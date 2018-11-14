@@ -35,12 +35,12 @@ definition nand :: "sig conc_stmt" where
   "nand = process {A, B} : Bassign_inert C (Bnand (Bsig A) (Bsig B)) 1"
 
 theorem
-  assumes "10, 0, def_state, {A}, empty_beh \<turnstile> <nand, empty_trans> \<leadsto> beh"
+  assumes "10, 0, def_state, {A}, 0 \<turnstile> <nand, empty_trans> \<leadsto> beh"
   shows "get_trans beh 1 C = Some True"
   using assms
 proof (cases)
   case (1 \<tau>')
-  have base: "0 , def_state , {A} , empty_beh \<turnstile> <nand , rem_curr_trans 0 empty_trans> \<longrightarrow>\<^sub>c
+  have base: "0 , def_state , {A} , 0 \<turnstile> <nand , rem_curr_trans 0 empty_trans> \<longrightarrow>\<^sub>c
                                                                          (Poly_Mapping.update 1 [C \<mapsto> True] 0)"
     unfolding nand_def by (auto simp add: is_stable_empty_trans inr_post_def  trans_post_empty_trans_upd)
   hence \<tau>'_def: "\<tau>' = (Poly_Mapping.update 1 [C \<mapsto> True] 0)"
@@ -77,9 +77,8 @@ proof (cases)
     by (smt "1"(3) Collect_cong base dom_empty dom_fun_upd fun_upd_comp fun_upd_idem fun_upd_same
             get_trans_trans_upd_cancel insert_absorb insert_iff insert_not_empty map_upd_nonempty
             option.sel singleton_conv)
-  have nb: "add_to_beh def_state {A} empty_beh 0 1 =
-      (override_lookups_on_open_right 0 {A} 0 1,
-       override_lookups_on_open_right 0 (Some o def_state) 0 1)" (is "_ = ?beh'")
+  have nb: "add_to_beh def_state {A} 0 0 1 =
+       override_lookups_on_open_right 0 (Some o def_state) 0 1" (is "_ = ?beh'")
     unfolding add_to_beh_def by auto
   define beh2 where "beh2 = ?beh'"
   hence snd_cyc: "10, 1, def_state (C := True), {C} , beh2 \<turnstile> <nand , \<tau>'> \<leadsto> beh"
@@ -130,12 +129,12 @@ next
   then show ?thesis by auto
 qed
 
-values  "{lookup beh 1 C | beh. b_simulate_fin 10 0 def_state {A} empty_beh nand empty_trans beh}"
+values  "{lookup beh 1 C | beh. b_simulate_fin 10 0 def_state {A} 0 nand empty_trans beh}"
 
-value "get_trans (functional_simulate_fin 10 0 def_state {A} empty_beh nand empty_trans) 1 C"
+value "get_trans (functional_simulate_fin 10 0 def_state {A} 0 nand empty_trans) 1 C"
 
 theorem
-  "get_trans (functional_simulate_fin 10 0 def_state {A} empty_beh nand empty_trans) 1 C = Some True"
+  "get_trans (functional_simulate_fin 10 0 def_state {A} 0 nand empty_trans) 1 C = Some True"
   by eval
 
 value "get_trans (functional_simulate 10 nand) 1 C"

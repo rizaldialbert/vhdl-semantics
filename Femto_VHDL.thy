@@ -264,10 +264,6 @@ abbreviation empty_trans :: "'signal transaction" where
   "empty_trans \<equiv> 0"
 
 type_synonym 'signal trace = "(nat, 'signal valuation) poly_mapping"
-type_synonym 'signal behaviour = "(nat, 'signal event) poly_mapping \<times> 'signal trace"
-
-abbreviation empty_beh :: "'signal behaviour" where
-  "empty_beh \<equiv> (0, 0)"
 
 subsection "Rule of semantics"
 
@@ -280,12 +276,12 @@ text \<open>The semantics of expression is standard. A slightly more involved de
 @{term "Bsig_delayed"}. Basically, it gets the value in the history @{term "snd \<theta> :: 'signal trace"}
 at time @{term "now - t"} where @{term "t"} is the delay.\<close>
 
-fun beval :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour \<Rightarrow> 'signal bexp \<Rightarrow> val"
+fun beval :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow> 'signal bexp \<Rightarrow> val"
   where
   "beval now \<sigma> \<gamma> \<theta> (Bsig sig) = \<sigma> sig"
 | "beval now \<sigma> \<gamma> \<theta> (Btrue) = True"
 | "beval now \<sigma> \<gamma> \<theta> (Bfalse) = False"
-| "beval now \<sigma> \<gamma> \<theta> (Bsig_delayed sig t) = the (get_trans (snd \<theta>) (now - t) sig)"
+| "beval now \<sigma> \<gamma> \<theta> (Bsig_delayed sig t) = the (get_trans \<theta> (now - t) sig)"
 | "beval now \<sigma> \<gamma> \<theta> (Bsig_event sig) = (sig \<in> \<gamma>)"
 | "beval now \<sigma> \<gamma> \<theta> (Bnot e) \<longleftrightarrow> \<not> beval now \<sigma> \<gamma> \<theta> e"
 | "beval now \<sigma> \<gamma> \<theta> (Band e1 e2) \<longleftrightarrow> beval now \<sigma> \<gamma> \<theta> e1 \<and> beval now \<sigma> \<gamma> \<theta> e2"
@@ -295,7 +291,7 @@ fun beval :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rig
 | "beval now \<sigma> \<gamma> \<theta> (Bxor e1 e2) \<longleftrightarrow> xor (beval now \<sigma> \<gamma> \<theta> e1) (beval now \<sigma> \<gamma> \<theta> e2)"
 | "beval now \<sigma> \<gamma> \<theta> (Bxnor e1 e2) \<longleftrightarrow> \<not> xor (beval now \<sigma> \<gamma> \<theta> e1) (beval now \<sigma> \<gamma> \<theta> e2)"
 
-abbreviation beval_abb :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour
+abbreviation beval_abb :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace
                                                                       \<Rightarrow> 'signal bexp \<Rightarrow> val \<Rightarrow> bool"
  ("_ , _ , _ , _ \<turnstile> _ \<longrightarrow>\<^sub>b _") where
   "now, \<sigma>, \<gamma>, \<theta> \<turnstile> e \<longrightarrow>\<^sub>b val \<equiv> beval now \<sigma> \<gamma> \<theta> e = val"
@@ -632,7 +628,7 @@ definition inr_post :: "'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow
     else
       trans_post sig val (purge dly \<tau> now sig cur_val) (now + dly))"
 
-fun b_seq_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour \<Rightarrow>
+fun b_seq_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                                'signal seq_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
   where
   "b_seq_exec t \<sigma> \<gamma> \<theta> Bnull \<tau> = \<tau>"
@@ -645,7 +641,7 @@ fun b_seq_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event 
 | "b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau> =
                                        (let x = (beval t \<sigma> \<gamma> \<theta> e) in inr_post sig x (\<sigma> sig) \<tau> t dly)"
 
-abbreviation b_seq_exec_abb :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour \<Rightarrow>
+abbreviation b_seq_exec_abb :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                                'signal seq_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> bool"
     ("_ , _ , _ , _ \<turnstile> <_ , _> \<longrightarrow>\<^sub>s _") where
   "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>') \<equiv> (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau> = \<tau>')"
@@ -960,7 +956,7 @@ text \<open>Note that in the following semantics, if the process is not activate
 sensitivity list does not contain recently changed signals --- then the returned transaction is an
 empty transaction.\<close>
 
-fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour \<Rightarrow>
+fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                              'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
   where
     "b_conc_exec t \<sigma> \<gamma> \<theta> (process sl : ss) \<tau> =
@@ -968,7 +964,7 @@ fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event
   | "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =
            (let \<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>;  \<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau> in clean_zip \<tau> \<tau>1 \<tau>2)"
 
-abbreviation  b_conc_exec_abb :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour \<Rightarrow>
+abbreviation  b_conc_exec_abb :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                              'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> bool"
   ("_ , _ , _ , _ \<turnstile> <_ , _> \<longrightarrow>\<^sub>c _") where
   "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>') \<equiv> (b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>')"
@@ -1103,14 +1099,14 @@ theorem parallel_comp_assoc:
 text \<open>The Language Reference Manual for VHDL stipulates that each process will be executed initially
 regardless of their sensitivity list.\<close>
 
-inductive init :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour
+inductive init :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace
                     \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> bool"
   ("_ , _ , _ , _ \<turnstile> <_ , _> \<longrightarrow> start _") where
   "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>') \<Longrightarrow> (t, \<sigma>, \<gamma>, \<theta> \<turnstile> <process sl : ss , \<tau>> \<longrightarrow> start \<tau>')"
 | "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1 , \<tau>> \<longrightarrow> start \<tau>') \<Longrightarrow> (t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs2 , \<tau>> \<longrightarrow> start \<tau>'') \<Longrightarrow>
                                    (t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1 || cs2, \<tau>> \<longrightarrow> start (clean_zip \<tau> \<tau>' \<tau>''))"
 
-fun init' :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour \<Rightarrow>
+fun init' :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                              'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
   where
     "init' t \<sigma> \<gamma> \<theta> (process sl : ss) \<tau> =  b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>"
@@ -1210,10 +1206,9 @@ text \<open>After we advance to the next interesting computation point, we need 
 that we can return this as the result in the end of the computation (either when it is quiet or
 the maximum simulation time is reached).\<close>
 
-definition add_to_beh :: "'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour \<Rightarrow> time \<Rightarrow> time
-                                             \<Rightarrow> 'signal behaviour" where
-  "add_to_beh \<sigma> \<gamma> \<theta> st fi = (override_lookups_on_open_right (fst \<theta>) \<gamma> st fi,
-                             override_lookups_on_open_right (snd \<theta>) (Some o \<sigma>) st fi)"
+definition add_to_beh :: "'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow> time \<Rightarrow> time
+                                             \<Rightarrow> 'signal trace" where
+  "add_to_beh \<sigma> \<gamma> \<theta> st fi = override_lookups_on_open_right \<theta> (Some o \<sigma>) st fi"
 
 lemma [simp]:
   "add_to_beh \<sigma> \<gamma> \<theta> t t = \<theta>"
@@ -1236,8 +1231,8 @@ predicted behaviour in the future (transaction), and lastly the result of the ex
 Check the mixfix notation used in the semantics below.
 
 The left hand side of the turnstile contains simulation elements: time @{term "t :: time"},
-state @{term "\<sigma> :: 'signal state"}, event @{term "\<gamma> :: 'signal event"}, and behaviour
-@{term "\<theta> :: 'signal behaviour"}. This is the context to determine how a VHDL text shall progress.
+state @{term "\<sigma> :: 'signal state"}, event @{term "\<gamma> :: 'signal event"}, and trace
+@{term "\<theta> :: 'signal trace"}. This is the context to determine how a VHDL text shall progress.
 The right hand side of the turnstile is divided further into two parts to the left and right of
 the squiggle. The left of the squiggle is a pair of the concurrent statements (a list of processes)
 and the  current transaction store. The right part is of course the result of executing the
@@ -1257,7 +1252,7 @@ In case the current time is much later than the maximum time, we just have to de
 from @{term "maxtime + 1"} to @{term "t"}.
 \<close>
 
-inductive b_simulate_fin :: "time \<Rightarrow> time \<Rightarrow> 'signal  state \<Rightarrow> 'signal event \<Rightarrow> 'signal behaviour \<Rightarrow>
+inductive b_simulate_fin :: "time \<Rightarrow> time \<Rightarrow> 'signal  state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                             'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal trace \<Rightarrow> bool"
   ("_, _ , _ , _ , _ \<turnstile> <_ , _> \<leadsto> _") where
 
@@ -1275,12 +1270,12 @@ inductive b_simulate_fin :: "time \<Rightarrow> time \<Rightarrow> 'signal  stat
   \<comment> \<open>The simulation has quiesced and there is still time\<close>
 | "    (t \<le> maxtime)
    \<Longrightarrow> (quiet \<tau> \<gamma>)
-   \<Longrightarrow> (override_lookups_on_closed (snd \<theta>) (Some o \<sigma>) t maxtime = res)
+   \<Longrightarrow> (override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime = res)
    \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
 
   \<comment> \<open>Time is up\<close>
 | "  \<not> (t \<le> maxtime)
-   \<Longrightarrow> (override_lookups_on_open_left (snd \<theta>) 0 maxtime t = res)
+   \<Longrightarrow> (override_lookups_on_open_left \<theta> 0 maxtime t = res)
    \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
 
 inductive_cases bau: "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> beh"
@@ -1289,13 +1284,13 @@ lemma case_quiesce:
   assumes "t \<le> maxtime"
   assumes "quiet \<tau> \<gamma>"
   assumes "(maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
-  shows "res = override_lookups_on_closed (snd \<theta>) (Some o \<sigma>) t maxtime"
+  shows "res = override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime"
   using bau[OF assms(3)] assms by auto
 
 lemma case_timesup:
   assumes "\<not> (t \<le> maxtime)"
   assumes "(maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
-  shows "res = override_lookups_on_open_left (snd \<theta>) 0 maxtime t"
+  shows "res = override_lookups_on_open_left \<theta> 0 maxtime t"
   using bau[OF assms(2)] assms by auto
 
 lemma case_bau:
@@ -1325,11 +1320,11 @@ text \<open>Judgement @{term "b_simulate"} contains one rule only: executing the
 before @{term "b_simulate_fin"}.\<close>
 
 inductive b_simulate :: "time \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal trace \<Rightarrow> bool" where
-  "     init' 0 def_state {} empty_beh cs empty_trans = \<tau>'
+  "     init' 0 def_state {} 0 cs empty_trans = \<tau>'
    \<Longrightarrow>  next_time  0 \<tau>' = t'
    \<Longrightarrow>  next_state 0 \<tau>' def_state = \<sigma>'
    \<Longrightarrow>  next_event 0 \<tau>' def_state = \<gamma>'
-   \<Longrightarrow>  add_to_beh def_state {} empty_beh 0 t' = beh'
+   \<Longrightarrow>  add_to_beh def_state {} 0 0 t' = beh'
    \<Longrightarrow>  maxtime, t', \<sigma>', \<gamma>', beh' \<turnstile> <cs, \<tau>'> \<leadsto> res
    \<Longrightarrow>  b_simulate maxtime cs res"
 
@@ -1337,11 +1332,11 @@ inductive_cases bau_init : "b_simulate maxtime cs res"
 
 lemma case_bau':
   assumes "b_simulate maxtime cs res"
-  assumes "init' 0 def_state {} empty_beh cs empty_trans = \<tau>'"
+  assumes "init' 0 def_state {} 0 cs empty_trans = \<tau>'"
   shows "maxtime, next_time  0 \<tau>', next_state 0 \<tau>' def_state, next_event 0 \<tau>' def_state,
-                             add_to_beh def_state {} empty_beh 0 (next_time  0 \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> res"
+                             add_to_beh def_state {} 0 0 (next_time  0 \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> res"
   using bau_init[OF assms(1)] assms by auto
-
+  
 text \<open>Similar to the theorem accompanying @{term "b_simulate_fin"}, i.e.
 @{thm "b_simulate_fin_deterministic"}, the rule @{term "b_simulate"} is also deterministic.\<close>
 
@@ -1362,7 +1357,7 @@ to have non terminating VHDL text), the property that the corresponding code is 
 We cannot talk about termination with big step semantics. Hence, we also formalise the small-step
 semantics and prove (only one way) that the small step implies the big step semantics.\<close>
 
-type_synonym 'signal configuration = "time \<times> 'signal  state \<times> 'signal event \<times> 'signal behaviour"
+type_synonym 'signal configuration = "time \<times> 'signal  state \<times> 'signal event \<times> 'signal trace"
 
 fun update_config :: "'signal configuration \<Rightarrow> 'signal transaction \<Rightarrow> 'signal configuration"
   where
@@ -1378,14 +1373,14 @@ inductive b_simulate_fin_ss :: "time \<Rightarrow> 'signal conc_stmt \<Rightarro
   where
    \<comment> \<open>Time is up\<close>
  "  \<not>  t \<le> maxtime
-   \<Longrightarrow> override_lookups_on_open_left (snd \<theta>) 0 maxtime t = res'
-   \<Longrightarrow> b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime + 1, \<sigma>, \<gamma>, (fst \<theta>, res'))"
+   \<Longrightarrow> override_lookups_on_open_left \<theta> 0 maxtime t = res'
+   \<Longrightarrow> b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime + 1, \<sigma>, \<gamma>, res')"
 
    \<comment> \<open>The simulation has quiesced and there is still time\<close>
 | "    t \<le> maxtime
    \<Longrightarrow> quiet \<tau> \<gamma>
-   \<Longrightarrow> override_lookups_on_closed (snd \<theta>) (Some o \<sigma>) t maxtime = res'
-   \<Longrightarrow> b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime + 1, \<sigma>, \<gamma>, (fst \<theta>, res'))"
+   \<Longrightarrow> override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime = res'
+   \<Longrightarrow> b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime + 1, \<sigma>, \<gamma>, res')"
 
    \<comment> \<open>Business as usual: not quiesced yet and there is still time\<close>
 | "    t \<le> maxtime
@@ -1398,15 +1393,15 @@ inductive_cases sim_ss_ic : "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, 
 
 lemma
   assumes "  \<not>  t \<le> maxtime"
-  assumes "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime, \<sigma>, \<gamma>, (fst \<theta>, res'))"
-  shows "override_lookups_on_open_left (snd \<theta>) 0 maxtime t = res'"
+  assumes "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime, \<sigma>, \<gamma>, res')"
+  shows "override_lookups_on_open_left \<theta> 0 maxtime t = res'"
   using assms by (auto intro: sim_ss_ic)
 
 lemma
   assumes "t \<le> maxtime"
   assumes "quiet \<tau> \<gamma>"
-  assumes "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime, \<sigma>, \<gamma>, (fst \<theta>, res'))"
-  shows "override_lookups_on_closed (snd \<theta>) (Some o \<sigma>) t maxtime = res'"
+  assumes "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime, \<sigma>, \<gamma>, res')"
+  shows "override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime = res'"
   using assms by (auto intro:sim_ss_ic)
 
 lemma
@@ -1531,42 +1526,38 @@ abbreviation
 
 lemma lookup_zero_after_ss:
   assumes "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', t', \<sigma>', \<gamma>', \<theta>')"
-  assumes "\<And>n. t  \<le> n \<Longrightarrow> Poly_Mapping.lookup (snd \<theta> ) n = 0"
+  assumes "\<And>n. t  \<le> n \<Longrightarrow> Poly_Mapping.lookup \<theta> n = 0"
   assumes "\<And>n. n  < t \<Longrightarrow> get_trans \<tau> n = 0"
-  shows   "\<And>n. t' \<le> n \<Longrightarrow> Poly_Mapping.lookup (snd \<theta>') n = 0"
+  shows   "\<And>n. t' \<le> n \<Longrightarrow> Poly_Mapping.lookup \<theta>' n = 0"
 proof (rule sim_ss_ic[OF assms(1)])
   fix n
   assume "t' \<le> n"
-  assume "\<theta>' = (fst \<theta>, override_lookups_on_open_left (snd \<theta>) 0 maxtime t)"
-  hence *: "snd \<theta>' =  override_lookups_on_open_left (snd \<theta>) 0 maxtime t"
-    by auto
+  assume *: "\<theta>' = override_lookups_on_open_left \<theta> 0 maxtime t"
   assume " t' = Suc maxtime " and "\<not> t \<le> maxtime" and "t' = Suc maxtime"
   hence "Suc maxtime \<le> t" and "t' \<le> t" by auto
   have "t < n \<or> n \<le> t" by auto
   moreover
   { assume "t < n"
-    have "\<And>n. t < n \<Longrightarrow> get_trans (snd \<theta>') n = get_trans (snd \<theta>) n"
+    have "\<And>n. t < n \<Longrightarrow> get_trans \<theta>' n = get_trans \<theta> n"
       using * by transfer' auto
-    with assms(2) have "get_trans (snd \<theta>') n = 0"
+    with assms(2) have "get_trans \<theta>' n = 0"
       using `t < n` by auto }
   moreover
   { assume "n \<le> t"
     with `t' \<le> n` have "maxtime < n" unfolding `t' = Suc maxtime`
       by auto
-    with * and `n \<le> t` have "get_trans (snd \<theta>') n = 0"
+    with * and `n \<le> t` have "get_trans \<theta>' n = 0"
       by transfer' auto }
-  ultimately show "get_trans (snd \<theta>') n = 0" by auto
+  ultimately show "get_trans  \<theta>' n = 0" by auto
 next
   fix n
   assume "t' \<le> n"
   assume "t \<le> maxtime"
-  assume " \<theta>' = (fst \<theta>, override_lookups_on_closed (snd \<theta>) (Some \<circ> \<sigma>) t maxtime)"
-  hence *: "snd \<theta>' =  override_lookups_on_closed (snd \<theta>) (Some \<circ> \<sigma>) t maxtime"
-    by auto
+  assume *: " \<theta>' = override_lookups_on_closed \<theta> (Some \<circ> \<sigma>) t maxtime"
   assume t'_def: "t' = Suc maxtime"
-  hence "get_trans (snd \<theta>') n = get_trans (snd \<theta>) n"
+  hence "get_trans \<theta>' n = get_trans \<theta> n"
     using * `t' \<le> n` by transfer' auto
-  thus "get_trans (snd \<theta>') n = 0"
+  thus "get_trans \<theta>' n = 0"
     using `t' \<le> n` t'_def `t \<le> maxtime` assms(2) by auto
 next
   fix n
@@ -1577,9 +1568,9 @@ next
                 , add_to_beh \<sigma> \<gamma> \<theta> t t')) =
          (t', \<sigma>', \<gamma>', \<theta>')"
   hence t'_def: "t' = next_time t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>))"
-    and \<theta>'_def: "snd \<theta>' = override_lookups_on_open_right (snd \<theta>) (Some o \<sigma>) t t'"
+    and \<theta>'_def: "\<theta>' = override_lookups_on_open_right \<theta> (Some o \<sigma>) t t'"
     unfolding Let_def add_to_beh_def by auto
-  hence **: "get_trans (snd \<theta>') n = get_trans (snd \<theta>) n"
+  hence **: "get_trans \<theta>' n = get_trans \<theta> n"
     using `t' \<le> n` unfolding add_to_beh_def
     by transfer' (simp add: override_lookups_on_open_right.rep_eq)
   have *: "\<And>n. n < t \<Longrightarrow> get_trans (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) n = 0"
@@ -1587,7 +1578,7 @@ next
   have "t \<le> t'"
     using next_time_at_least[OF *] t'_def by auto
   with `t' \<le> n` have "t \<le> n" by auto
-  with assms(2) show " get_trans (snd \<theta>') n = 0"
+  with assms(2) show " get_trans \<theta>' n = 0"
     using ** by auto
 qed
 
@@ -1634,24 +1625,22 @@ qed
 lemma ss_big_continue:
   assumes "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', t', \<sigma>', \<gamma>', \<theta>')"
   assumes "b_simulate_fin maxtime t' \<sigma>' \<gamma>' \<theta>' cs \<tau>' res"
-  assumes "\<forall>n. t  \<le> n \<longrightarrow> Poly_Mapping.lookup (snd \<theta> ) n = 0"
+  assumes "\<forall>n. t  \<le> n \<longrightarrow> Poly_Mapping.lookup \<theta> n = 0"
   shows "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> res"
 proof (rule sim_ss_ic[OF assms(1)])
   assume "\<not> t \<le> maxtime" hence "maxtime < t" by auto
   hence "Suc (maxtime) \<le> t" by auto
-  assume "\<theta>' = (fst \<theta>, override_lookups_on_open_left (snd \<theta>) 0 maxtime t)"
-  hence **: "snd \<theta>' = override_lookups_on_open_left (snd \<theta>) 0 maxtime t"
-    by auto
-  hence *: "Poly_Mapping.lookup (snd \<theta>') (Suc maxtime) = 0"
+  assume **: "\<theta>' = override_lookups_on_open_left \<theta> 0 maxtime t"
+  hence *: "Poly_Mapping.lookup \<theta>' (Suc maxtime) = 0"
     using `Suc (maxtime) \<le> t` by (transfer') (auto)
   assume t'suc: "t' = Suc maxtime"
-  have "res = override_lookups_on_open_left (snd \<theta>') 0 maxtime t'"
+  have "res = override_lookups_on_open_left \<theta>' 0 maxtime t'"
     using case_timesup[OF _ assms(2)] t'suc by auto
-  hence "res = Poly_Mapping.update (Suc maxtime) 0 (snd \<theta>')"
+  hence "res = Poly_Mapping.update (Suc maxtime) 0 \<theta>'"
     unfolding t'suc  by (transfer') (auto)
-  with * have "res = snd \<theta>'"
+  with * have "res = \<theta>'"
     by (transfer') auto
-  hence "override_lookups_on_open_left (snd \<theta>) 0 maxtime t = res"
+  hence "override_lookups_on_open_left \<theta> 0 maxtime t = res"
     by (simp add: **)
   with `\<not> t \<le> maxtime` show "maxtime, t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<leadsto> res"
     by (auto intro:b_simulate_fin.intros)
@@ -1660,20 +1649,18 @@ next
   assume t'suc: "t' = Suc maxtime"
   assume "t \<le> maxtime"
   assume "(quiet \<tau> \<gamma>)"
-  assume "\<theta>' = (fst \<theta>, override_lookups_on_closed (snd \<theta>) (Some \<circ> \<sigma>) t maxtime)"
-  hence **: "snd \<theta>' = override_lookups_on_closed (snd \<theta>) (Some \<circ> \<sigma>) t maxtime"
-    by auto
-  hence *: "Poly_Mapping.lookup (snd \<theta>') (Suc maxtime) = 0"
+  assume **: "\<theta>' = override_lookups_on_closed \<theta> (Some \<circ> \<sigma>) t maxtime"
+  hence *: "Poly_Mapping.lookup \<theta>' (Suc maxtime) = 0"
     using assms(1) assms(3) lookup_zero_after_ss t'suc
     by (simp add: \<open>t \<le> maxtime\<close> le_SucI override_lookups_on_closed.rep_eq)
   \<comment> \<open>from big step\<close>
-  have "res = override_lookups_on_open_left (snd \<theta>') 0 maxtime (Suc maxtime)"
+  have "res = override_lookups_on_open_left \<theta>' 0 maxtime (Suc maxtime)"
     using t'suc case_timesup[OF _ assms(2)] t'suc by auto
-  hence "res = Poly_Mapping.update (Suc maxtime) 0 (snd \<theta>')"
+  hence "res = Poly_Mapping.update (Suc maxtime) 0 \<theta>'"
     by (transfer') (auto)
-  hence "res = snd \<theta>'"
+  hence "res = \<theta>'"
     using * by (metis lookup_update poly_mapping_eqI)
-  hence "override_lookups_on_closed (snd \<theta>) (Some o \<sigma>) t maxtime = res"
+  hence "override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime = res"
     by (simp add: "**")
   with `t \<le> maxtime` show "maxtime, t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<leadsto> res"
     using `quiet \<tau> \<gamma>` by (auto intro: b_simulate_fin.intros)
@@ -1699,26 +1686,26 @@ qed
 
 theorem small_step_implies_big_step:
   assumes "simulate_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
-  assumes "\<forall>n. t  \<le> n \<longrightarrow> Poly_Mapping.lookup (snd \<theta> ) n = 0"
+  assumes "\<forall>n. t  \<le> n \<longrightarrow> Poly_Mapping.lookup \<theta> n = 0"
   assumes "\<forall>n. n < t \<longrightarrow> get_trans \<tau> n = 0"
-  shows "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> (Poly_Mapping.update (maxtime + 1) 0 (snd \<theta>'))"
+  shows "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> (Poly_Mapping.update (maxtime + 1) 0 \<theta>')"
   using assms
 proof (induction "(\<tau>, t, \<sigma>, \<gamma>, \<theta>)" "(\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')" arbitrary: \<tau> t \<sigma> \<gamma> \<theta>
                                                                                   rule: star.induct)
   case refl
-  have " Poly_Mapping.update (maxtime + 1) 0 (snd \<theta>') =
-                                      override_lookups_on_open_left (snd \<theta>') 0 maxtime (maxtime + 1)"
+  have " Poly_Mapping.update (maxtime + 1) 0 \<theta>' =
+                                      override_lookups_on_open_left \<theta>' 0 maxtime (maxtime + 1)"
     apply transfer' unfolding override_on_def by auto
   then show ?case
     using b_simulate_fin.intros(3)[of "maxtime + 1" "maxtime" "\<theta>'"
-    "Poly_Mapping.update (maxtime + 1) 0 (snd \<theta>')" "\<sigma>'" "\<gamma>'" "cs" "\<tau>'"] refl by auto
+    "Poly_Mapping.update (maxtime + 1) 0 \<theta>'" "\<sigma>'" "\<gamma>'" "cs" "\<tau>'"] refl by auto
 next
   case (step y)
   obtain \<tau>'' t'' \<sigma>'' \<gamma>'' \<theta>'' where y_def: "y = (\<tau>'', t'', \<sigma>'', \<gamma>'', \<theta>'')"
     using prod_cases5 by blast
   hence *: "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>'', t'', \<sigma>'', \<gamma>'', \<theta>'')"
     using step(1) by auto
-  have **: "\<forall>n\<ge>t''. get_trans (snd \<theta>'') n = 0"
+  have **: "\<forall>n\<ge>t''. get_trans \<theta>'' n = 0"
     using "*" lookup_zero_after_ss step.prems by blast
   have ***: "\<forall>n<t''. get_trans \<tau>'' n = 0"
     using "*" small_step_preserve_trans_removal step.prems(2) by blast
