@@ -87,8 +87,10 @@ proof (cases)
   thus "get_trans beh 1 C = Some True"
   proof (cases)
     case (1 \<tau>'')
-    hence t''_def: "\<tau>'' = 0"
-      unfolding nand_def by auto
+    have t''_def: "\<tau>'' = 0"
+      unfolding nand_def
+      using 1(3) unfolding nand_def  apply (auto simp add: \<tau>'_def rem_curr_trans_def)
+      by (transfer', auto)
     have nt2: "next_time 1 0 = 1"
       by auto
     moreover have "next_state 1 \<tau>'' (def_state(C := True)) = def_state (C := True)"

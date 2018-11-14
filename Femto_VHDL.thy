@@ -964,7 +964,7 @@ fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event
                              'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
   where
     "b_conc_exec t \<sigma> \<gamma> \<theta> (process sl : ss) \<tau> =
-                                  (if disjnt sl \<gamma> then 0 else b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>)"
+                                  (if disjnt sl \<gamma> then \<tau> else b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>)"
   | "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =
            (let \<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>;  \<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau> in clean_zip \<tau> \<tau>1 \<tau>2)"
 
