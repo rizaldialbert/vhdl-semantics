@@ -77,12 +77,12 @@ proof (cases)
     by (smt "1"(3) Collect_cong base dom_empty dom_fun_upd fun_upd_comp fun_upd_idem fun_upd_same
             get_trans_trans_upd_cancel insert_absorb insert_iff insert_not_empty map_upd_nonempty
             option.sel singleton_conv)
-  have nb: "add_to_beh def_state {A} 0 0 1 =
+  have nb: "add_to_beh def_state 0 0 1 =
        Poly_Mapping.update 0 (Some o def_state) 0" (is "_ = ?beh'")
     unfolding add_to_beh_def by auto
-  define beh2 where "beh2 = ?beh'"
+  define beh2 :: "(nat \<Rightarrow>\<^sub>0 sig \<Rightarrow> bool option)" where "beh2 = ?beh'"
   hence snd_cyc: "10, 1, def_state (C := True), {C} , beh2 \<turnstile> <nand , \<tau>'> \<leadsto> beh"
-    using 1 nt ns ne nb by auto
+    using 1 nt ns ne nb by metis
   thus "get_trans beh 1 C = Some True"
   proof (cases)
     case (1 \<tau>'')
@@ -96,7 +96,7 @@ proof (cases)
       unfolding next_state_def Let_def t''_def nt2 by auto
     moreover have "next_event 1 \<tau>'' (def_state(C := True)) = {}"
       unfolding next_event_def Let_def t''_def nt2 by (auto simp add: zero_map)
-    moreover have "add_to_beh (def_state(C := True)) {C} beh2 1 (next_time 1 \<tau>'') = beh2"
+    moreover have "add_to_beh (def_state(C := True)) beh2 1 (next_time 1 \<tau>'') = beh2"
       unfolding add_to_beh_def t''_def nt2 by (auto simp add: override_coeffs_open_right_same_idx)
     moreover have "rem_curr_trans 1 (Poly_Mapping.update 1 [C \<mapsto> True] empty_trans) = 0"
       unfolding rem_curr_trans_def by (transfer, auto)

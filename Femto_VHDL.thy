@@ -1372,12 +1372,11 @@ text \<open>After we advance to the next interesting computation point, we need 
 that we can return this as the result in the end of the computation (either when it is quiet or
 the maximum simulation time is reached).\<close>
 
-definition add_to_beh :: "'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow> time \<Rightarrow> time
-                                             \<Rightarrow> 'signal trace" where
-  "add_to_beh \<sigma> \<gamma> \<theta> st fi = (if st < fi then Poly_Mapping.update st (Some o \<sigma>) \<theta> else \<theta>)"
+definition add_to_beh :: "'signal state \<Rightarrow> 'signal trace \<Rightarrow> time \<Rightarrow> time \<Rightarrow> 'signal trace" where
+  "add_to_beh \<sigma> \<theta> st fi = (if st < fi then Poly_Mapping.update st (Some o \<sigma>) \<theta> else \<theta>)"
 
 lemma [simp]:
-  "add_to_beh \<sigma> \<gamma> \<theta> t t = \<theta>"
+  "add_to_beh \<sigma> \<theta> t t = \<theta>"
   unfolding add_to_beh_def by (transfer, auto)
 
 definition rem_curr_trans :: "time \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction" where
@@ -1430,7 +1429,7 @@ inductive b_simulate_fin :: "time \<Rightarrow> time \<Rightarrow> 'signal  stat
              next_time t \<tau>',
                 next_state t \<tau>' \<sigma>,
                     next_event t \<tau>' \<sigma>,
-                        add_to_beh \<sigma> \<gamma> \<theta> t (next_time t \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> res)
+                        add_to_beh \<sigma> \<theta> t (next_time t \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> res)
    \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
 
   \<comment> \<open>The simulation has quiesced and there is still time\<close>
@@ -1468,7 +1467,7 @@ lemma case_bau:
              next_time t \<tau>',
                 next_state t \<tau>' \<sigma>,
                     next_event t \<tau>' \<sigma>,
-                        add_to_beh \<sigma> \<gamma> \<theta> t (next_time t \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> beh)"
+                        add_to_beh \<sigma> \<theta> t (next_time t \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> beh)"
   using bau[OF assms(4)] assms by auto
 
 text \<open>An important theorem for any inductive definition; the computation should be deterministic.\<close>
@@ -1487,7 +1486,7 @@ inductive b_simulate :: "time \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'sig
    \<Longrightarrow>  next_time  0 \<tau>' = t'
    \<Longrightarrow>  next_state 0 \<tau>' def_state = \<sigma>'
    \<Longrightarrow>  next_event 0 \<tau>' def_state = \<gamma>'
-   \<Longrightarrow>  add_to_beh def_state {} 0 0 t' = beh'
+   \<Longrightarrow>  add_to_beh def_state 0 0 t' = beh'
    \<Longrightarrow>  maxtime, t', \<sigma>', \<gamma>', beh' \<turnstile> <cs, \<tau>'> \<leadsto> res
    \<Longrightarrow>  b_simulate maxtime cs res"
 
@@ -1501,7 +1500,7 @@ lemma case_bau':
   assumes "b_simulate maxtime cs res"
   assumes "init' 0 def_state {} 0 cs empty_trans = \<tau>'"
   shows "maxtime, next_time  0 \<tau>', next_state 0 \<tau>' def_state, next_event 0 \<tau>' def_state,
-                             add_to_beh def_state {} 0 0 (next_time  0 \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> res"
+                             add_to_beh def_state 0 0 (next_time  0 \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> res"
   using bau_init[OF assms(1)] assms by auto
 
 text \<open>Similar to the theorem accompanying @{term "b_simulate_fin"}, i.e.
@@ -1531,7 +1530,7 @@ fun update_config :: "'signal configuration \<Rightarrow> 'signal transaction \<
   "update_config (t, \<sigma>, \<gamma>, \<theta>) \<tau>' = (let t' = next_time t \<tau>';
                                         \<sigma>' = next_state t \<tau>' \<sigma>;
                                         \<gamma>' = next_event t \<tau>' \<sigma>;
-                                        \<theta>' = add_to_beh \<sigma> \<gamma> \<theta> t t'
+                                        \<theta>' = add_to_beh \<sigma> \<theta> t t'
                                     in (t', \<sigma>', \<gamma>', \<theta>'))"
 
 inductive b_simulate_fin_ss :: "time \<Rightarrow> 'signal conc_stmt \<Rightarrow>
@@ -1732,7 +1731,7 @@ next
   assume "(let t' = next_time t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>))
           in (t', next_state t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) \<sigma>
                 , next_event t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) \<sigma>
-                , add_to_beh \<sigma> \<gamma> \<theta> t t')) =
+                , add_to_beh \<sigma> \<theta> t t')) =
          (t', \<sigma>', \<gamma>', \<theta>')"
   hence t'_def: "t' = next_time t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>))"
     and \<theta>'_def: "\<theta>' = (if t < t' then Poly_Mapping.update t (Some o \<sigma>) \<theta> else \<theta>)"
@@ -1795,7 +1794,7 @@ next
   assume "(let t' = next_time t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>))
           in (t', next_state t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) \<sigma>
                 , next_event t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) \<sigma>
-                , add_to_beh \<sigma> \<gamma> \<theta> t t')) = (t', \<sigma>', \<gamma>', \<theta>')"
+                , add_to_beh \<sigma> \<theta> t t')) = (t', \<sigma>', \<gamma>', \<theta>')"
   hence **: "t' = next_time t \<tau>'"
     unfolding Let_def \<tau>'_def by auto
   moreover assume "n < t'"
@@ -1854,11 +1853,11 @@ next
   assume "(let t' = next_time t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>))
      in (t', next_state t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) \<sigma>
            , next_event t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) \<sigma>
-           , add_to_beh \<sigma> \<gamma> \<theta> t t')) = (t', \<sigma>', \<gamma>', \<theta>')"
+           , add_to_beh \<sigma> \<theta> t t')) = (t', \<sigma>', \<gamma>', \<theta>')"
   hence t'_def: "t' = next_time t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>))" and
         \<sigma>'_def: "\<sigma>' = next_state t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) \<sigma>" and
         \<gamma>'_def: "\<gamma>' = next_event t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) \<sigma>" and
-        \<theta>'_def: "\<theta>' = add_to_beh \<sigma> \<gamma> \<theta> t t'"
+        \<theta>'_def: "\<theta>' = add_to_beh \<sigma> \<theta> t t'"
     unfolding Let_def by auto
   assume \<tau>'_def: "\<tau>' = b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)"
   hence "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>')"

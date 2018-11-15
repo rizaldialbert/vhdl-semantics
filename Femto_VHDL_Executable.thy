@@ -620,7 +620,7 @@ proof (transfer', rule ext)
     by blast
 qed
 
-value [code] "add_to_beh (def_state :: sig state) {A, B, C}"
+value [code] "add_to_beh (def_state :: sig state)"
 
 code_thms add_to_beh
 
@@ -721,7 +721,7 @@ proof -
   have "0 < t \<or> t = 0" by auto
   moreover
   { assume "0 < t"
-    have "\<theta> = add_to_beh def_state {} 0 0 t"
+    have "\<theta> = add_to_beh def_state 0 0 t"
       using assms(2) by (auto simp add: Let_def)
     also have "... = Poly_Mapping.update 0 (Some o def_state) empty_trans"
       unfolding add_to_beh_def using `0 < t` by auto
@@ -731,7 +731,7 @@ proof -
       using small_step_implies_big_step[OF assms(3)] look by auto }
   moreover
   { assume "t = 0"
-    have "\<theta> = add_to_beh def_state {} 0 0 t"
+    have "\<theta> = add_to_beh def_state 0 0 t"
       using assms(2) by (auto simp add: Let_def)
     also have "... = empty_trans"
       unfolding add_to_beh_def using `t = 0` by auto
