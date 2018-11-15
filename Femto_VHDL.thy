@@ -14,6 +14,7 @@ theory Femto_VHDL
           "HOL-Library.Infinite_Set"
           "HOL-Library.Finite_Map"
           "HOL-IMP.Star"
+          "Polynomials.Poly_Mapping_Finite_Map"
 begin
 
 section "Syntax and Semantics"
@@ -265,6 +266,169 @@ abbreviation empty_trans :: "'signal transaction" where
 
 type_synonym 'signal trace = "(nat, 'signal valuation) poly_mapping"
 
+subsection \<open>New reprsentation of transaction \<close>
+
+(* TODO : introductory text for this subsection*)
+
+type_synonym 'signal trans_raw2 = "'signal \<Rightarrow> nat \<Rightarrow> val option"
+type_synonym 'signal transaction2 = "'signal \<Rightarrow> nat \<Rightarrow>\<^sub>0 val option"
+
+definition to_trans_raw2 :: "'signal trans_raw \<Rightarrow> 'signal trans_raw2" where
+  "to_trans_raw2 \<tau> = (\<lambda>sig n. \<tau> n sig)"
+
+lift_definition to_transaction2 :: "'signal transaction \<Rightarrow> 'signal transaction2" is to_trans_raw2
+  by (metis (mono_tags, lifting) finite_subset mem_Collect_eq subsetI to_trans_raw2_def zero_fun_def)
+
+subsection \<open>From transaction to function of time (signal)\<close>
+
+fun inf_key :: "nat list \<Rightarrow> nat \<Rightarrow> nat option" where
+  "inf_key ks n = (case takeWhile (\<lambda>k. k \<le> n) ks of [] \<Rightarrow> None | ks' \<Rightarrow> Some (last ks'))"
+
+lemma inf_keyE1:
+  assumes "inf_key ks n = Some k"
+  obtains ks' where "takeWhile (\<lambda>k. k \<le> n) ks = ks'" and "last ks' = k"
+  using assms by (auto split:list.splits)
+
+lemma inf_key_in_list:
+  assumes "inf_key ks n = Some k"
+  shows "k \<in> set ks"
+proof -
+  obtain ks' where "takeWhile (\<lambda>k. k \<le> n) ks = ks'"  and "last ks' = k" and "ks' \<noteq> []"
+    using assms by (auto split:list.splits)
+  hence "set ks' \<subseteq> set ks"
+    by (meson set_takeWhileD subsetI)
+  moreover have "k \<in> set ks'"
+    using `last ks' = k` last_in_set `ks' \<noteq> []` by auto
+  ultimately show ?thesis
+    by auto
+qed
+
+lemma inf_key_tail:
+  assumes "sorted (a # ks)"
+  assumes "inf_key ks n = Some x"
+  assumes "inf_key (a # ks) n = Some y"
+  shows "x = y"
+proof -
+  obtain ks' where *: "takeWhile (\<lambda>k. k \<le> n) ks = ks'" and "ks' \<noteq> []" and "last ks' = x"
+    using assms(2) inf_keyE1 by fastforce
+  have "takeWhile (\<lambda>k. k \<le> n) (a # ks) = a # ks'"
+    by (metis * assms(3) inf_key.simps list.simps(4) option.simps(3) takeWhile.simps(2))
+  moreover hence "last (a # ks') = x"
+    using `last ks' = x` `ks' \<noteq> []` by auto
+  ultimately have "inf_key (a # ks) n = Some x"
+    by auto
+  thus ?thesis using assms by auto
+qed
+
+lemma inf_key_none:
+  assumes "sorted ks"
+  shows "inf_key ks n = None \<Longrightarrow> \<forall>k \<in> set ks. n < k"
+  using assms
+  by (induction ks)(auto split:if_splits)
+
+lemma inf_key_correct:
+  assumes "sorted ks"
+  assumes "inf_key ks n = Some k'"
+  shows "\<forall>k \<in> set ks. k \<le> n \<longrightarrow> k \<le> k'"
+  using assms
+proof (induction ks)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons a ks)
+  show ?case
+  proof (intro ballI)
+    fix k
+    assume "k \<in> set (a # ks)"
+    hence "k = a \<or> k \<in> set ks" by auto
+    moreover
+    { assume "k = a"
+      have "k' = a \<or> k' \<in> set ks"
+        using Cons(3) by (meson inf_key_in_list set_ConsD)
+      moreover have "k' = a \<Longrightarrow> k \<le> k'"
+        using `k = a` by auto
+      moreover have "k' \<in> set ks \<Longrightarrow> k \<le> k'"
+        using Cons(2) `k = a` by auto
+      ultimately have " k \<le> n \<longrightarrow> k \<le> k'" by auto }
+    moreover
+    { assume "k \<in> set ks"
+      have "sorted ks"
+        using Cons(2) by auto
+      obtain x where  "inf_key ks n = None \<or> inf_key ks n = Some x"
+        by (meson option.exhaust)
+      moreover
+      { assume "inf_key ks n = None"
+        hence "\<forall>k \<in> set ks. n < k"
+          using inf_key_none[OF `sorted ks`] by auto
+        hence "k \<le> n \<longrightarrow> k \<le> k'"
+          using `k \<in> set ks` by auto }
+      moreover
+      { assume *: "inf_key ks n = Some x"
+        with Cons(3) have "x = k'"
+          using inf_key_tail[OF `sorted (a # ks)`] by metis
+        with Cons(1)[OF `sorted ks`] * `k \<in> set ks` have "k \<le> n \<longrightarrow> k \<le> k'"
+          by auto }
+      ultimately have "k \<le> n \<longrightarrow> k \<le> k'"
+        by auto }
+    ultimately show "k \<le> n \<longrightarrow> k \<le> k'"
+      by auto
+  qed
+qed
+
+lemma set_keys_dom_lookup:
+  fixes \<tau> :: "'signal \<Rightarrow> nat \<Rightarrow>\<^sub>0 'b option"
+  fixes sig :: "'signal"
+  shows "set (sorted_list_of_set (keys (\<tau> sig))) = dom (lookup (\<tau> sig))"
+proof transfer
+  fix \<tau> :: "'a \<Rightarrow> nat \<Rightarrow> 'b option"
+  fix sig :: "'a"
+  assume "pred_fun top (\<lambda>f. finite {x. f x \<noteq> 0}) \<tau>"
+  hence "finite {k. \<tau> sig k \<noteq> 0}"
+    by auto
+  hence "set (sorted_list_of_set {k. \<tau> sig k \<noteq> 0}) = {k. \<tau> sig k \<noteq> None}"
+    unfolding zero_option_def by auto
+  also have "... = dom (\<tau> sig)"
+    unfolding dom_def by auto
+  finally show "set (sorted_list_of_set {k. \<tau> sig k \<noteq> 0}) = dom (\<tau> sig)"
+    by auto
+qed
+
+definition "inf_time \<tau> sig n = inf_key (sorted_list_of_set (keys (\<tau> sig))) n"
+
+lemma
+  assumes "inf_time \<tau> sig n = Some k"
+  shows "\<forall>t \<in> dom (lookup (\<tau> sig)). t \<le> n \<longrightarrow> t \<le> k"
+proof -
+  have"inf_key (sorted_list_of_set (keys (\<tau> sig))) n = Some k"
+    using assms unfolding inf_time_def by fastforce
+  with inf_key_correct have "\<forall>t\<in>set (sorted_list_of_set (keys (\<tau> sig))). t \<le> n \<longrightarrow> t \<le> k"
+    using sorted_sorted_list_of_set by blast
+  then show ?thesis
+    using set_keys_dom_lookup by metis
+qed
+
+lemma
+  assumes "inf_time \<tau> sig n = None"
+  shows "\<forall>t \<in> dom (lookup (\<tau> sig)). n < t"
+proof -
+  have "inf_key (sorted_list_of_set (keys (\<tau> sig))) n = None"
+    using assms unfolding inf_time_def by fastforce
+  with inf_key_none have " \<forall>k\<in>set (sorted_list_of_set (keys (\<tau> sig))). n < k"
+    using sorted_sorted_list_of_set by blast
+  moreover have "set (sorted_list_of_set (keys (\<tau> sig))) = dom (lookup (\<tau> sig))"
+    using set_keys_dom_lookup by metis
+  ultimately show ?thesis
+    using not_le by auto
+qed
+
+(* Rethink this definition; should @{term "None \<Rightarrow> False"} be removed ? By introducing new type? lifting? *)
+definition to_signal :: "'signal transaction2 \<Rightarrow> 'signal \<Rightarrow> time \<Rightarrow> val" where
+  "to_signal \<tau> sig t = (case inf_time \<tau> sig t of
+                           None    \<Rightarrow> False
+                         | Some t' \<Rightarrow> the (lookup (\<tau> sig) t'))"
+
+abbreviation "signal_of \<equiv> to_signal o to_transaction2"
+
 subsection "Rule of semantics"
 
 subsubsection \<open>Semantics of @{typ "'signal bexp"}\<close>
@@ -281,7 +445,7 @@ fun beval :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rig
   "beval now \<sigma> \<gamma> \<theta> (Bsig sig) = \<sigma> sig"
 | "beval now \<sigma> \<gamma> \<theta> (Btrue) = True"
 | "beval now \<sigma> \<gamma> \<theta> (Bfalse) = False"
-| "beval now \<sigma> \<gamma> \<theta> (Bsig_delayed sig t) = the (get_trans \<theta> (now - t) sig)"
+| "beval now \<sigma> \<gamma> \<theta> (Bsig_delayed sig t) = signal_of \<theta> sig (now - t)"
 | "beval now \<sigma> \<gamma> \<theta> (Bsig_event sig) = (sig \<in> \<gamma>)"
 | "beval now \<sigma> \<gamma> \<theta> (Bnot e) \<longleftrightarrow> \<not> beval now \<sigma> \<gamma> \<theta> e"
 | "beval now \<sigma> \<gamma> \<theta> (Band e1 e2) \<longleftrightarrow> beval now \<sigma> \<gamma> \<theta> e1 \<and> beval now \<sigma> \<gamma> \<theta> e2"
@@ -290,6 +454,8 @@ fun beval :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rig
 | "beval now \<sigma> \<gamma> \<theta> (Bnor e1 e2) \<longleftrightarrow> \<not> (beval now \<sigma> \<gamma> \<theta> e1 \<or> beval now \<sigma> \<gamma> \<theta> e2)"
 | "beval now \<sigma> \<gamma> \<theta> (Bxor e1 e2) \<longleftrightarrow> xor (beval now \<sigma> \<gamma> \<theta> e1) (beval now \<sigma> \<gamma> \<theta> e2)"
 | "beval now \<sigma> \<gamma> \<theta> (Bxnor e1 e2) \<longleftrightarrow> \<not> xor (beval now \<sigma> \<gamma> \<theta> e1) (beval now \<sigma> \<gamma> \<theta> e2)"
+
+term "to_signal o to_transaction2 "
 
 abbreviation beval_abb :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace
                                                                       \<Rightarrow> 'signal bexp \<Rightarrow> val \<Rightarrow> bool"
@@ -1208,7 +1374,7 @@ the maximum simulation time is reached).\<close>
 
 definition add_to_beh :: "'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow> time \<Rightarrow> time
                                              \<Rightarrow> 'signal trace" where
-  "add_to_beh \<sigma> \<gamma> \<theta> st fi = override_lookups_on_open_right \<theta> (Some o \<sigma>) st fi"
+  "add_to_beh \<sigma> \<gamma> \<theta> st fi = (if st < fi then Poly_Mapping.update st (Some o \<sigma>) \<theta> else \<theta>)"
 
 lemma [simp]:
   "add_to_beh \<sigma> \<gamma> \<theta> t t = \<theta>"
@@ -1264,13 +1430,13 @@ inductive b_simulate_fin :: "time \<Rightarrow> time \<Rightarrow> 'signal  stat
              next_time t \<tau>',
                 next_state t \<tau>' \<sigma>,
                     next_event t \<tau>' \<sigma>,
-                        add_to_beh \<sigma> \<gamma> \<theta> t (next_time t \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> beh)
-   \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> beh)"
+                        add_to_beh \<sigma> \<gamma> \<theta> t (next_time t \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> res)
+   \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
 
   \<comment> \<open>The simulation has quiesced and there is still time\<close>
 | "    (t \<le> maxtime)
    \<Longrightarrow> (quiet \<tau> \<gamma>)
-   \<Longrightarrow> (override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime = res)
+   \<Longrightarrow> Poly_Mapping.update t (Some o \<sigma>) \<theta> = res
    \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
 
   \<comment> \<open>Time is up\<close>
@@ -1284,7 +1450,7 @@ lemma case_quiesce:
   assumes "t \<le> maxtime"
   assumes "quiet \<tau> \<gamma>"
   assumes "(maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
-  shows "res = override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime"
+  shows "res = Poly_Mapping.update t (Some o \<sigma>) \<theta>"
   using bau[OF assms(3)] assms by auto
 
 lemma case_timesup:
@@ -1316,9 +1482,6 @@ theorem b_simulate_fin_deterministic:
   using case_quiesce apply blast
   using case_timesup by blast
 
-text \<open>Judgement @{term "b_simulate"} contains one rule only: executing the @{term "init'"} rule
-before @{term "b_simulate_fin"}.\<close>
-
 inductive b_simulate :: "time \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal trace \<Rightarrow> bool" where
   "     init' 0 def_state {} 0 cs empty_trans = \<tau>'
    \<Longrightarrow>  next_time  0 \<tau>' = t'
@@ -1328,6 +1491,10 @@ inductive b_simulate :: "time \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'sig
    \<Longrightarrow>  maxtime, t', \<sigma>', \<gamma>', beh' \<turnstile> <cs, \<tau>'> \<leadsto> res
    \<Longrightarrow>  b_simulate maxtime cs res"
 
+text \<open>Judgement @{term "b_simulate"} contains one rule only: executing the @{term "init'"} rule
+before @{term "b_simulate_fin"}.\<close>
+
+
 inductive_cases bau_init : "b_simulate maxtime cs res"
 
 lemma case_bau':
@@ -1336,7 +1503,7 @@ lemma case_bau':
   shows "maxtime, next_time  0 \<tau>', next_state 0 \<tau>' def_state, next_event 0 \<tau>' def_state,
                              add_to_beh def_state {} 0 0 (next_time  0 \<tau>') \<turnstile> <cs, \<tau>'> \<leadsto> res"
   using bau_init[OF assms(1)] assms by auto
-  
+
 text \<open>Similar to the theorem accompanying @{term "b_simulate_fin"}, i.e.
 @{thm "b_simulate_fin_deterministic"}, the rule @{term "b_simulate"} is also deterministic.\<close>
 
@@ -1373,14 +1540,14 @@ inductive b_simulate_fin_ss :: "time \<Rightarrow> 'signal conc_stmt \<Rightarro
   where
    \<comment> \<open>Time is up\<close>
  "  \<not>  t \<le> maxtime
-   \<Longrightarrow> override_lookups_on_open_left \<theta> 0 maxtime t = res'
-   \<Longrightarrow> b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime + 1, \<sigma>, \<gamma>, res')"
+   \<Longrightarrow> override_lookups_on_open_left \<theta> 0 maxtime t = \<theta>'
+   \<Longrightarrow> b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime + 1, \<sigma>, \<gamma>, \<theta>')"
 
    \<comment> \<open>The simulation has quiesced and there is still time\<close>
 | "    t \<le> maxtime
    \<Longrightarrow> quiet \<tau> \<gamma>
-   \<Longrightarrow> override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime = res'
-   \<Longrightarrow> b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime + 1, \<sigma>, \<gamma>, res')"
+   \<Longrightarrow> Poly_Mapping.update t (Some o \<sigma>) \<theta> = \<theta>'
+   \<Longrightarrow> b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime + 1, \<sigma>, \<gamma>, \<theta>')"
 
    \<comment> \<open>Business as usual: not quiesced yet and there is still time\<close>
 | "    t \<le> maxtime
@@ -1401,7 +1568,7 @@ lemma
   assumes "t \<le> maxtime"
   assumes "quiet \<tau> \<gamma>"
   assumes "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxtime, \<sigma>, \<gamma>, res')"
-  shows "override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime = res'"
+  shows "Poly_Mapping.update t (Some o \<sigma>) \<theta> = res'"
   using assms by (auto intro:sim_ss_ic)
 
 lemma
@@ -1553,10 +1720,10 @@ next
   fix n
   assume "t' \<le> n"
   assume "t \<le> maxtime"
-  assume *: " \<theta>' = override_lookups_on_closed \<theta> (Some \<circ> \<sigma>) t maxtime"
+  assume *: " \<theta>' =  Poly_Mapping.update t (Some \<circ> \<sigma>) \<theta>"
   assume t'_def: "t' = Suc maxtime"
   hence "get_trans \<theta>' n = get_trans \<theta> n"
-    using * `t' \<le> n` by transfer' auto
+    using * `t' \<le> n` `t \<le> maxtime` by transfer auto
   thus "get_trans \<theta>' n = 0"
     using `t' \<le> n` t'_def `t \<le> maxtime` assms(2) by auto
 next
@@ -1568,18 +1735,34 @@ next
                 , add_to_beh \<sigma> \<gamma> \<theta> t t')) =
          (t', \<sigma>', \<gamma>', \<theta>')"
   hence t'_def: "t' = next_time t (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>))"
-    and \<theta>'_def: "\<theta>' = override_lookups_on_open_right \<theta> (Some o \<sigma>) t t'"
+    and \<theta>'_def: "\<theta>' = (if t < t' then Poly_Mapping.update t (Some o \<sigma>) \<theta> else \<theta>)"
     unfolding Let_def add_to_beh_def by auto
-  hence **: "get_trans \<theta>' n = get_trans \<theta> n"
-    using `t' \<le> n` unfolding add_to_beh_def
-    by transfer' (simp add: override_lookups_on_open_right.rep_eq)
-  have *: "\<And>n. n < t \<Longrightarrow> get_trans (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) n = 0"
-    using b_conc_exec_rem_curr_trans_preserve_trans_removal[OF assms(3)] by auto
-  have "t \<le> t'"
-    using next_time_at_least[OF *] t'_def by auto
-  with `t' \<le> n` have "t \<le> n" by auto
-  with assms(2) show " get_trans \<theta>' n = 0"
-    using ** by auto
+  have "t < t' \<or> t' \<le> t" by auto
+  moreover
+  { assume "t < t'"
+    hence **: "get_trans \<theta>' n = get_trans \<theta> n"
+      using `t' \<le> n` `t < t'` \<theta>'_def unfolding add_to_beh_def
+      by transfer' auto
+    have *: "\<And>n. n < t \<Longrightarrow> get_trans (b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)) n = 0"
+      using b_conc_exec_rem_curr_trans_preserve_trans_removal[OF assms(3)] by auto
+    have "t \<le> t'"
+      using next_time_at_least[OF *] t'_def by auto
+    with `t' \<le> n` have "t \<le> n" by auto
+    with assms(2) have " get_trans \<theta>' n = 0"
+      using ** by auto }
+  moreover
+  { assume "t' \<le> t"
+    define \<tau>'' where "\<tau>'' = b_conc_exec t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>)"
+    have temp : "\<And>n. n  < t \<Longrightarrow> get_trans \<tau>'' n = 0"
+      using b_conc_exec_rem_curr_trans_preserve_trans_removal[OF assms(3), of "t"]
+      unfolding \<tau>''_def by auto
+    have "t' = t" using next_time_at_least[OF temp, of "t"] t'_def `t' \<le> t` unfolding \<tau>''_def
+      by auto
+    hence "\<theta>' = \<theta>" using \<theta>'_def by auto
+    hence "get_trans \<theta>' n = 0"
+      using assms(2) `t' \<le> n` `t' = t` by auto }
+  ultimately show "get_trans \<theta>' n = 0"
+    by auto
 qed
 
 lemma small_step_preserve_trans_removal:
@@ -1649,10 +1832,11 @@ next
   assume t'suc: "t' = Suc maxtime"
   assume "t \<le> maxtime"
   assume "(quiet \<tau> \<gamma>)"
-  assume **: "\<theta>' = override_lookups_on_closed \<theta> (Some \<circ> \<sigma>) t maxtime"
+  assume **: "\<theta>' = Poly_Mapping.update t (Some \<circ> \<sigma>) \<theta> "
   hence *: "Poly_Mapping.lookup \<theta>' (Suc maxtime) = 0"
-    using assms(1) assms(3) lookup_zero_after_ss t'suc
-    by (simp add: \<open>t \<le> maxtime\<close> le_SucI override_lookups_on_closed.rep_eq)
+    using assms(1) assms(3) t'suc
+    by (metis \<open>t \<le> maxtime\<close> leD le_SucI lessI lookup_update)
+
   \<comment> \<open>from big step\<close>
   have "res = override_lookups_on_open_left \<theta>' 0 maxtime (Suc maxtime)"
     using t'suc case_timesup[OF _ assms(2)] t'suc by auto
@@ -1660,7 +1844,7 @@ next
     by (transfer') (auto)
   hence "res = \<theta>'"
     using * by (metis lookup_update poly_mapping_eqI)
-  hence "override_lookups_on_closed \<theta> (Some o \<sigma>) t maxtime = res"
+  hence "Poly_Mapping.update t (Some o \<sigma>) \<theta> = res"
     by (simp add: "**")
   with `t \<le> maxtime` show "maxtime, t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<leadsto> res"
     using `quiet \<tau> \<gamma>` by (auto intro: b_simulate_fin.intros)

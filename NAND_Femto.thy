@@ -78,7 +78,7 @@ proof (cases)
             get_trans_trans_upd_cancel insert_absorb insert_iff insert_not_empty map_upd_nonempty
             option.sel singleton_conv)
   have nb: "add_to_beh def_state {A} 0 0 1 =
-       override_lookups_on_open_right 0 (Some o def_state) 0 1" (is "_ = ?beh'")
+       Poly_Mapping.update 0 (Some o def_state) 0" (is "_ = ?beh'")
     unfolding add_to_beh_def by auto
   define beh2 where "beh2 = ?beh'"
   hence snd_cyc: "10, 1, def_state (C := True), {C} , beh2 \<turnstile> <nand , \<tau>'> \<leadsto> beh"
@@ -138,5 +138,7 @@ theorem
   by eval
 
 value "get_trans (functional_simulate 10 nand) 1 C"
+
+value "signal_of (functional_simulate 10 nand) C 100"
 
 end
