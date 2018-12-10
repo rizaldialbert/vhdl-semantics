@@ -38,10 +38,6 @@ instance proof
 qed (simp_all only: enum_sig_def enum_all_sig_def enum_ex_sig_def UNIV_sig, simp_all)
 end
 
-lemma zero_map:
-  "(0 :: 'a \<rightharpoonup> 'b) x = None"
-  by (auto simp add:zero_option_def zero_fun_def)
-
 lemma zero_upd:
   "0 (sig := None) = 0"
   by (auto simp add:zero_map zero_option_def)
@@ -754,5 +750,7 @@ theorem
   assumes "simulate_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
   shows "functional_simulate maxtime cs = beh \<longleftrightarrow> b_simulate maxtime cs beh"
   using assms functional_simulate_sound functional_simulate_complete by metis
+
+hide_const exp1 exp2 seq1 seq2
 
 end
