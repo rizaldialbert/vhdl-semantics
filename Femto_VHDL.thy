@@ -2554,7 +2554,6 @@ has to deal with the advance of simulation time. Rather than advancing time natu
 proceeds to the "next interesting point of computation" @{cite "VanTassel1995"}. The following
 function does exactly this purpose.\<close>
 
-(* TODO : it should be the smallest time larger than t*)
 definition next_time :: "time \<Rightarrow> 'signal transaction \<Rightarrow> time" where
   "next_time t \<tau>' = (if \<tau>' = 0 then t else LEAST n. dom (get_trans \<tau>' n) \<noteq> {})"
 
