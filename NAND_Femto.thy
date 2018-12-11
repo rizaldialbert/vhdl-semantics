@@ -1133,7 +1133,7 @@ proof -
     unfolding to_signal2_def comp_def by auto
 qed
 
-theorem
+theorem nand3_correctness:
   assumes "b_simulate2 (Suc i) nand3 \<tau> res"
   assumes "lookup (to_transaction2 \<tau> C) = 0"
   shows "signal_of2 def res C (Suc i) \<longleftrightarrow> \<not> (signal_of2 False \<tau> A i \<and> signal_of2 False \<tau> B i)"
