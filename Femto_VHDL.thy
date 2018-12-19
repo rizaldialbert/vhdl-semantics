@@ -204,6 +204,13 @@ datatype 'signal seq_stmt =
   | Bassign_inert 'signal "'signal bexp" delay
   | Bnull
 
+fun nonneg_delay :: "'signal seq_stmt \<Rightarrow> bool" where
+  "nonneg_delay Bnull = True"
+| "nonneg_delay (Bcomp s1 s2) \<longleftrightarrow> nonneg_delay s1 \<and> nonneg_delay s2"
+| "nonneg_delay (Bguarded g s1 s2) \<longleftrightarrow> nonneg_delay s1 \<and> nonneg_delay s2"
+| "nonneg_delay (Bassign_trans sig exp dly) \<longleftrightarrow> 0 < dly"
+| "nonneg_delay (Bassign_inert sig exp dly) \<longleftrightarrow> 0 < dly"
+
 fun signals_in :: "'signal seq_stmt \<Rightarrow> 'signal list" where
   "signals_in (Bnull) = []"
 | "signals_in (Bassign_trans sig _ _) = [sig]"
@@ -290,6 +297,11 @@ lemma finite_keys_to_transaction2:
 lemma lookups_equal_transaction2:
   assumes "\<And>n. n \<le> maxtime \<Longrightarrow> lookup \<tau>1 n = lookup \<tau>2 n"
   shows "\<And>n. n \<le> maxtime \<Longrightarrow> lookup (to_transaction2 \<tau>1 sig) n = lookup (to_transaction2 \<tau>2 sig) n"
+  using assms apply transfer' unfolding to_trans_raw2_def by auto
+
+lemma lookups_equal_transaction2_strict:
+  assumes "\<And>n. n < maxtime \<Longrightarrow> lookup \<tau>1 n = lookup \<tau>2 n"
+  shows "\<And>n. n < maxtime \<Longrightarrow> lookup (to_transaction2 \<tau>1 sig) n = lookup (to_transaction2 \<tau>2 sig) n"
   using assms apply transfer' unfolding to_trans_raw2_def by auto
 
 lemma to_transaction2_update:
@@ -703,6 +715,30 @@ next
   ultimately show ?thesis by auto
 qed
 
+lemma takeWhile_lookup_same_strict:
+  fixes maxtime :: nat
+  assumes "\<And>n. n < maxtime \<Longrightarrow> lookup \<tau>1 n = lookup \<tau>2 n"
+  shows "(takeWhile (\<lambda>n. n < maxtime) (sorted_list_of_set (keys \<tau>1))) =
+         (takeWhile (\<lambda>n. n < maxtime) (sorted_list_of_set (keys \<tau>2)))"
+proof (cases "maxtime \<noteq> 0")
+  case True
+  hence "\<And>n. n \<le> maxtime - 1 \<Longrightarrow> lookup \<tau>1 n = lookup \<tau>2 n"
+    using assms by auto
+  hence "(takeWhile (\<lambda>n. n \<le> maxtime - 1) (sorted_list_of_set (keys \<tau>1))) =
+         (takeWhile (\<lambda>n. n \<le> maxtime - 1) (sorted_list_of_set (keys \<tau>2)))"
+    using takeWhile_lookup_same by auto
+  moreover have "takeWhile (\<lambda>n. n \<le> maxtime - 1) (sorted_list_of_set (keys \<tau>1)) =
+                 takeWhile (\<lambda>n. n < maxtime) (sorted_list_of_set (keys \<tau>1))"
+    by (metis Suc_pred' True less_Suc_eq_le neq0_conv)
+  moreover have "takeWhile (\<lambda>n. n \<le> maxtime - 1) (sorted_list_of_set (keys \<tau>2)) =
+                 takeWhile (\<lambda>n. n < maxtime) (sorted_list_of_set (keys \<tau>2))"
+    by (metis Suc_pred' True less_Suc_eq_le neq0_conv)
+  ultimately show ?thesis by auto
+next
+  case False hence "maxtime = 0" by auto
+  then show ?thesis
+    by (metis (full_types) last_in_set not_less_zero set_takeWhileD)
+qed
 
 fun inf_key :: "nat list \<Rightarrow> nat \<Rightarrow> nat option" where
   "inf_key ks n = (case takeWhile (\<lambda>k. k \<le> n) ks of [] \<Rightarrow> None | ks' \<Rightarrow> Some (last ks'))"
@@ -937,6 +973,24 @@ next
   ultimately show ?case by auto
 qed
 
+lemma inf_key_less:
+  assumes "sorted ks"
+  assumes "i \<notin> set ks"
+  shows "inf_key ks i = inf_key ks (i - 1)"
+proof -
+  have f1: "\<forall>ns nsa p pa. (ns \<noteq> nsa \<or> (\<exists>n. (n::nat) \<in> set ns \<and> p n \<noteq> pa n)) \<or> takeWhile p ns = takeWhile pa nsa"
+    by (metis (no_types) takeWhile_cong)
+  obtain nn :: "(nat \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> bool) \<Rightarrow> nat list \<Rightarrow> nat" where
+    "\<forall>x0 x1 x3. (\<exists>v4. v4 \<in> set x3 \<and> x1 v4 \<noteq> x0 v4) = (nn x0 x1 x3 \<in> set x3 \<and> x1 (nn x0 x1 x3) \<noteq> x0 (nn x0 x1 x3))"
+    by moura
+  then have f2: "\<forall>ns nsa p pa. (ns \<noteq> nsa \<or> nn pa p ns \<in> set ns \<and> p (nn pa p ns) \<noteq> pa (nn pa p ns)) \<or> takeWhile p ns = takeWhile pa nsa"
+    using f1 by presburger
+  have "Suc (i - Suc 0) = i \<longrightarrow> nn (\<lambda>n. n \<le> i - 1) (\<lambda>n. n \<le> i) ks \<notin> set ks \<or> (nn (\<lambda>n. n \<le> i - 1) (\<lambda>n. n \<le> i) ks \<le> i) = (nn (\<lambda>n. n \<le> i - 1) (\<lambda>n. n \<le> i) ks \<le> i - 1)"
+    by (metis (no_types) One_nat_def assms(2) less_Suc_eq_le less_le)
+  then show ?thesis
+    using f2 by (metis Suc_pred diff_is_0_eq' inf_key.simps neq0_conv zero_le_one)
+qed
+
 lemma inf_key_chopped:
   assumes "sorted ks"
   assumes "\<exists>k' \<in> set ks. k < k' \<and> k' \<le> i"
@@ -1155,6 +1209,22 @@ proof -
   finally show ?thesis by auto
 qed
 
+lemma inf_time_when_lookups_same_strict:
+  assumes "\<And>n. n < maxtime \<Longrightarrow> lookup (to_transaction2 \<tau>1 sig) n = lookup (to_transaction2 \<tau>2 sig) n"
+  assumes "n < maxtime"
+  shows "inf_time (to_transaction2 \<tau>1) sig n = inf_time (to_transaction2 \<tau>2) sig n"
+proof -
+  have "inf_time (to_transaction2 \<tau>1) sig n =
+        inf_key (takeWhile (\<lambda>n. n < maxtime) (sorted_list_of_set (keys (to_transaction2 \<tau>1 sig)))) n"
+    using inf_time_upto_upper_bound_strict[OF `n < maxtime`] by auto
+  also have "... =
+        inf_key (takeWhile (\<lambda>n. n < maxtime) (sorted_list_of_set (keys (to_transaction2 \<tau>2 sig)))) n"
+    using takeWhile_lookup_same_strict[OF assms(1)] by auto
+  also have "... = inf_time (to_transaction2 \<tau>2) sig n"
+    using inf_time_upto_upper_bound_strict[OF `n < maxtime`] by metis
+  finally show ?thesis by auto
+qed
+
 lemma inf_time_update:
   assumes "\<And>n. t \<le> n \<Longrightarrow> get_trans \<theta> n = 0"
   assumes "Poly_Mapping.update t (Some \<circ> \<sigma>) \<theta> = res"
@@ -1222,6 +1292,12 @@ proof (rule ccontr)
   ultimately show False by auto
 qed
 
+lemma lookup_some_inf_time':
+  assumes "lookup \<tau> n sig = Some (\<sigma> sig)"
+  shows "inf_time (to_transaction2 \<tau>) sig n = Some n"
+  by (metis assms domI inf_time_at_most inf_time_neq_t_choice not_le order_refl to_trans_raw2_def
+      to_transaction2.rep_eq)
+
 lemma inf_time_at_zero:
   assumes "lookup \<tau> 0 = 0"
   shows "inf_time (to_transaction2 \<tau>) sig 0 = None"
@@ -1234,6 +1310,38 @@ proof (rule ccontr)
           inf_time_at_most[OF `inf_time (to_transaction2 \<tau>) sig 0 = Some ta`] by auto
   with `lookup \<tau> 0 = 0` show False
     by (transfer', simp add: to_trans_raw2_def domIff zero_fun_def zero_option_def)
+qed
+
+lemma inf_time_less:
+  assumes "lookup (\<tau> sig) t = 0"
+  shows "inf_time \<tau> sig t = inf_time \<tau> sig (t - 1)"
+  unfolding inf_time_def using assms inf_key_less by auto
+
+lemma inf_time_someI:
+  assumes "k \<in> dom (lookup (\<tau> sig))" and "k \<le> n"
+  assumes "\<forall>t \<in> dom (lookup (\<tau> sig)). t \<le> n \<longrightarrow> t \<le> k"
+  shows "inf_time \<tau> sig n = Some k"
+proof (rule ccontr)
+  assume "inf_time \<tau> sig n \<noteq> Some k"
+  then obtain k' where "inf_time \<tau> sig n = None \<or> inf_time \<tau> sig n = Some k' \<and> k' \<noteq> k"
+    using option.exhaust_sel by auto
+  moreover
+  { assume "inf_time \<tau> sig n = None"
+    hence "\<forall>t \<in> dom (lookup (\<tau> sig)). n < t"
+      by (auto dest!: inf_time_noneE)
+    with assms(1-2) have "False"  using not_le by blast }
+  moreover
+  { assume *: "inf_time \<tau> sig n = Some k' \<and> k' \<noteq> k"
+    hence "\<forall>t \<in> dom (lookup (\<tau> sig)). t \<le> n \<longrightarrow> t \<le> k'" and "k' \<noteq> k"
+      by (auto dest!: inf_time_someE)
+    with assms(1-2) have "k < k'"
+      by auto
+    have "k' \<le> n " and "k' \<in> dom (lookup (\<tau> sig))"
+      using * inf_time_at_most   apply fastforce using inf_time_someE2 * by fastforce
+    hence "k' \<le> k"
+      using assms(3) by auto
+    with `k < k'` have False by auto }
+  ultimately show "False" by auto
 qed
 
 (* Rethink this definition; should @{term "None \<Rightarrow> False"} be removed ? By introducing new type? lifting? *)
@@ -1272,7 +1380,7 @@ lemma [simp]:
   "inf_time 0 sig t = None"
   unfolding zero_fun_def inf_time_def by auto
 
-lemma [simp]:
+lemma signal_of2_empty[simp]:
   "signal_of2 def 0 sig t = def"
   unfolding to_signal2_def comp_def
   apply transfer' unfolding to_trans_raw2_def by auto
@@ -1283,6 +1391,16 @@ lemma signal_of2_lookup_same:
   shows "signal_of2 def \<tau>1 sig n = signal_of2 def \<tau>2 sig n"
   using to_signal2_lookup_same[OF assms] by auto
 
+lemma signal_of2_lookup_sig_same:
+  assumes "\<And>n. lookup (to_transaction2 \<tau>1 sig) n = lookup (to_transaction2 \<tau>2 sig) n"
+  shows "signal_of2 def \<tau>1 sig m = signal_of2 def \<tau>2 sig m"
+proof -
+  have "inf_time (to_transaction2 \<tau>1) sig m = inf_time (to_transaction2 \<tau>2) sig m"
+    using inf_time_when_lookups_same assms by (meson inf_time_when_lookups_same_strict less_Suc_eq)
+  thus ?thesis
+    using assms unfolding to_signal2_def comp_def  by (simp add: option.case_eq_if)
+qed
+
 lemma lookup_some_signal_of2:
   assumes "lookup \<tau> n = Some o \<sigma>"
   shows "signal_of2 def \<tau> sig n = \<sigma> sig"
@@ -1292,6 +1410,52 @@ proof -
   thus ?thesis
     using assms unfolding to_signal2_def comp_def
     by (simp add: to_trans_raw2_def to_transaction2.rep_eq)
+qed
+
+lemma lookup_some_signal_of2':
+  assumes "lookup \<tau> n sig = Some (\<sigma> sig)"
+  shows "signal_of2 def \<tau> sig n = \<sigma> sig"
+  using assms
+  by (simp add: lookup_some_inf_time' to_signal2_def to_trans_raw2_def to_transaction2.rep_eq)
+
+lemma signal_of2_less:
+  assumes "lookup \<tau> t = 0"
+  shows "signal_of2 def \<tau> sig t = signal_of2 def \<tau> sig (t - 1)"
+proof -
+  have " lookup (to_transaction2 \<tau> sig) t = 0"
+    using assms by (transfer', auto simp add: to_trans_raw2_def zero_map zero_option_def)
+  hence "inf_time (to_transaction2 \<tau>) sig t = inf_time (to_transaction2 \<tau>) sig (t-1)"
+    using inf_time_less[of "to_transaction2 \<tau>" "sig"] by auto
+  thus ?thesis
+    unfolding to_signal2_def comp_def by auto
+qed
+
+lemma signal_of2_less_ind:
+  assumes "\<And>n. k1 < n \<Longrightarrow> n \<le> k2 \<Longrightarrow> lookup \<tau> n = 0"
+  assumes "k1 < k2"
+  shows "signal_of2 def \<tau> sig k2 = signal_of2 def \<tau> sig k1"
+  using assms
+proof (induction "k2")
+  case 0
+  then show ?case by auto
+next
+  case (Suc k2)
+  hence "get_trans \<tau> (Suc k2) = 0"
+    by auto
+  hence *: "signal_of2 def \<tau> sig (Suc k2) = signal_of2 def \<tau> sig k2"
+    by(auto dest!: signal_of2_less)
+  have IH1: "\<And>n. k1 < n \<Longrightarrow> n \<le> k2 \<Longrightarrow> get_trans \<tau> n = 0"
+    using Suc by auto
+  have "k1 < k2 \<or> k1 = k2"
+    using `k1 < Suc k2` by auto
+  moreover
+  { assume IH2: "k1 < k2"
+    hence ?case
+      using Suc(1)[OF IH1 IH2] * by auto }
+  moreover
+  { assume "k1 = k2"
+    hence ?case using * by auto }
+  ultimately show ?case by auto
 qed
 
 subsection "Rule of semantics"
@@ -1310,7 +1474,7 @@ fun beval :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rig
   "beval now \<sigma> \<gamma> \<theta> (Bsig sig) = \<sigma> sig"
 | "beval now \<sigma> \<gamma> \<theta> (Btrue) = True"
 | "beval now \<sigma> \<gamma> \<theta> (Bfalse) = False"
-| "beval now \<sigma> \<gamma> \<theta> (Bsig_delayed sig t) = signal_of \<theta> sig (now - t)"
+| "beval now \<sigma> \<gamma> \<theta> (Bsig_delayed sig t) = signal_of2 False \<theta> sig (now - t)"
 | "beval now \<sigma> \<gamma> \<theta> (Bsig_event sig) = (sig \<in> \<gamma>)"
 | "beval now \<sigma> \<gamma> \<theta> (Bnot e) \<longleftrightarrow> \<not> beval now \<sigma> \<gamma> \<theta> e"
 | "beval now \<sigma> \<gamma> \<theta> (Band e1 e2) \<longleftrightarrow> beval now \<sigma> \<gamma> \<theta> e1 \<and> beval now \<sigma> \<gamma> \<theta> e2"
@@ -1350,7 +1514,12 @@ lift_definition trans_post :: "'signal \<Rightarrow> val \<Rightarrow> 'signal t
 lemma lookup_trans_post:
   assumes "s' \<noteq> s"
   shows "lookup (to_transaction2 (trans_post s' v \<tau> k) s) n = lookup (to_transaction2 \<tau> s) n"
-    using assms by (transfer', auto simp add:trans_post_raw_def to_trans_raw2_def)
+  using assms by (transfer', auto simp add:trans_post_raw_def to_trans_raw2_def)
+
+lemma lookup_trans_post_less:
+  assumes "n < k"
+  shows "lookup (to_transaction2 (trans_post s' v \<tau> k) s) n = lookup (to_transaction2 \<tau> s) n"
+  using assms by (transfer', auto simp add:trans_post_raw_def to_trans_raw2_def)
 
 lemma inf_time_trans_post:
   assumes "s' \<noteq> s"
@@ -1364,11 +1533,60 @@ proof -
     unfolding inf_time_def by auto
 qed
 
+lemma inf_time_trans_post_less:
+  assumes "t < k"
+  shows "inf_time (to_transaction2 (trans_post s' v \<tau> k)) s t = inf_time (to_transaction2 \<tau>) s t"
+proof -
+  have "\<And>n. n < k \<Longrightarrow> lookup (to_transaction2 (trans_post s' v \<tau> k) s) n = lookup (to_transaction2 \<tau> s) n"
+    by (simp add: lookup_trans_post_less)
+  with inf_time_when_lookups_same_strict[OF this `t < k`] show ?thesis
+    by auto
+qed
+
 lemma signal_of_trans_post:
   assumes "s' \<noteq> s"
   shows "signal_of2 def (trans_post s' v \<tau> k) s t = signal_of2 def \<tau> s t"
   using inf_time_trans_post[OF assms] lookup_trans_post[OF assms]
   unfolding to_signal2_def comp_def  by (simp add: option.case_eq_if)
+
+lemma signal_of_trans_post2:
+  assumes "t < k"
+  shows "signal_of2 def (trans_post s' v \<tau> k) s t = signal_of2 def \<tau> s t"
+  using inf_time_trans_post_less[OF assms] lookup_trans_post_less[OF assms]
+  unfolding to_signal2_def comp_def
+  by (smt assms case_optionE inf_key_at_most inf_time_def le_less_trans lookup_trans_post_less
+      option.case_eq_if option.sel)
+
+lemma signal_of_trans_post3:
+  assumes "k \<le> t"
+  shows "signal_of2 def (trans_post s v \<tau> k) s t = v"
+proof -
+  have "inf_time (to_transaction2 (trans_post s v \<tau> k)) s t = Some k"
+  proof (rule inf_time_someI)
+    show " k \<in> dom (lookup (to_transaction2 (trans_post s v \<tau> k) s))"
+      by (transfer', auto simp  add: to_trans_raw2_def trans_post_raw_def)
+  next
+    show "k \<le> t" using assms by auto
+  next
+    { fix ta
+      assume *: "ta \<in> dom (lookup (to_transaction2 (trans_post s v \<tau> k) s))"
+      assume "ta \<le> t"
+      have "ta \<le> k"
+      proof (rule ccontr)
+        assume "\<not> ta \<le> k"
+        hence "k < ta" by auto
+        hence "lookup (to_transaction2 (trans_post s v \<tau> k) s) ta = None"
+          apply transfer' unfolding to_trans_raw2_def trans_post_raw_def by auto
+        with * show "False" by auto
+      qed }
+    thus " \<forall>ta\<in>dom (lookup (to_transaction2 (trans_post s v \<tau> k) s)). ta \<le> t \<longrightarrow> ta \<le> k"
+      by auto
+  qed
+  moreover have "lookup (to_transaction2 (trans_post s v \<tau> k) s) k = Some v"
+    apply transfer' unfolding to_trans_raw2_def trans_post_raw_def by auto
+  ultimately show ?thesis
+    unfolding to_signal2_def comp_def by auto
+qed
 
 fun check :: "('signal \<rightharpoonup> val) \<Rightarrow> 'signal \<Rightarrow> val \<Rightarrow> bool" where
   "check \<sigma> sig val = (case \<sigma> sig of None \<Rightarrow> True | Some val' \<Rightarrow> val = val')"
@@ -1682,6 +1900,89 @@ definition inr_post :: "'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow
     else
       trans_post sig val (purge dly \<tau> now sig cur_val) (now + dly))"
 
+lemma lookup_inr_post_purged:
+  assumes "(\<forall>s. s \<in> dom (lookup \<tau> now) \<longrightarrow> \<sigma> s = the (lookup \<tau> now s))"
+  shows "\<And>n. now \<le> n \<Longrightarrow> n < now + dly \<Longrightarrow>
+                                    lookup (inr_post sig val (\<sigma> sig) \<tau> now dly) n sig = Some (\<sigma> sig)
+                                  \<or> lookup (inr_post sig val (\<sigma> sig) \<tau> now dly) n sig = None"
+proof -
+  fix n
+  assume "now \<le> n" and "n < now + dly"
+  have "is_stable dly \<tau> now sig (\<sigma> sig) \<or> \<not> is_stable dly \<tau> now sig (\<sigma> sig)"
+    by auto
+  moreover
+  { assume "is_stable dly \<tau> now sig (\<sigma> sig)"
+    hence "(\<forall>m. now < m \<and> m \<le> now + dly \<longrightarrow> check (lookup \<tau> m) sig (\<sigma> sig))"
+      using is_stable_correct by metis
+    hence "\<forall>m. now < m \<and> m \<le> now + dly \<longrightarrow> (case lookup \<tau> m sig of None \<Rightarrow> True | Some val' \<Rightarrow> \<sigma> sig = val')"
+      by auto
+    hence "\<forall>m. now < m \<and> m \<le> now + dly \<longrightarrow> lookup \<tau> m sig = None \<or> lookup \<tau> m sig = Some (\<sigma> sig)"
+      using option.inject by fastforce
+    hence disj: "lookup \<tau> n sig = None \<or> lookup \<tau> n sig = Some (\<sigma> sig)"
+      using `now \<le> n` `n < now + dly` using assms by (smt domIff le_eq_less_or_eq option.exhaust_sel)
+    have "inr_post sig val (\<sigma> sig) \<tau> now dly = trans_post sig val \<tau> (now + dly)" (is "?inr = ?trans")
+      using `is_stable dly \<tau> now sig (\<sigma> sig)` unfolding inr_post_def by auto
+    hence "lookup ?inr n sig = lookup ?trans n sig"
+      by auto
+    also have "... = lookup \<tau> n sig"
+      using `n < now + dly` apply transfer' unfolding trans_post_raw_def by auto
+    finally have "lookup ?inr n sig = lookup \<tau> n sig"
+      by auto
+    hence "lookup ?inr n sig = None \<or> lookup ?inr n sig = Some (\<sigma> sig)"
+      using disj by auto }
+  moreover
+  { assume "\<not> is_stable dly \<tau> now sig (\<sigma> sig)"
+    hence "inr_post sig val (\<sigma> sig) \<tau> now dly = trans_post sig val (purge dly \<tau> now sig (\<sigma> sig)) (now + dly)"
+      (is "?inr = ?trans") unfolding inr_post_def by auto
+    hence "lookup ?inr n sig = lookup ?trans n sig"
+      by auto
+    also have "... = lookup (purge dly \<tau> now sig (\<sigma> sig)) n sig" (is "_ = lookup ?purge n sig")
+      using `n < now + dly` apply transfer' unfolding trans_post_raw_def by auto
+    finally have "lookup ?inr n sig = lookup ?purge n sig"
+      by auto
+    moreover have "lookup ?purge n sig = None \<or> lookup ?purge n sig = Some (\<sigma> sig)"
+      using purge_correctness' `now \<le> n` `n < now + dly` assms
+      by (smt domIff le_eq_less_or_eq option.exhaust_sel purge_before_now_unchanged)
+    ultimately have "lookup ?inr n sig = None \<or> lookup ?inr n sig = Some (\<sigma> sig)"
+      by auto }
+  ultimately show "lookup (inr_post sig val (\<sigma> sig) \<tau> now dly) n sig = Some (\<sigma> sig) \<or>
+                   lookup (inr_post sig val (\<sigma> sig) \<tau> now dly) n sig = None"
+    by linarith
+qed
+
+lemma signal_of_inr_post:
+  assumes "now + dly \<le> t"
+  shows "signal_of2 def (inr_post s v c \<tau> now dly) s t = v"
+proof -
+  have "inf_time (to_transaction2 (inr_post s v c \<tau> now dly)) s t = Some (now + dly)"
+  proof (rule inf_time_someI)
+    show " now + dly \<in> dom (lookup (to_transaction2 (inr_post s v c \<tau> now dly) s))"
+      unfolding inr_post_def apply transfer' unfolding trans_post_raw_def to_trans_raw2_def
+      by auto
+  next
+    show "now + dly \<le> t" using assms by auto
+  next
+    { fix ta
+      assume *: "ta \<in> dom (lookup (to_transaction2 (inr_post s v c \<tau> now dly) s))"
+      assume "ta \<le> t"
+      have "ta \<le> now + dly"
+      proof (rule ccontr)
+        assume "\<not> ta \<le> now + dly"
+        hence "now + dly < ta" by auto
+        hence "lookup (to_transaction2 (inr_post s v c \<tau> now dly) s) ta = None"
+          unfolding inr_post_def apply transfer' unfolding trans_post_raw_def to_trans_raw2_def
+          by auto
+        with * show "False" by auto
+      qed }
+    thus " \<forall>ta\<in>dom (lookup (to_transaction2 (inr_post s v c \<tau> now dly) s)). ta \<le> t \<longrightarrow> ta \<le> now + dly"
+      by auto
+  qed
+  moreover have "lookup (to_transaction2 (inr_post s v c \<tau> now dly) s) (now + dly) = Some v"
+    unfolding inr_post_def apply transfer' unfolding to_trans_raw2_def trans_post_raw_def by auto
+  ultimately show ?thesis
+    unfolding to_signal2_def comp_def by auto
+qed
+
 fun b_seq_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                                'signal seq_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
   where
@@ -1936,16 +2237,70 @@ lemma purge_raw_preserve_trans_removal:
   shows "\<And>n. n < t \<Longrightarrow> (purge_raw dly \<tau> t sig (\<sigma> sig)) n = 0"
   using assms by (induction dly arbitrary:\<tau>) (auto simp add: Let_def)
 
+lemma purge_raw_preserve_trans_removal':
+  assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
+  shows "\<And>n. n < t \<Longrightarrow> (purge_raw dly \<tau> t sig c) n = 0"
+  using assms by (induction dly arbitrary:\<tau>) (auto simp add: Let_def)
+
 lemma purge_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0"
   shows "\<And>n. n < t \<Longrightarrow> get_trans (purge dly \<tau> t sig (\<sigma> sig)) n = 0"
   using assms by (transfer, auto simp add: purge_raw_preserve_trans_removal)
+
+lemma purge_preserve_trans_removal':
+  assumes "\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0"
+  shows "\<And>n. n < t \<Longrightarrow> get_trans (purge dly \<tau> t sig c) n = 0"
+  using assms by (transfer, auto simp add: purge_raw_preserve_trans_removal')
 
 lemma inr_post_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0"
   shows "\<And>n. n < t \<Longrightarrow> get_trans (inr_post sig x (\<sigma> sig) \<tau> t dly) n = 0"
   using assms  unfolding inr_post_def
   by (auto simp add: trans_post_preserve_trans_removal purge_preserve_trans_removal)
+
+lemma inr_post_preserve_trans_removal':
+  assumes "\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0"
+  shows "\<And>n. n < t \<Longrightarrow> get_trans (inr_post sig x c \<tau> t dly) n = 0"
+  using assms  unfolding inr_post_def
+  by (auto simp add: trans_post_preserve_trans_removal purge_preserve_trans_removal')
+
+lemma signal_of_inr_post2:
+  assumes "now \<le> t" and "t < now + dly"
+  assumes "\<And>n. n <  now \<Longrightarrow> lookup \<tau> n = 0"
+  assumes "(\<forall>s. s \<in> dom (lookup \<tau> now) \<longrightarrow> \<sigma> s = the (lookup \<tau> now s))"
+  shows "signal_of2 (\<sigma> s) (inr_post s v (\<sigma> s) \<tau> now dly) s t = (\<sigma> s)"
+proof (cases "inf_time (to_transaction2 (inr_post s v (\<sigma> s) \<tau> now dly)) s t = None")
+  case True
+  then show ?thesis  unfolding to_signal2_def comp_def by auto
+next
+  case False
+  then obtain t' where inf: "inf_time (to_transaction2 (inr_post s v (\<sigma> s) \<tau> now dly)) s t = Some t'"
+    by auto
+  hence "t' \<le> t" and "t' < now + dly"
+    using assms(2) by (auto dest!: inf_time_at_most)
+  have *: "\<And>n. n < now \<Longrightarrow> lookup \<tau> n = 0"
+    using assms(3) by auto
+  have **: "\<And>n. n < now \<Longrightarrow> lookup (inr_post s v (\<sigma> s) \<tau> now dly) n = 0"
+    using inr_post_preserve_trans_removal'[OF *] by auto
+  have "now \<le> t'"
+  proof (rule ccontr)
+    assume "\<not> now \<le> t'" hence "t' < now" by auto
+    with assms(2) have "lookup (inr_post s v (\<sigma> s) \<tau> now dly) t' = 0"
+      using ** by auto
+    have "t' \<in> dom (lookup (to_transaction2 (inr_post s v (\<sigma> s) \<tau> now dly) s))"
+      using inf_time_someE2[OF inf] by auto
+    hence "lookup (inr_post s v (\<sigma> s) \<tau> now dly) t' \<noteq> 0"
+      unfolding inr_post_def apply transfer' unfolding to_trans_raw2_def trans_post_raw_def
+      by (metis (no_types, lifting) domIff zero_map)
+    with `lookup (inr_post s v (\<sigma> s) \<tau> now dly) t' = 0` show False by auto
+  qed
+  have "t' \<in> dom (lookup (to_transaction2 (inr_post s v (\<sigma> s) \<tau> now dly) s))"
+    using inf_time_someE2[OF inf] by auto
+  with lookup_inr_post_purged[OF assms(4) `now \<le> t'` `t' < now + dly`]
+  have "the (lookup (to_transaction2 (inr_post s v (\<sigma> s) \<tau> now dly) s) t') = (\<sigma> s)"
+    by (metis domIff option.sel to_trans_raw2_def to_transaction2.rep_eq)
+  with inf show ?thesis unfolding to_signal2_def comp_def by auto
+qed
 
 lemma b_seq_exec_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0"
@@ -2557,6 +2912,25 @@ function does exactly this purpose.\<close>
 definition next_time :: "time \<Rightarrow> 'signal transaction \<Rightarrow> time" where
   "next_time t \<tau>' = (if \<tau>' = 0 then t else LEAST n. dom (get_trans \<tau>' n) \<noteq> {})"
 
+lemma next_time_lookup_zero:
+  "\<forall>n. t < n \<and> n < next_time t \<tau>' \<longrightarrow> lookup \<tau>' n = 0"
+proof -
+  have f1: "dom (0::'a \<Rightarrow> bool option) = {}"
+    by (simp add: zero_fun_def zero_option_def)
+  obtain nn :: nat where
+    "(\<exists>v0. (t < v0 \<and> v0 < next_time t \<tau>') \<and> get_trans \<tau>' v0 \<noteq> 0) = ((t < nn \<and> nn < next_time t \<tau>') \<and> get_trans \<tau>' nn \<noteq> 0)"
+    by moura
+  moreover
+  { assume "get_trans \<tau>' nn \<noteq> Map.empty"
+    then have "\<not> nn < (LEAST n. dom (get_trans \<tau>' n) \<noteq> {})"
+      using not_less_Least by auto
+    then have "(\<not> t < nn \<or> \<not> nn < next_time t \<tau>') \<or> get_trans \<tau>' nn = 0"
+      by (metis (no_types) less_trans nat_neq_iff next_time_def) }
+  ultimately show ?thesis
+    using f1 by auto
+qed
+
+
 lemma [simp]:
   "next_time t 0 = t"
   unfolding next_time_def by auto
@@ -3076,7 +3450,6 @@ next
     by transfer' auto
 qed
 
-
 lemma b_conc_exec_does_not_modify_signals2:
   assumes "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
   assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
@@ -3115,6 +3488,144 @@ proof -
     using ** case_none unfolding to_signal2_def  by (auto simp add: * split:option.splits)
   thus "signal_of2 (\<sigma> s) \<tau> s i = signal_of2 (next_state t \<tau>' \<sigma> s) \<tau>' s i"
     by auto
+qed
+
+definition context_invariant :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> bool" where
+  "context_invariant t \<sigma> \<gamma> \<theta> \<tau> \<equiv> (\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0)
+                               \<and> (\<gamma> = {s. \<sigma> s \<noteq> signal_of2 False \<theta> s (t - 1)})
+                               \<and> (\<forall>s. s \<in> dom (lookup \<tau> t) \<longrightarrow> \<sigma> s = the (lookup \<tau> t s))
+                               \<and> (\<forall>n. t \<le> n \<longrightarrow> lookup \<theta> n = 0)"
+
+lemma context_invariant:
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+  assumes "t < next_time t \<tau>'"
+  shows "context_invariant (next_time t \<tau>') (next_state t \<tau>' \<sigma>) (next_event t \<tau>' \<sigma>) (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) \<tau>'"
+proof -
+  have 0: "\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0"
+    using assms unfolding context_invariant_def by auto
+  hence 1: "\<And>n. n < t \<Longrightarrow> get_trans \<tau>' n = 0"
+    using b_conc_exec_rem_curr_trans_preserve_trans_removal assms(2) by metis
+  have 2: "\<And>n. t \<le> n \<Longrightarrow> lookup \<theta> n = 0"
+    using assms unfolding context_invariant_def by auto
+
+  define t' where t'_def: "t' = next_time t \<tau>'"
+  define \<sigma>' where \<sigma>'_def: "\<sigma>' = next_state t \<tau>' \<sigma>"
+  define \<gamma>' where \<gamma>'_def: "\<gamma>' = next_event t \<tau>' \<sigma>"
+  define \<theta>' where \<theta>'_def: "\<theta>' = add_to_beh \<sigma> \<theta> t (next_time t \<tau>')"
+
+  have " t \<le> next_time t \<tau>'"
+    using assms(3) by auto
+  have 3: "\<forall>n. n < t' \<longrightarrow> lookup \<tau>' n = 0"
+    using next_time_at_least2 t'_def by metis
+  have 4: "\<forall>n. t' \<le> n \<longrightarrow> lookup \<theta>' n = 0"
+    unfolding \<theta>'_def add_to_beh_def t'_def using 2 `t \<le> next_time t \<tau>'`
+    by transfer' auto
+  have 5: "\<forall>s. s \<in> dom (lookup \<tau>' t') \<longrightarrow> \<sigma>' s = the (lookup \<tau>' t' s)"
+    unfolding \<sigma>'_def next_state_def t'_def Let_def comp_def by auto
+  have "\<And>s. signal_of2 False \<theta>' s (t' - 1) = \<sigma> s"
+  proof -
+    have "t' - 1 = t \<or> t < t' - 1"
+      using assms(3) unfolding t'_def by auto
+    moreover
+    { assume "t' - 1 = t"
+      have "lookup \<theta>' t = Some o \<sigma>"
+        unfolding \<theta>'_def add_to_beh_def using `t < next_time t \<tau>'`  by transfer' auto
+      hence "\<And>s. signal_of2 False \<theta>' s (t' - 1) = \<sigma> s"
+        using lookup_some_signal_of2 `t' - 1 = t` by metis }
+    moreover
+    { assume "t < t' - 1"
+      have "\<And>n. t < n \<Longrightarrow> n \<le> t' - 1 \<Longrightarrow> get_trans \<theta>' n = 0"
+        unfolding \<theta>'_def add_to_beh_def using `t < next_time t \<tau>'` unfolding t'_def
+        using 2  by (simp add: lookup_update)
+      hence "\<And>s. signal_of2  False \<theta>' s (t' - 1) = signal_of2 False \<theta>' s t"
+        using signal_of2_less_ind[OF _ `t < t' - 1`] by metis
+      moreover have "\<And>s. signal_of2 False \<theta>' s t = \<sigma> s"
+        using lookup_some_signal_of2 unfolding \<theta>'_def add_to_beh_def using `t < next_time t \<tau>'`
+        by (metis (mono_tags, hide_lams) lookup_update)
+      finally have "\<And>s. signal_of2 False \<theta>' s (t' - 1) = \<sigma> s"
+        by auto }
+    ultimately show "\<And>s. signal_of2 False \<theta>' s (t' - 1) = \<sigma> s"
+      by auto
+  qed
+  hence "\<gamma>' = {s. \<sigma>' s \<noteq> signal_of2 False \<theta>' s (t' - 1)}"
+    unfolding \<gamma>'_def next_event_alt_def \<sigma>'_def by auto
+  thus ?thesis
+    using 3 4 5 unfolding \<gamma>'_def t'_def \<theta>'_def \<sigma>'_def context_invariant_def by auto
+qed
+
+lemma nonneg_delay_lookup_same:
+  assumes "nonneg_delay ss"
+  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  shows "lookup \<tau> t = lookup \<tau>' t"
+  using assms
+proof (induction ss arbitrary:\<tau> \<tau>')
+  case (Bcomp ss1 ss2)
+  thus ?case
+    by (metis b_seq_exec.simps(2) nonneg_delay.simps(2))
+next
+  case (Bguarded x1 ss1 ss2)
+  then show ?case
+    by (metis b_seq_exec.simps(3) nonneg_delay.simps(3))
+next
+  case (Bassign_trans sig exp dly)
+  hence \<tau>'_def: "\<tau>' = trans_post sig (beval t \<sigma> \<gamma> \<theta> exp) \<tau> (t + dly)" and "0 < dly"
+    by auto
+  hence "t < t + dly"
+    by auto
+  then show ?case
+    unfolding \<tau>'_def by (transfer', auto simp add: trans_post_raw_def)
+next
+  case (Bassign_inert sig exp dly)
+  hence \<tau>'_def: "\<tau>' = inr_post sig (beval t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly" and "0 < dly"
+    by auto
+  have "is_stable dly \<tau> t sig (\<sigma> sig) \<or> \<not> is_stable dly \<tau> t sig (\<sigma> sig)"
+    by auto
+  moreover
+  { assume "is_stable dly \<tau> t sig (\<sigma> sig)"
+    hence \<tau>'_def': "\<tau>' = trans_post sig (beval t \<sigma> \<gamma> \<theta> exp) \<tau> (t + dly)"
+      unfolding \<tau>'_def inr_post_def by auto
+    have "t < t + dly"
+      using `0 < dly` by auto
+    hence ?case
+      unfolding \<tau>'_def' by (transfer', auto simp add: trans_post_raw_def) }
+  moreover
+  { assume "\<not> is_stable dly \<tau> t sig (\<sigma> sig)"
+    hence \<tau>'_def': "\<tau>' = trans_post sig (beval t \<sigma> \<gamma> \<theta> exp) (purge dly \<tau> t sig (\<sigma> sig)) (t + dly)"
+      unfolding \<tau>'_def inr_post_def by auto
+    have "t < t + dly"
+      using `0 < dly` by auto
+    hence "lookup \<tau>' t = lookup (purge dly \<tau> t sig (\<sigma> sig)) t"
+      unfolding \<tau>'_def' by (transfer', auto simp add: trans_post_raw_def)
+    also have "... = lookup \<tau> t"
+      using purge_before_now_unchanged by (metis order_refl)
+    finally have "lookup \<tau> t = lookup \<tau>' t"
+      by auto }
+  ultimately show ?case by auto
+next
+  case Bnull
+  then show ?case by auto
+qed
+
+text \<open>Again, the context invariant is preserved when we have non-negative delay in the sequential
+statement.\<close>
+
+lemma b_seq_exec_preserves_context_invariant:
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  assumes "nonneg_delay ss"
+  shows "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
+proof -
+  have "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
+    using assms(1) unfolding context_invariant_def by auto
+  hence 0: "\<And>n. n < t \<Longrightarrow> lookup \<tau>' n = 0"
+    using assms(2) b_seq_exec_preserve_trans_removal by blast
+  have "\<And>s. s \<in> dom (lookup \<tau> t) \<Longrightarrow> \<sigma> s = the (lookup \<tau> t s)"
+    using assms(1) unfolding context_invariant_def by auto
+  hence "\<And>s. s \<in> dom (lookup \<tau>' t) \<Longrightarrow> \<sigma> s = the (lookup \<tau>' t s)"
+    using nonneg_delay_lookup_same[OF assms(3) assms(2)] by auto
+  with 0 show ?thesis
+    using assms(1) unfolding context_invariant_def by auto
 qed
 
 text \<open>An important theorem for any inductive definition; the computation should be deterministic.\<close>
