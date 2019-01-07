@@ -143,6 +143,14 @@ proof -
     using `finite ?set1` `?set = ?set1 \<union> ?set2`  by (metis (no_types, lifting) finite_UnI)
 qed
 
+lift_definition poly_mapping_of_fun ::  "(nat \<Rightarrow> 'a::zero) \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat, 'a) poly_mapping"
+  is "\<lambda>f lo hi n. if n \<in> {lo ..< hi} then f n else 0"
+  by auto
+
+lemma poly_mapping_of_fun_empty_set:
+  "poly_mapping_of_fun f 0 0 = 0"
+  apply transfer' by auto
+
 lemma [code]:
   "override_lookups_on_closed m v lo hi = override_lookups_on_open_right m v lo (hi + 1)"
   by (transfer) (auto simp add: atLeastLessThanSuc_atLeastAtMost)
@@ -1385,6 +1393,19 @@ lemma signal_of2_empty[simp]:
   unfolding to_signal2_def comp_def
   apply transfer' unfolding to_trans_raw2_def by auto
 
+lemma signal_of2_zero:
+  assumes "lookup \<tau> 0 sig = 0"
+  shows "signal_of2 def \<tau> sig 0 = def"
+proof -
+  have "\<forall>t\<in>dom (lookup (to_transaction2 \<tau> sig)). 0 < t"
+    using assms 
+    by (metis domIff neq0_conv to_trans_raw2_def to_transaction2.rep_eq zero_option_def)
+  hence "inf_time (to_transaction2 \<tau>) sig 0 = None"
+    by (intro inf_time_noneI)
+  thus ?thesis
+    unfolding to_signal2_def comp_def by auto
+qed
+
 lemma signal_of2_lookup_same:
   assumes "\<And>n. n \<le> maxtime \<Longrightarrow> lookup \<tau>1 n = lookup \<tau>2 n"
   assumes "n \<le> maxtime"
@@ -1430,6 +1451,11 @@ proof -
     unfolding to_signal2_def comp_def by auto
 qed
 
+lemma signal_of2_less_sig:
+  assumes "lookup \<tau> t sig = 0"
+  shows "signal_of2 def \<tau> sig t = signal_of2 def \<tau> sig (t - 1)"
+  by (simp add: assms inf_time_less to_signal2_def to_trans_raw2_def to_transaction2.rep_eq)
+
 lemma signal_of2_less_ind:
   assumes "\<And>n. k1 < n \<Longrightarrow> n \<le> k2 \<Longrightarrow> lookup \<tau> n = 0"
   assumes "k1 < k2"
@@ -1445,6 +1471,34 @@ next
   hence *: "signal_of2 def \<tau> sig (Suc k2) = signal_of2 def \<tau> sig k2"
     by(auto dest!: signal_of2_less)
   have IH1: "\<And>n. k1 < n \<Longrightarrow> n \<le> k2 \<Longrightarrow> get_trans \<tau> n = 0"
+    using Suc by auto
+  have "k1 < k2 \<or> k1 = k2"
+    using `k1 < Suc k2` by auto
+  moreover
+  { assume IH2: "k1 < k2"
+    hence ?case
+      using Suc(1)[OF IH1 IH2] * by auto }
+  moreover
+  { assume "k1 = k2"
+    hence ?case using * by auto }
+  ultimately show ?case by auto
+qed
+
+lemma signal_of2_less_ind':
+  assumes "\<And>n. k1 < n \<Longrightarrow> n \<le> k2 \<Longrightarrow> lookup \<tau> n sig = 0"
+  assumes "k1 < k2"
+  shows "signal_of2 def \<tau> sig k2 = signal_of2 def \<tau> sig k1"
+  using assms
+proof (induction "k2")
+  case 0
+  then show ?case by auto
+next
+  case (Suc k2)
+  hence "get_trans \<tau> (Suc k2) sig = 0"
+    by auto
+  hence *: "signal_of2 def \<tau> sig (Suc k2) = signal_of2 def \<tau> sig k2"
+    by(auto dest!: signal_of2_less_sig)
+  have IH1: "\<And>n. k1 < n \<Longrightarrow> n \<le> k2 \<Longrightarrow> get_trans \<tau> n sig = 0"
     using Suc by auto
   have "k1 < k2 \<or> k1 = k2"
     using `k1 < Suc k2` by auto
@@ -3496,6 +3550,29 @@ definition context_invariant :: "nat \<Rightarrow> 'signal state \<Rightarrow> '
                                \<and> (\<forall>s. s \<in> dom (lookup \<tau> t) \<longrightarrow> \<sigma> s = the (lookup \<tau> t s))
                                \<and> (\<forall>n. t \<le> n \<longrightarrow> lookup \<theta> n = 0)"
 
+lemma trans_degree_gt_t:
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>" and "\<tau> \<noteq> 0"
+  shows "t < Poly_Mapping.degree \<tau>"
+proof (rule ccontr)
+  assume "\<not> t < Poly_Mapping.degree \<tau>"
+  hence "Poly_Mapping.degree \<tau> \<le> t" by auto
+  have "Poly_Mapping.degree \<tau> = 0 \<or> 0 < Poly_Mapping.degree \<tau>"
+    by auto
+  moreover
+  { assume gt: "0 < Poly_Mapping.degree \<tau>"
+    hence "lookup \<tau> (Poly_Mapping.degree \<tau> - 1) \<noteq> 0"
+      using degree_greater_zero_in_keys[OF gt] by auto
+    with `context_invariant t \<sigma> \<gamma> \<theta> \<tau>` have "False"
+      unfolding context_invariant_def  using \<open>\<not> t < Poly_Mapping.degree \<tau>\<close>  using gt by auto }
+  moreover
+  { assume "Poly_Mapping.degree \<tau> = 0"
+    hence "\<tau> = 0" using degree_zero_iff by auto
+    with `\<tau> \<noteq> 0` have "False"
+      by auto }
+  ultimately show "False" 
+    by auto
+qed
+
 lemma context_invariant:
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
   assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
@@ -3626,6 +3703,38 @@ proof -
     using nonneg_delay_lookup_same[OF assms(3) assms(2)] by auto
   with 0 show ?thesis
     using assms(1) unfolding context_invariant_def by auto
+qed
+
+lemma poly_mapping_degree:
+  "(LEAST n. \<forall>t \<ge> n. lookup \<tau> t = 0) = Poly_Mapping.degree \<tau>"
+proof (rule Least_equality)
+  show " \<forall>t\<ge>Poly_Mapping.degree \<tau>. lookup \<tau> t = 0"
+    by (simp add: beyond_degree_lookup_zero)
+next
+  fix y
+  { assume "y < Poly_Mapping.degree \<tau>"
+    hence "Poly_Mapping.degree \<tau> - 1 \<ge> y" and "0 < Poly_Mapping.degree \<tau>" 
+      by auto
+    moreover have "lookup \<tau> (Poly_Mapping.degree \<tau> - 1) \<noteq> 0"
+      using degree_greater_zero_in_keys[OF `0 < Poly_Mapping.degree \<tau>`] by auto
+    ultimately have "\<exists>t \<ge> y. lookup \<tau> t \<noteq> 0"
+      by auto }
+  thus "\<forall>t\<ge>y. lookup \<tau> t = 0 \<Longrightarrow> Poly_Mapping.degree \<tau> \<le> y "
+    using leI by blast
+qed  
+
+lemma degree_alt_def:
+  "Poly_Mapping.degree \<tau> = (LEAST n. \<forall>t \<ge> n. lookup \<tau> t = 0)"
+  using poly_mapping_degree[THEN sym] by auto 
+
+lemma
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  shows "Poly_Mapping.degree \<theta> \<le> t"
+proof -
+  have "\<forall>k \<ge> t. lookup \<theta> k = 0"
+    using assms unfolding context_invariant_def by auto
+  thus ?thesis
+    unfolding degree_alt_def by (simp add: Least_le)
 qed
 
 text \<open>An important theorem for any inductive definition; the computation should be deterministic.\<close>

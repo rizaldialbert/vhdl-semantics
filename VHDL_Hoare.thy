@@ -1,5 +1,5 @@
 (*
- * Copyright 2018, NTU
+ * Copyright 2018-2019, NTU
  *
  * This software may be distributed and modified according to the terms of
  * the BSD 2-Clause license. Note that NO WARRANTY is provided.
@@ -12,17 +12,53 @@ theory VHDL_Hoare
   imports Femto_VHDL
 begin
 
+text \<open>This theory is the first attempt for defining a Hoare logic for VHDL sequential statement. 
+As the exploration continues, I realise that we can only prove the soundness in this first attempt
+but not the completeness. The second attempt is shown in @{theory_text "VHDL_Hoare_Complete"}. Even
+though we cannot show that it is complete, many theorems and definitions in this theory are useful
+for defining a sound and complete Hoare logic in @{theory_text "VHDL_Hoare_Complete"}.\<close>
+
 subsection \<open>Hoare Logic for @{typ "'signal seq_stmt"}\<close>
 
 type_synonym 'signal worldline = "'signal \<Rightarrow> nat \<Rightarrow> val"
 
-definition worldline_upd :: "'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline" ("_[_, _:= _]") where
-  "worldline_upd w s t v = (\<lambda>s' t'. if s' \<noteq> s \<or> t' < t then w s' t' else v)"
+text \<open>The type @{typ "'signal worldline"} represent the concept of ``worlds'' which are required 
+for the axiomatic semantics of VHDL specified in @{cite Breuer1995}. As can be seen from the 
+definition, this type represents a function with two arguments: @{term "signal :: 'signal"} and 
+@{term "time :: nat"} to a set of value. 
 
-definition worldline_inert_upd :: "'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline" ("_[_, _, _ := _]") where
-  "worldline_inert_upd w s t t0 v = (\<lambda>s' t'. if s' \<noteq> s \<or> t' < t0 then w s' t' else if t' < t then w s' t0 else v)"
+Compared to the standard ``worlds'' for defining the axiomatic semantics of sequential programming
+language --- e.g. @{typ "'variable \<Rightarrow> val"} --- we have added the notion of @{term "time :: nat"}
+here. For example, when we do assignment in VHDL, we can specify the time when this assignment will
+happen in the future. This construct is, of course, absent from the typical assignment in sequential
+programming language where assignments happen instantaneously. It is due to this notion of time, we 
+add a suffix ``line'' in the type @{typ "'signal worldline"}.
+
+What is the relationship between @{typ "'signal worldline"} with the context @{term "\<sigma> :: 'signal 
+state"}, @{term "\<gamma> :: 'signal event"}, @{term "\<theta> :: 'signal transaction"}, @{term "\<tau>' \<tau> :: 'signal 
+transaction"} in the semantics @{term "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"}? The answer is that the latter
+is the refined version of the former. We shall show the formal relationship later in this theory.
+\<close>
+
+definition worldline_upd :: "'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline" 
+  ("_[_, _:= _]") where
+  "worldline_upd w s t v = (\<lambda>s' t'. if s' \<noteq> s \<or> t' < t then w s' t' else v)"
+        
+definition worldline_inert_upd :: "'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline" 
+  ("_[_, _, _ := _]") where
+  "worldline_inert_upd w s t dly v = (\<lambda>s' t'. if s' \<noteq> s \<or> t' < t then w s' t' else 
+                                              if t' < t + dly     then w s' t  else v)"
+
+text \<open>These are the two constructs we can use to update or modify a @{typ "'signal worldline"}. Note
+that the syntax between these two are quite similar. The only difference is the number of arguments
+on the left of the equality sign: @{term "worldline_upd"} has two while @{term
+"worldline_inert_upd"} has three. As the names suggest, they correspond to the transport delay
+assignment @{term "Bassign_trans"} and inertial delay assignment @{term "Bassign_inert"}.\<close>
 
 type_synonym 'signal assn = "'signal worldline \<Rightarrow> bool"
+
+text \<open>The type @{typ "'signal assn"} represents a predicate over a worldline, i.e., a property 
+about a worldline. The pre- and post-condition of a VHDL sequential statement will be of this type.\<close>
 
 definition state_of_world :: "'signal worldline \<Rightarrow> nat \<Rightarrow> 'signal state" where
   "state_of_world w t = (\<lambda>s. w s t)"
@@ -43,17 +79,37 @@ lemma [simp]:
 definition beval_world :: "'signal worldline \<Rightarrow> nat \<Rightarrow> 'signal bexp \<Rightarrow> val" where
   "beval_world w t exp = beval t (state_of_world w t) (event_of_world w t) (beh_of_world w t) exp"
 
-definition trans_of_world_raw :: "'signal worldline \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal \<rightharpoonup> val" where
-  "trans_of_world_raw w t = (\<lambda>t'. if t \<le> t' then undefined else Map.empty)"
+text \<open>As promised in the beginning of this theory, we show the first relationship from @{typ
+"'signal worldline"} to the realm of @{typ "'signal state"}, @{typ "'signal event"}, and @{typ
+"'signal transaction"}. 
+
+For @{term "state_of_world"}, the definition is obvious. We need a function abstraction --- instead
+of simply giving an argument to function @{term "w :: 'signal worldline"} to return another function
+--- here because the different order of the arguments: in @{typ "'signal worldline"} the name of the
+signal comes before the time.
+
+Event represents the set of signals whose values are different from the previous time. Here is the 
+dilemma: what happens at time @{term "0::nat"}? There is no such time as @{term "0 - 1"} as this 
+will evaluate to @{term "0"} in natural numbers. Nevertheless, event at time @{term "0 :: nat"}
+has different interpretation: it is the set of signals whose values are different from the default 
+values, i.e., @{term "False :: val"}. The expression for else-statement in @{term "event_of_world"}
+is obvious. 
+
+Note that @{term "beh_of_world"} requires a lift_definition instead of standard definition
+construct; this is due to @{typ "'signal transaction"}. Its raw version @{term "beh_of_world_raw"}
+only maps until the time @{term "t"} only. This is because behaviour is synonymous with history in 
+our definition and, according to the order of time, we do not have any ``mapping'' from time now 
+until the future.
+\<close>
 
 inductive
-  seq_hoare :: "nat \<Rightarrow> 'signal assn \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn \<Rightarrow> bool" ("\<turnstile>\<^sub>_ ({(1_)}/ (_)/ {(1_)})" 50)
-  where
+  seq_hoare :: "nat \<Rightarrow> 'signal assn \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn \<Rightarrow> bool" 
+  ("\<turnstile>\<^sub>_ ({(1_)}/ (_)/ {(1_)})" 50) where
 Null: "\<turnstile>\<^sub>t {P} Bnull {P}" |
 
 Assign: "\<turnstile>\<^sub>t {\<lambda>w. P(w[sig, t + dly := beval_world w t exp])} Bassign_trans sig exp dly {P}" |
 
-AssignI: "\<turnstile>\<^sub>t {\<lambda>w. P(w[sig, t + dly, t := beval_world w t exp])} Bassign_inert sig exp dly {P}" |
+AssignI: "\<turnstile>\<^sub>t {\<lambda>w. P(w[sig, t, dly := beval_world w t exp])} Bassign_inert sig exp dly {P}" |
 
 Comp: "\<lbrakk> \<turnstile>\<^sub>t {P} s1 {Q}; \<turnstile>\<^sub>t {Q} s2 {R}\<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>t {P} Bcomp s1 s2 {R}" |
 
@@ -61,6 +117,12 @@ If: "\<lbrakk>\<turnstile>\<^sub>t {\<lambda>w. P w \<and> beval_world w t g} s1
         \<Longrightarrow>  \<turnstile>\<^sub>t {P} Bguarded g s1 s2 {Q}" |
 
 Conseq: "\<lbrakk>\<forall>w. P' w \<longrightarrow> P w; \<turnstile>\<^sub>t {P} s {Q}; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>t {P'} s {Q'}"
+
+text \<open>The inductive definition @{term "seq_hoare"} is similar to the inductive definition @{term
+"hoare"} in @{theory_text "Hoare"}. Rules other than @{term "Assign"} and @{term "AssignI"} are 
+standard; we explain those two only here. As can be seen, the construct @{term "worldline_upd"} and
+@{term "worldline_inert_upd"} are designed for the purpose of defining the axiomatic semantics 
+of VHDL. We show how it makes sense later in the soundness property.\<close>
 
 inductive_cases seq_hoare_ic: "\<turnstile>\<^sub>t {P} s {Q}"
 
@@ -85,7 +147,7 @@ lemma BassignE:
 lemma Bassign_inertE:
   assumes "\<turnstile>\<^sub>t {P} s {Q}"
   assumes "s = Bassign_inert sig exp dly"
-  shows "\<forall>w. P w \<longrightarrow> Q(w[sig, t + dly, t := beval_world w t exp])"
+  shows "\<forall>w. P w \<longrightarrow> Q(w[sig, t, dly := beval_world w t exp])"
   using assms
   by (induction rule: seq_hoare.induct, auto)
 
@@ -116,8 +178,281 @@ lemma Assign':
 
 subsection \<open>Validity of Hoare proof rules\<close>
 
-definition worldline :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> 'signal worldline" where
+definition worldline :: 
+  "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> 'signal worldline" where
   "worldline t \<sigma> \<theta> \<tau> = (\<lambda>s' t'. if t' < t then signal_of2 False \<theta> s' t' else signal_of2 (\<sigma> s') \<tau> s' t')"
+
+text \<open>@{term "worldline"} is a constructor here. Note that we have used the same identifier (name)
+for the constructor and the type here. This construct is the link from the operational semantics's
+world such as @{typ "'signal state"}, @{typ "'signal transaction"} to the axiomatic semantics's 
+world @{typ "'signal worldline"}. 
+
+An observant reader might have noticed that there is no @{typ "'signal event"} when we construct
+@{typ "'signal worldline"}. This is because, as Breuer and Kloos~@{cite "Breuer1995"} argued, the
+notion of event can be reconstructed from the notion of @{typ "'signal worldline"}. Or,
+alternatively, the notion of event is inherent in @{typ "'signal worldline"}. Simply find the
+signals which have different values from those at the previous time correspondingly suffices for
+reconstructing the event at every time point.\<close>
+
+definition difference_raw :: "'signal worldline \<Rightarrow> nat \<Rightarrow> 'signal \<rightharpoonup> val" where
+  "difference_raw w t = (\<lambda>s. if w s t \<noteq> w s (t - 1) then Some (w s t) else None)"
+
+(* 
+  - variable t represents current time; 
+  - variable d represents the degree of the world, i.e., point  at which the worldline does not 
+    change anymore. 
+*)
+
+lift_definition derivative_raw :: "'signal worldline \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal transaction" 
+  is "\<lambda>w d t n. if n < t \<or> d < n then Map.empty else  if n = t then Some o (\<lambda>s. w s t) else difference_raw w n "
+  unfolding sym[OF eventually_cofinite] MOST_nat
+proof -
+  fix w :: "'signal worldline"
+  fix d t :: nat
+  have "\<forall>n > max d t. (if n < t \<or> d < n then Map.empty else  if n = t then Some o (\<lambda>s. w s t) else difference_raw w n ) = 0"
+    by (auto simp add:zero_fun_def zero_option_def)
+  thus "\<exists>t''. \<forall>n > t''. (if n < t \<or> d < n then Map.empty else  if n = t then Some o (\<lambda>s. w s t) else difference_raw w n ) = 0"
+    by blast
+qed
+
+text \<open> The function @{term "derivative_raw"} is a function to obtain the transaction 
+@{term "\<tau> :: 'signal transaction"} in the operational semantics @{term "b_seq_exec"}. Note that to 
+use @{typ "'signal worldline"} as a context to define the axiomatic semantics of VHDL, it is always
+paired with a time variable @{term "t :: time"}. This variable denotes the current time of the 
+computation; anything strictly before this time is a history (related to the notion of behaviour 
+@{term "\<theta> :: 'signal transaction"})  and anything after this time is a prediction (related to 
+the notion of transaction @{term "\<tau> :: 'signal transaction"}).
+
+The naming ``derivative'' signifies that this function acts similarly to a derivative in the 
+real number calculus. Hence, the derivative here only record those values which are different 
+(via @{term "difference_raw"}) from the value at the previous time (hence the name ``difference''
+as the derivative counterpart for discrete-time signal).
+
+Why do we still have the suffix ``raw'' in @{term "derivative_raw"}? Because we will still lift 
+this definition further as will be explained in @{theory_text "VHDL_Hoare_Complete"}.
+\<close>
+
+lemma derivative_raw_zero:
+  "d < t \<Longrightarrow> derivative_raw w d t = 0"
+proof (transfer, rule)
+  fix d t n :: nat
+  fix w :: "'a worldline"
+  assume "d < t"
+  have "d < n \<or> n \<le> d" by auto
+  moreover
+  { assume "d < n"
+    hence "(if n < t \<or> d < n then Map.empty else if n = t then Some \<circ> (\<lambda>s. w s t) else difference_raw w n) = 0"
+      unfolding zero_fun_def by (simp add: zero_option_def) }
+  moreover
+  { assume "n \<le> d"
+    hence "n < t" using `d < t` by auto
+    hence "(if n < t \<or> d < n then Map.empty else if n = t then Some \<circ> (\<lambda>s. w s t) else difference_raw w n) = 0"
+      unfolding zero_fun_def by (simp add: zero_option_def) }
+  ultimately show "(if n < t \<or> d < n then Map.empty else if n = t then Some \<circ> (\<lambda>s. w s t) else difference_raw w n) = 0"
+    by auto
+qed
+
+lemma signal_of2_poly_mapping_fun:
+  assumes "t' < t"
+  shows "signal_of2 def (poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. w s t)) 0 t) s' t' = w s' t'"
+proof -
+  have "lookup (poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. w s t)) 0 t) t' = Some o (\<lambda>s. w s t')"
+    using assms apply transfer' by auto
+  from lookup_some_signal_of2[OF this] show ?thesis by auto
+qed
+
+lemma signal_of2_derivative_raw_t:
+  assumes "t \<le> d"
+  shows "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t = w s' t"
+proof -
+  have "lookup (derivative_raw w d t) t = Some o (\<lambda>s. w s t)"
+    using assms apply transfer' by auto
+  from lookup_some_signal_of2[OF this] show ?thesis by auto
+qed
+
+lemma signal_of2_derivative_raw:
+  assumes "t \<le> t'" and "t' \<le> d"
+  shows "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = w s' t'"
+  using assms
+proof (induction t')
+  case 0
+  hence "t = 0" by auto
+  have lookup: "lookup (derivative_raw w d 0) 0 = Some o (\<lambda>s. w s 0)"
+    by transfer' auto
+  hence " signal_of2 (\<sigma> s') (derivative_raw w d t) s' 0 =  signal_of2 (\<sigma> s') (derivative_raw w d 0) s' 0"
+    unfolding `t = 0` by auto                                                                           
+  also have "... = w s' 0"
+    using lookup_some_signal_of2[OF lookup] by auto
+  finally show ?case by auto
+next
+  case (Suc t')
+  hence "Suc t' = t \<or> t < Suc t'"
+    by auto
+  moreover
+  { assume "Suc t' = t"
+    have lookup: "lookup (derivative_raw w d t) (Suc t') = Some o (\<lambda>s. w s t)"
+      using `Suc t' \<le> d` unfolding `Suc t' = t` apply transfer' by auto
+    have " signal_of2 (\<sigma> s') (derivative_raw w d t) s' (Suc t') =  w s' t"
+      using lookup_some_signal_of2[OF lookup] unfolding `Suc t' = t` by auto
+    hence ?case unfolding `Suc t' = t` by auto }
+  moreover
+  { assume "t < Suc t'"
+    hence "t \<le> t'" by auto
+    have "Suc t' = d \<or> Suc t' < d" using `Suc t' \<le> d` by auto
+    moreover
+    { assume "Suc t' = d"
+      hence lookup: "lookup (derivative_raw w d t) (Suc t') = difference_raw w (Suc t')"
+        using `t < Suc t'` by transfer' auto
+      also have "... = difference_raw w d"
+        unfolding `Suc t' = d` by auto
+      finally have *: "lookup (derivative_raw w d t) (Suc t') = difference_raw w d"
+        by auto
+      have "w s' d = w s' (d - 1) \<and> difference_raw w d s' = None \<or> w s' d \<noteq> w s' (d - 1) \<and> difference_raw w d s' = Some (w s' d)"
+        unfolding difference_raw_def by auto
+      moreover
+      { assume "w s' d = w s' (d - 1) \<and> difference_raw w d s' = None"
+        hence "lookup (derivative_raw w d t) (Suc t') s' = None" and "w s' d = w s' (d - 1)"
+          using * by auto
+        with signal_of2_less_sig[of "derivative_raw w d t" "Suc t'" "s'"] 
+        have **: "signal_of2 (\<sigma> s') (derivative_raw w d t) s' (Suc t') =  
+              signal_of2 (\<sigma> s') (derivative_raw w d t) s' t'"
+          unfolding zero_option_def by auto
+        have "t' \<le> d"
+          using `Suc t' = d` by auto
+        have "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = w s' t'"
+          using Suc(1)[OF `t \<le> t'` `t' \<le> d`] by auto
+        with ** have " signal_of2 (\<sigma> s') (derivative_raw w d t) s' (Suc t') = w s' t'"
+          by auto
+        also have "... = w s' (Suc t')"
+          using `w s' d = w s' (d - 1)` using `Suc t' = d` by auto
+        finally have ?case by auto }
+      moreover
+      { assume "w s' d \<noteq> w s' (d-1) \<and> difference_raw w d s' = Some (w s' d)"
+        hence lookup: "lookup (derivative_raw w d t) (Suc t') s' = Some (w s' d)"
+          using * by auto
+        have "signal_of2 (\<sigma> s') (derivative_raw w d t) s' (Suc t') = w s' d"
+          using lookup_some_signal_of2'[where \<sigma>="\<lambda>s. w s d", OF lookup] by auto
+        hence ?case
+          unfolding `Suc t' = d` by auto }
+      ultimately have ?case by auto }
+    moreover
+    { assume "Suc t' < d"
+      hence IH: "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = w s' t'"
+        using Suc(1)[OF `t \<le> t'`] by auto
+      have lookup: "lookup (derivative_raw w d t) (Suc t') = difference_raw w (Suc t')"
+        using `Suc t' < d` `t < Suc t'` by transfer' auto
+      have "w s' (Suc t') = w s' t' \<or> w s' (Suc t') \<noteq> w s' t'"
+        by auto
+      moreover
+      { assume "w s' (Suc t') = w s' t'"
+        with lookup have "lookup (derivative_raw w d t) (Suc t') s' = None"
+          unfolding difference_raw_def by auto
+        moreover hence "signal_of2 (\<sigma> s') (derivative_raw w d t) s' (Suc t') = 
+               signal_of2 (\<sigma> s') (derivative_raw w d t) s' t'"
+          using signal_of2_less_sig[of "derivative_raw w d t" "Suc t'" "s'"] unfolding zero_option_def 
+          by auto
+        ultimately have ?case
+          using IH `w s' (Suc t') = w s' t'` by auto }
+      moreover
+      { assume "w s' (Suc t') \<noteq> w s' t'"
+        with lookup have "lookup (derivative_raw w d t) (Suc t') s' = Some (w s' (Suc t'))"
+          unfolding difference_raw_def by auto
+        from lookup_some_signal_of2'[where \<sigma>="\<lambda>s. w s (Suc t')", OF this]      
+        have ?case by auto }
+      ultimately have ?case by auto }
+    ultimately have ?case by auto }
+  ultimately show ?case by auto
+qed
+
+lemma signal_of2_derivative_raw2:
+  assumes "t \<le> d" and "d < t'"
+  shows "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = w s' d"
+proof -
+  have "\<And>n. d < n \<Longrightarrow> n \<le> t' \<Longrightarrow> lookup (derivative_raw w d t) n s' = 0"
+    by transfer' (auto simp add: zero_option_def)
+  from signal_of2_less_ind'[OF this]
+  have "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = signal_of2 (\<sigma> s') (derivative_raw w d t) s' d"
+    using assms(2) by blast
+  also have "... = w s' d"
+    using signal_of2_derivative_raw[OF assms(1), of "d"] by (metis (no_types) le_refl)
+  finally show ?thesis by auto
+qed
+
+lemma signal_of2_derivative_raw':
+  assumes "t \<le> t'" and "t \<le> d"
+  assumes "\<And>n s. d < n \<Longrightarrow> w s n = w s d"
+  shows "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = w s' t'"
+  by (metis (full_types) assms not_less signal_of2_derivative_raw signal_of2_derivative_raw2)
+
+lemma signal_of2_derivative_raw_degree_lt_now:
+  assumes "d < t"
+  shows "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = \<sigma> s'"
+proof -
+  have "derivative_raw w d t = 0"
+    using derivative_raw_zero[OF assms] by auto
+  moreover have "signal_of2 (\<sigma> s') 0 s' t' = \<sigma> s'"
+    using signal_of2_empty by metis
+  ultimately show ?thesis by auto
+qed
+
+lemma signal_of2_derivative_before_now:
+  assumes "t' < t"
+  shows "signal_of2 def (derivative_raw w d t) s' t' = def"
+proof -
+  have "\<forall>k\<in>dom (lookup (to_transaction2 (derivative_raw w d t) s')). t' < k"
+  proof (rule ccontr)
+    assume "\<not> (\<forall>k\<in>dom (lookup (to_transaction2 (derivative_raw w d t) s')). t' < k)"
+    then obtain k where kdom: "k \<in> dom (lookup  (to_transaction2 (derivative_raw w d t) s'))" and "k \<le> t'"
+      using not_less by blast
+    hence "k < t"
+      using assms by auto
+    hence "lookup (derivative_raw w d t) k = 0"
+      apply transfer' by (metis aux derivative_raw.rep_eq derivative_raw_zero)
+    hence "k \<notin> dom (lookup  (to_transaction2 (derivative_raw w d t) s'))"
+      apply transfer'  by (simp add: domIff to_trans_raw2_def zero_map)
+    thus "False"
+      using kdom by auto
+  qed
+  hence "inf_time (to_transaction2 (derivative_raw w d t)) s' t' = None"  
+    by (rule inf_time_noneI)
+  thus ?thesis
+    unfolding to_signal2_def comp_def by auto
+qed
+
+lemma exists_quiesce_worldline:
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  shows "\<exists>n. \<forall>k > n. \<forall>s. worldline t \<sigma> \<theta> \<tau> s k = worldline t \<sigma> \<theta> \<tau> s n"
+proof (cases "\<tau> = 0")
+  case True
+  { fix k s
+    assume "k > t"
+    hence "worldline t \<sigma> \<theta> \<tau> s k = signal_of2 (\<sigma> s) \<tau> s k"
+      unfolding worldline_def by auto
+    also have "... = signal_of2 (\<sigma> s) \<tau> s t"
+      unfolding `\<tau> = 0` using signal_of2_empty by metis
+    finally have "worldline t \<sigma> \<theta> \<tau> s k = signal_of2 (\<sigma> s) \<tau> s t"
+      by auto }
+  then show ?thesis 
+    by (meson worldline_def)
+next
+  case False
+  have "t < Poly_Mapping.degree \<tau>"
+    using trans_degree_gt_t[OF assms False] by auto
+  { fix k s
+    assume "k > Poly_Mapping.degree \<tau> - 1"
+    hence expl: "worldline t \<sigma> \<theta> \<tau> s k = signal_of2 (\<sigma> s) \<tau> s k"
+      unfolding worldline_def using `t < Poly_Mapping.degree \<tau>` by auto
+    have expr: " worldline t \<sigma> \<theta> \<tau> s (Poly_Mapping.degree \<tau> - 1) = signal_of2 (\<sigma> s) \<tau> s (Poly_Mapping.degree \<tau> - 1)"
+      unfolding worldline_def using `t < Poly_Mapping.degree \<tau>` by auto
+    have "\<And>n. Poly_Mapping.degree \<tau> - 1 < n \<Longrightarrow> n \<le> k \<Longrightarrow> lookup \<tau> n = 0"
+      by (simp add: beyond_degree_lookup_zero)
+    hence " signal_of2 (\<sigma> s) \<tau> s k = signal_of2 (\<sigma> s) \<tau> s (Poly_Mapping.degree \<tau> - 1)"      
+      by (meson \<open>Poly_Mapping.degree \<tau> - 1 < k\<close> signal_of2_less_ind)
+    with expl and expr have "worldline t \<sigma> \<theta> \<tau> s k = worldline t \<sigma> \<theta> \<tau> s (Poly_Mapping.degree \<tau> - 1)"
+      by auto }
+  then show ?thesis 
+    by (meson worldline_def)
+qed
 
 definition
 seq_hoare_valid :: "nat \<Rightarrow> 'signal assn \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn \<Rightarrow> bool" ("\<Turnstile>\<^sub>_ {(1_)}/ (_)/ {(1_)}" 50)
@@ -126,6 +461,23 @@ seq_hoare_valid :: "nat \<Rightarrow> 'signal assn \<Rightarrow> 'signal seq_stm
                                             \<and>  P w
                                             \<and> (t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s, \<tau>> \<longrightarrow>\<^sub>s \<tau>')
                                             \<and>  w' = worldline t \<sigma> \<theta> \<tau>' \<longrightarrow> Q w')"
+
+text \<open>The definition @{term "seq_hoare_valid"} shall be the basis to define the soundness of the 
+Hoare logic rules. Note that the symbol of `\<Turnstile>` has @{term "t"} as its subscript which indicates
+that the validity is a function of time. Here is the diagram explaining the definition of the 
+validity:
+\<close>                                
+
+(*
+         P w             \<longrightarrow>               Q w
+          \<up>                                 \<up>
+ w = worldline t \<sigma> \<theta> \<tau>          w' = worldline t \<sigma> \<theta> \<tau>'
+          \<up>                                 \<up>
+          \<tau>              \<longrightarrow>\<^sub>c               \<tau>'
+*)
+
+
+subsection \<open>Soundness\<close>
 
 lemma Bcomp_hoare_valid:
   assumes "\<Turnstile>\<^sub>t {P} s1 {Q}" and "\<Turnstile>\<^sub>t {Q} s2 {R}"
@@ -155,18 +507,8 @@ proof (rule)+
   thus "R w'"
     using `\<Turnstile>\<^sub>t {Q} s2 {R}` `w'' = worldline t \<sigma> \<theta> \<tau>''` `Q w''` 1 2 unfolding seq_hoare_valid_def
     by auto
-qed
-
-(*      Relationship between w, \<tau>, \<tau>', and w'  in seq_hoare_valid
- *
- *         P w             \<longrightarrow>               Q w
- *          \<up>                                 \<up>
- * w = worldline t \<sigma> \<theta> \<tau>          w' = worldline t \<sigma> \<theta> \<tau>'
- *          \<up>                                 \<up>
- *          \<tau>              \<longrightarrow>\<^sub>c               \<tau>'
- *
- *)
-
+qed                                 
+  
 lemma Bnull_sound:
   "\<turnstile>\<^sub>t {P} Bnull {Q} \<Longrightarrow> \<Turnstile>\<^sub>t {P} Bnull {Q}"
   by (auto dest!: BnullE' simp add: seq_hoare_valid_def)
@@ -339,6 +681,20 @@ proof -
     unfolding beval_world_def by auto
 qed
 
+lemma beval_beval_world_ci:
+  assumes "w = worldline t \<sigma> \<theta> \<tau>"
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau> "
+  shows "beval t \<sigma> \<gamma> \<theta> exp = beval_world w t exp"
+proof -
+  have 0: "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0" and 
+       1: "\<gamma> = {s. \<sigma> s \<noteq> signal_of2 False \<theta> s (t - 1)}" and 
+       2: "\<And>s. s \<in> dom (lookup \<tau> t) \<Longrightarrow> \<sigma> s = the (lookup \<tau> t s)" and 
+       3: "\<And>n. t \<le> n \<Longrightarrow> lookup \<theta> n = 0"
+    using assms(2) unfolding context_invariant_def by auto
+  show ?thesis
+    using beval_beval_world[OF assms(1) 0 1 2 3] by auto
+qed
+
 lemma Bguarded_hoare_valid:
   assumes "\<Turnstile>\<^sub>t {\<lambda>a. P a \<and> beval_world a t g} s1 {Q}" and "\<Turnstile>\<^sub>t {\<lambda>a. P a \<and> \<not> beval_world a t g} s2 {Q}"
   shows "\<Turnstile>\<^sub>t {P} Bguarded g s1 s2 {Q}"
@@ -376,6 +732,88 @@ proof (rule)+
   ultimately show "Q w'" by auto
 qed
 
+lemma lift_trans_post_worldline_upd:
+  assumes "\<omega> = worldline t \<sigma> \<theta> \<tau>"
+  assumes \<tau>'_def: "\<tau>' = trans_post sig (beval_world \<omega> t exp) \<tau> (t + dly)"
+  shows "worldline t \<sigma> \<theta> \<tau>' = \<omega>[sig, t + dly := beval_world \<omega> t exp]"
+proof (rule ext, rule ext)
+  fix s' t'
+  have "t' < t \<or> t' \<ge> t" by auto
+  moreover
+  { assume "t' < t"
+    hence 0: " worldline t \<sigma> \<theta> \<tau>' s' t' =  signal_of2 False \<theta> s' t'"
+      unfolding worldline_def by auto
+    have "t' < t + dly"
+      using `t' < t` by auto
+    hence "\<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+      unfolding `\<omega> = worldline t \<sigma> \<theta> \<tau>` worldline_upd_def by auto
+    also have "... = signal_of2 False \<theta> s' t'"
+      using `t' < t` unfolding worldline_def by auto
+    finally have "\<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' = signal_of2 False \<theta> s' t'"
+      by auto
+    hence "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t'"
+      using 0 by auto }
+  moreover
+  { assume "t' \<ge> t"
+    hence 0: "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
+      unfolding worldline_def by auto
+    have "t' < t + dly \<or> t' \<ge> t + dly"
+      by auto
+    moreover
+    { assume "t' < t + dly"
+      have "\<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+        using `t' < t + dly` unfolding `\<omega> = worldline t \<sigma> \<theta> \<tau>` worldline_upd_def by auto
+      also have "... = signal_of2 (\<sigma> s') \<tau> s' t'"
+        using `t' \<ge> t` unfolding worldline_def by auto
+      finally have 1: "\<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' = signal_of2 (\<sigma> s') \<tau> s' t'"
+        by auto
+      have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
+        using `t' \<ge> t` unfolding worldline_def by auto
+      also have "... = signal_of2 (\<sigma> s') \<tau> s' t'"
+        using signal_of_trans_post2[OF `t' < t + dly`] unfolding \<tau>'_def by metis
+      also have "... = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t'"
+        using 1 by auto
+      finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t'"
+        by auto }
+    moreover
+    { assume "t' \<ge> t + dly"
+      have "s' = sig \<or> s' \<noteq> sig" by auto
+      moreover
+      { assume "s' = sig"
+        hence 2: "\<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' = beval_world (worldline t \<sigma> \<theta> \<tau>) t exp"
+          using `t' \<ge> t + dly` unfolding `\<omega> = worldline t \<sigma> \<theta> \<tau>` worldline_upd_def by auto
+        have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
+          using `t' \<ge> t` unfolding worldline_def by auto
+        also have "... = beval_world (worldline t \<sigma> \<theta> \<tau>) t exp"
+          using signal_of_trans_post3[OF `t + dly \<le> t'`, of "\<sigma> s'" "sig"] unfolding \<tau>'_def
+          `\<omega> = worldline t \<sigma> \<theta> \<tau>` by (simp add: \<open>s' = sig\<close>)
+        finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' "
+          using 2 by auto }
+      moreover
+      { assume "s' \<noteq> sig"
+        hence "sig \<noteq> s'" by auto
+        hence "\<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+          unfolding `\<omega> = worldline t \<sigma> \<theta> \<tau>` worldline_upd_def  by auto
+        also have "... = signal_of2 (\<sigma> s') \<tau> s' t'"
+          using `t' \<ge> t` unfolding worldline_def by auto
+        finally have 3: "\<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' = signal_of2 (\<sigma> s') \<tau> s' t'"
+          by auto
+        have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
+          using `t' \<ge> t` unfolding worldline_def by auto
+        also have "... = signal_of2 (\<sigma> s') \<tau> s' t'"
+          unfolding \<tau>'_def using signal_of_trans_post[OF `sig \<noteq> s'`] by metis
+        also have "... = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t'"
+          using 3 by auto
+        finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' "
+          by auto }
+      ultimately have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' "
+        by auto }
+    ultimately have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' "
+      by auto }
+  ultimately show "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t'"
+    by auto 
+qed
+
 lemma Bassign_trans_sound:
   "\<turnstile>\<^sub>t {P} Bassign_trans sig exp dly {Q} \<Longrightarrow> \<Turnstile>\<^sub>t {P} Bassign_trans sig exp dly {Q}"
 proof -
@@ -398,84 +836,7 @@ proof -
     ultimately have \<tau>'_def: "\<tau>' = trans_post sig (beval_world w t exp) \<tau> (t + dly)"
       by auto
     have "worldline t \<sigma> \<theta> \<tau>' = w[sig, t + dly := beval_world w t exp]"
-    proof (rule ext, rule ext)
-      fix s' t'
-      have "t' < t \<or> t' \<ge> t" by auto
-      moreover
-      { assume "t' < t"
-        hence 0: " worldline t \<sigma> \<theta> \<tau>' s' t' =  signal_of2 False \<theta> s' t'"
-          unfolding worldline_def by auto
-        have "t' < t + dly"
-          using `t' < t` by auto
-        hence "w[sig, t + dly := beval_world w t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
-          unfolding `w = worldline t \<sigma> \<theta> \<tau>` worldline_upd_def by auto
-        also have "... = signal_of2 False \<theta> s' t'"
-          using `t' < t` unfolding worldline_def by auto
-        finally have "w[sig, t + dly := beval_world w t exp] s' t' = signal_of2 False \<theta> s' t'"
-          by auto
-        hence "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly := beval_world w t exp] s' t'"
-          using 0 by auto }
-      moreover
-      { assume "t' \<ge> t"
-        hence 0: "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
-          unfolding worldline_def by auto
-        have "t' < t + dly \<or> t' \<ge> t + dly"
-          by auto
-        moreover
-        { assume "t' < t + dly"
-          have "w[sig, t + dly := beval_world w t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
-            using `t' < t + dly` unfolding `w = worldline t \<sigma> \<theta> \<tau>` worldline_upd_def by auto
-          also have "... = signal_of2 (\<sigma> s') \<tau> s' t'"
-            using `t' \<ge> t` unfolding worldline_def by auto
-          finally have 1: "w[sig, t + dly := beval_world w t exp] s' t' = signal_of2 (\<sigma> s') \<tau> s' t'"
-            by auto
-
-          have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
-            using `t' \<ge> t` unfolding worldline_def by auto
-          also have "... = signal_of2 (\<sigma> s') \<tau> s' t'"
-            using signal_of_trans_post2[OF `t' < t + dly`] unfolding \<tau>'_def by metis
-          also have "... = w[sig, t + dly := beval_world w t exp] s' t'"
-            using 1 by auto
-          finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly := beval_world w t exp] s' t'"
-            by auto }
-        moreover
-        { assume "t' \<ge> t + dly"
-          have "s' = sig \<or> s' \<noteq> sig" by auto
-          moreover
-          { assume "s' = sig"
-            hence 2: "w[sig, t + dly := beval_world w t exp] s' t' = beval_world (worldline t \<sigma> \<theta> \<tau>) t exp"
-              using `t' \<ge> t + dly` unfolding `w = worldline t \<sigma> \<theta> \<tau>` worldline_upd_def by auto
-            have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
-              using `t' \<ge> t` unfolding worldline_def by auto
-            also have "... = beval_world (worldline t \<sigma> \<theta> \<tau>) t exp"
-              using signal_of_trans_post3[OF `t + dly \<le> t'`, of "\<sigma> s'" "sig"] unfolding \<tau>'_def
-              `w = worldline t \<sigma> \<theta> \<tau>` by (simp add: \<open>s' = sig\<close>)
-            finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly := beval_world w t exp] s' t' "
-              using 2 by auto }
-          moreover
-          { assume "s' \<noteq> sig"
-            hence "sig \<noteq> s'" by auto
-            hence "w[sig, t + dly := beval_world w t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
-              unfolding `w = worldline t \<sigma> \<theta> \<tau>` worldline_upd_def  by auto
-            also have "... = signal_of2 (\<sigma> s') \<tau> s' t'"
-              using `t' \<ge> t` unfolding worldline_def by auto
-            finally have 3: "w[sig, t + dly := beval_world w t exp] s' t' = signal_of2 (\<sigma> s') \<tau> s' t'"
-              by auto
-            have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
-              using `t' \<ge> t` unfolding worldline_def by auto
-            also have "... = signal_of2 (\<sigma> s') \<tau> s' t'"
-              unfolding \<tau>'_def using signal_of_trans_post[OF `sig \<noteq> s'`] by metis
-            also have "... = w[sig, t + dly := beval_world w t exp] s' t'"
-              using 3 by auto
-            finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly := beval_world w t exp] s' t' "
-              by auto }
-          ultimately have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly := beval_world w t exp] s' t' "
-            by auto }
-        ultimately have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly := beval_world w t exp] s' t' "
-          by auto }
-      ultimately show "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly := beval_world w t exp] s' t'"
-        by auto
-    qed
+      using \<open>w = worldline t \<sigma> \<theta> \<tau>\<close> \<tau>'_def lift_trans_post_worldline_upd by fastforce
     with imp and `P w` have "Q(w[sig, t + dly := beval_world w t exp])"
       by auto
     assume "w' = worldline t \<sigma> \<theta> \<tau>'"
@@ -486,12 +847,134 @@ proof -
     unfolding seq_hoare_valid_def by auto
 qed
 
+lemma lift_inr_post_worldline_upd:
+  assumes "\<omega> = worldline t \<sigma> \<theta> \<tau>" 
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  assumes "0 < dly"
+  shows "worldline t \<sigma> \<theta> \<tau>' = \<omega>[sig, t, dly := beval_world \<omega> t exp]"
+proof (rule ext, rule ext)
+  fix s' t'
+  have "\<tau>' = inr_post sig (beval t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly"
+    using assms(3) by auto
+  moreover have "beval t \<sigma> \<gamma> \<theta> exp = beval_world \<omega> t exp"
+    using `\<omega> = worldline t \<sigma> \<theta> \<tau> ` and `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
+    by (transfer', simp add: beval_beval_world_ci)
+  hence \<tau>'_def: "\<tau>' = inr_post sig (beval_world \<omega> t exp) (\<sigma> sig) \<tau> t dly"
+    by (simp add: calculation)
+  have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
+    using b_seq_exec_preserves_context_invariant[OF assms(2-3)] `0 < dly` by auto
+  hence asm: "\<forall>s. s \<in> dom (get_trans \<tau>' t) \<longrightarrow> \<sigma> s = the (get_trans \<tau>' t s)"
+    unfolding context_invariant_def by auto
+  hence asm': "\<forall>s. s \<in> dom (get_trans \<tau> t) \<longrightarrow> \<sigma> s = the (get_trans \<tau> t s)"
+    using `context_invariant t \<sigma> \<gamma> \<theta> \<tau>` unfolding context_invariant_def by auto
+  have "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
+    using assms(2) unfolding context_invariant_def by auto
+  have "s' \<noteq> sig \<or> t' < t \<or> s' = sig \<and> t \<le> t'"
+    by auto
+  moreover
+  { assume "s' \<noteq> sig \<or> t' < t"
+    moreover
+    { assume "t' < t"
+      hence 0: " worldline t \<sigma> \<theta> \<tau>' s' t' =  signal_of2 False \<theta> s' t'"
+        unfolding worldline_def by auto
+      have "t' < t + dly"
+        using `t' < t` by auto
+      hence "\<omega>[sig, t,  dly := beval_world \<omega> t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+        unfolding `\<omega> = worldline t \<sigma> \<theta> \<tau>` worldline_inert_upd_def  by (simp add: \<open>t' < t\<close>)
+      also have "... = signal_of2 False \<theta> s' t'"
+        using `t' < t` unfolding worldline_def by auto
+      finally have "\<omega>[sig, t, dly := beval_world \<omega> t exp] s' t' = signal_of2 False \<theta> s' t'"
+        by auto
+      hence "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t, dly := beval_world \<omega> t exp] s' t'"
+        using 0 by auto }
+    moreover
+    { assume "s' \<noteq> sig"
+      hence "\<omega>[sig, t, dly := beval_world \<omega> t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+        unfolding worldline_inert_upd_def `\<omega> = worldline t \<sigma> \<theta> \<tau>` by auto
+      also have "... = worldline t \<sigma> \<theta> \<tau>' s' t'"
+      proof -
+        have "\<And>n. lookup (to_transaction2 \<tau> s') n = lookup (to_transaction2 \<tau>' s') n"
+          using `s' \<noteq> sig` unfolding \<tau>'_def inr_post_def apply transfer' unfolding to_trans_raw2_def
+          trans_post_raw_def  by (simp add: purge_raw_does_not_affect_other_sig)
+        hence "signal_of2 (\<sigma> s') \<tau> s' t' = signal_of2 (\<sigma> s') \<tau>'  s' t'"
+          using signal_of2_lookup_sig_same  by metis
+        thus ?thesis
+          unfolding worldline_def by auto
+      qed
+      finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t, dly := beval_world \<omega> t exp] s' t'"
+        by auto }
+    ultimately have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t, dly := beval_world \<omega> t exp] s' t'"
+      by auto }
+  moreover
+  { assume "s' = sig \<and> t \<le> t'"
+    hence "t + dly \<le> t' \<or> t' < t + dly" and "s' = sig" and "t \<le> t'"
+      by auto
+    moreover
+    { assume "t + dly \<le> t'"
+      hence 2: "\<omega>[sig, t, dly := beval_world \<omega> t exp] s' t' = beval_world (worldline t \<sigma> \<theta> \<tau>) t exp"
+          using `s' = sig` unfolding `\<omega> = worldline t \<sigma> \<theta> \<tau>` worldline_inert_upd_def by auto
+      have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
+        using `t' \<ge> t` unfolding worldline_def by auto
+      also have "... = beval_world (worldline t \<sigma> \<theta> \<tau>) t exp"
+        using signal_of_inr_post[OF `t + dly \<le> t'`, of "\<sigma> s'" "sig"] unfolding \<tau>'_def
+        `\<omega> = worldline t \<sigma> \<theta> \<tau>` by (simp add: \<open>s' = sig \<and> t \<le> t'\<close>)
+      finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t, dly := beval_world \<omega> t exp] s' t' "
+        using 2 by auto }
+    moreover
+    { assume "t' < t + dly"
+      hence "\<omega>[sig, t, dly := beval_world \<omega> t exp] s' t' = \<omega> sig t"
+        unfolding worldline_inert_upd_def using `s' = sig`  using \<open>s' = sig \<and> t \<le> t'\<close> by auto
+      also have "... = signal_of2 (\<sigma> sig) \<tau> sig t"
+        unfolding `\<omega> = worldline t \<sigma> \<theta> \<tau>` worldline_def by auto
+      also have "... = \<sigma> sig"
+      proof (cases "lookup \<tau> t sig = None")
+        case True
+        have "\<And>k. k \<in>dom (lookup (to_transaction2 \<tau> sig)) \<Longrightarrow> t < k"
+        proof (rule ccontr)
+          fix k
+          assume in_dom: "k \<in>dom (lookup (to_transaction2 \<tau> sig))"
+          assume "\<not> t < k" hence "k \<le> t" by auto
+          hence "lookup \<tau> k sig = None"
+            using `\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0` True  by (metis dual_order.antisym leI zero_map)
+          hence "k \<notin> dom (lookup (to_transaction2 \<tau> sig))"
+            apply transfer' unfolding to_trans_raw2_def by auto
+          with in_dom show "False" by auto
+        qed
+        hence "inf_time (to_transaction2 \<tau>) sig t = None"
+          by (simp add: inf_time_noneI)
+        then show ?thesis
+          unfolding to_signal2_def comp_def by auto
+      next
+        case False
+        hence "lookup \<tau> t sig = Some (\<sigma> sig)"
+          using asm' by (simp add: domIff)
+        with lookup_some_signal_of2' show ?thesis
+          by fastforce
+      qed
+      finally have l: "\<omega>[sig, t, dly := beval_world \<omega> t exp] s' t' = \<sigma> sig"
+        by auto
+      have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
+        unfolding worldline_def using `s' = sig \<and> t \<le> t'` by auto
+      also have "... = \<sigma> s'"
+        using signal_of_inr_post2[OF `t \<le> t'` `t' < t + dly` `\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0` asm', of "s'"]
+        unfolding \<tau>'_def using `s' = sig` by auto
+      finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<sigma> s'"
+        by auto
+      with l have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t, dly := beval_world \<omega> t exp] s' t' "
+        using `s' = sig` by auto }
+    ultimately have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t, dly := beval_world \<omega> t exp] s' t' "
+      by auto }
+  ultimately show "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t, dly := beval_world \<omega> t exp] s' t' "
+    by auto
+qed
+
 lemma Bassign_inert_sound:
   assumes "0 < dly"
   shows "\<turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q} \<Longrightarrow> \<Turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q}"
 proof -
   assume "\<turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q}"
-  hence imp: "\<forall>w. P w \<longrightarrow> Q(w[sig, t + dly, t := beval_world w t exp])"
+  hence imp: "\<forall>w. P w \<longrightarrow> Q(w[sig, t, dly := beval_world w t exp])"
     by (auto dest!: Bassign_inertE)
   { fix \<sigma> :: "'a state"
     fix \<tau> \<tau>' \<theta> :: "'a transaction"
@@ -501,137 +984,18 @@ proof -
     assume "w = worldline t \<sigma> \<theta> \<tau>"
     assume "P w"
     assume ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-    hence "\<tau>' = inr_post sig (beval t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly"
-      by auto
-    moreover have "beval t \<sigma> \<gamma> \<theta> exp = beval_world w t exp"
-      using `w = worldline t \<sigma> \<theta> \<tau>`  `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
-      unfolding context_invariant_def by (simp add: beval_beval_world)
-    ultimately have \<tau>'_def: "\<tau>' = inr_post sig (beval_world w t exp) (\<sigma> sig) \<tau> t dly"
-      by auto
-    have "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
-      using `context_invariant t \<sigma> \<gamma> \<theta> \<tau>` unfolding context_invariant_def by auto
-    hence "\<And>n. n < t \<Longrightarrow> lookup \<tau>' n = 0"
-      unfolding \<tau>'_def using inr_post_preserve_trans_removal by metis
-    have nn: "nonneg_delay (Bassign_inert sig exp dly)"
-      using `0 < dly` by auto
-    have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
-      using b_seq_exec_preserves_context_invariant[OF c ex nn] by auto
-    hence asm: "\<forall>s. s \<in> dom (get_trans \<tau>' t) \<longrightarrow> \<sigma> s = the (get_trans \<tau>' t s)"
-      unfolding context_invariant_def by auto
-    hence asm': "\<forall>s. s \<in> dom (get_trans \<tau> t) \<longrightarrow> \<sigma> s = the (get_trans \<tau> t s)"
-      using `context_invariant t \<sigma> \<gamma> \<theta> \<tau>` unfolding context_invariant_def by auto
-    have "worldline t \<sigma> \<theta> \<tau>' = w[sig, t + dly, t := beval_world w t exp]"
-    proof (rule ext, rule ext)
-      fix s' t'
-      have "s' \<noteq> sig \<or> t' < t \<or> s' = sig \<and> t \<le> t'"
-        by auto
-      moreover
-      { assume "s' \<noteq> sig \<or> t' < t"
-        moreover
-        { assume "t' < t"
-          hence 0: " worldline t \<sigma> \<theta> \<tau>' s' t' =  signal_of2 False \<theta> s' t'"
-            unfolding worldline_def by auto
-          have "t' < t + dly"
-            using `t' < t` by auto
-          hence "w[sig, t + dly, t := beval_world w t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
-            unfolding `w = worldline t \<sigma> \<theta> \<tau>` worldline_inert_upd_def  by (simp add: \<open>t' < t\<close>)
-          also have "... = signal_of2 False \<theta> s' t'"
-            using `t' < t` unfolding worldline_def by auto
-          finally have "w[sig, t + dly, t := beval_world w t exp] s' t' = signal_of2 False \<theta> s' t'"
-            by auto
-          hence "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly, t := beval_world w t exp] s' t'"
-            using 0 by auto }
-        moreover
-        { assume "s' \<noteq> sig"
-          hence "w[sig, t + dly, t := beval_world w t exp] s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
-            unfolding worldline_inert_upd_def `w = worldline t \<sigma> \<theta> \<tau>` by auto
-          also have "... = worldline t \<sigma> \<theta> \<tau>' s' t'"
-          proof -
-            have "\<And>n. lookup (to_transaction2 \<tau> s') n = lookup (to_transaction2 \<tau>' s') n"
-              using `s' \<noteq> sig` unfolding \<tau>'_def inr_post_def apply transfer' unfolding to_trans_raw2_def
-              trans_post_raw_def  by (simp add: purge_raw_does_not_affect_other_sig)
-            hence "signal_of2 (\<sigma> s') \<tau> s' t' = signal_of2 (\<sigma> s') \<tau>'  s' t'"
-              using signal_of2_lookup_sig_same  by metis
-            thus ?thesis
-              unfolding worldline_def by auto
-          qed
-          finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly, t := beval_world w t exp] s' t'"
-            by auto }
-        ultimately have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly, t := beval_world w t exp] s' t'"
-          by auto }
-      moreover
-      { assume "s' = sig \<and> t \<le> t'"
-        hence "t + dly \<le> t' \<or> t' < t + dly" and "s' = sig" and "t \<le> t'"
-          by auto
-        moreover
-        { assume "t + dly \<le> t'"
-          hence 2: "w[sig, t + dly, t := beval_world w t exp] s' t' = beval_world (worldline t \<sigma> \<theta> \<tau>) t exp"
-              using `s' = sig` unfolding `w = worldline t \<sigma> \<theta> \<tau>` worldline_inert_upd_def by auto
-          have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
-            using `t' \<ge> t` unfolding worldline_def by auto
-          also have "... = beval_world (worldline t \<sigma> \<theta> \<tau>) t exp"
-            using signal_of_inr_post[OF `t + dly \<le> t'`, of "\<sigma> s'" "sig"] unfolding \<tau>'_def
-            `w = worldline t \<sigma> \<theta> \<tau>` by (simp add: \<open>s' = sig \<and> t \<le> t'\<close>)
-          finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly, t := beval_world w t exp] s' t' "
-            using 2 by auto }
-        moreover
-        { assume "t' < t + dly"
-          hence "w[sig, t + dly, t := beval_world w t exp] s' t' = w sig t"
-            unfolding worldline_inert_upd_def using `s' = sig`  using \<open>s' = sig \<and> t \<le> t'\<close> by auto
-          also have "... = signal_of2 (\<sigma> sig) \<tau> sig t"
-            unfolding `w = worldline t \<sigma> \<theta> \<tau>` worldline_def by auto
-          also have "... = \<sigma> sig"
-          proof (cases "lookup \<tau> t sig = None")
-            case True
-            have "\<And>k. k \<in>dom (lookup (to_transaction2 \<tau> sig)) \<Longrightarrow> t < k"
-            proof (rule ccontr)
-              fix k
-              assume in_dom: "k \<in>dom (lookup (to_transaction2 \<tau> sig))"
-              assume "\<not> t < k" hence "k \<le> t" by auto
-              hence "lookup \<tau> k sig = None"
-                using `\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0` True  by (metis dual_order.antisym leI zero_map)
-              hence "k \<notin> dom (lookup (to_transaction2 \<tau> sig))"
-                apply transfer' unfolding to_trans_raw2_def by auto
-              with in_dom show "False" by auto
-            qed
-            hence "inf_time (to_transaction2 \<tau>) sig t = None"
-              by (simp add: inf_time_noneI)
-            then show ?thesis
-              unfolding to_signal2_def comp_def by auto
-          next
-            case False
-            hence "lookup \<tau> t sig = Some (\<sigma> sig)"
-              using asm'  by (simp add: domIff)
-            with lookup_some_signal_of2' show ?thesis
-              by fastforce
-          qed
-          finally have l: "w[sig, t + dly, t := beval_world w t exp] s' t' = \<sigma> sig"
-            by auto
-
-          have "worldline t \<sigma> \<theta> \<tau>' s' t' = signal_of2 (\<sigma> s') \<tau>' s' t'"
-            unfolding worldline_def using `s' = sig \<and> t \<le> t'` by auto
-          also have "... = \<sigma> s'"
-            using signal_of_inr_post2[OF `t \<le> t'` `t' < t + dly` `\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0` asm', of "s'"]
-            unfolding \<tau>'_def using `s' = sig` by auto
-          finally have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<sigma> s'"
-            by auto
-          with l have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly, t := beval_world w t exp] s' t' "
-            using `s' = sig` by auto }
-        ultimately have "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly, t := beval_world w t exp] s' t' "
-          by auto }
-      ultimately show "worldline t \<sigma> \<theta> \<tau>' s' t' = w[sig, t + dly, t := beval_world w t exp] s' t' "
-        by auto
-    qed
-    with imp and `P w` have "Q(w[sig, t + dly, t := beval_world w t exp])"
+    have "worldline t \<sigma> \<theta> \<tau>' = w[sig, t, dly := beval_world w t exp]"
+      using lift_inr_post_worldline_upd[OF `w = worldline t \<sigma> \<theta> \<tau>` c ex assms] by auto
+    with imp and `P w` have "Q(w[sig, t, dly := beval_world w t exp])"
       by auto
     assume "w' = worldline t \<sigma> \<theta> \<tau>'"
     hence "Q w'"
-      using `Q(w[sig, t + dly, t := beval_world w t exp])` `worldline t \<sigma> \<theta> \<tau>' = w[sig, t + dly, t:= beval_world w t exp]`
+      using `Q(w[sig, t, dly := beval_world w t exp])` `worldline t \<sigma> \<theta> \<tau>' = w[sig, t, dly:= beval_world w t exp]`
       by auto }
   thus " \<Turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q}"
     unfolding seq_hoare_valid_def by auto
-qed
-
+qed                                                             
+ 
 lemma soundness:
   assumes "\<turnstile>\<^sub>t {P} s {R}"
   assumes "nonneg_delay s"
