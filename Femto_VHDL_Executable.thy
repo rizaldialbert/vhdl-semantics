@@ -142,7 +142,6 @@ value [code] "lookup (b_seq_exec 0 def_state {} 0 (Bguarded exp1 seq1 seq2) empt
 value [code] "lookup (b_seq_exec 0 def_state {} 0 seq1 empty_trans) 1 C"
 value [code] "lookup (b_seq_exec 0 def_state {} 0 seq2 empty_trans) 2 C"
 
-
 term "fmmap_keys (\<lambda>x. fmadd)"
 
 lemma [code]:
@@ -155,28 +154,26 @@ lemma [code]:
                      Pm_fmap (fmmap_keys (\<lambda>k v. map_diff (lookup0 xs k) (lookup0 ys k)) (xs ++\<^sub>f ys))"
   by (transfer') (rule ext, auto simp add: fmlookup_default_def zero_map split:option.splits)
 
-lemma clean_zip_alt_def [code]:
-  "clean_zip \<tau> \<tau>1 \<tau>2 = (let \<tau>1_stripped = map_diff_trans \<tau>1 \<tau>;
-                           \<tau>2_stripped = map_diff_trans \<tau>2 \<tau>;
-                           zipped = map_add_trans \<tau>1_stripped \<tau>2_stripped
-                        in
-                           map_add_trans \<tau> zipped)"
-  by (transfer) (auto simp add:clean_zip_raw_def)
+lemma [code]:
+  "clean_zip (Pm_fmap ts) (Pm_fmap ts1, s1) (Pm_fmap ts2, s2) =
+      Pm_fmap (fmmap_keys
+              (\<lambda>k v s. if s \<in> s1 then lookup0 ts1 k s else if s \<in> s2 then lookup0 ts2 k s else lookup0 ts k s)
+              (ts ++\<^sub>f ts1 ++\<^sub>f ts2))"
+  apply transfer'
+  apply (rule ext)
+  unfolding clean_zip_raw_def Let_def
+  by (auto split:prod.splits option.splits simp add: fmlookup_default_def zero_map)
 
-
-value [code] "clean_zip empty_trans empty_trans (empty_trans :: sig transaction)"
 value [code] "lookup (b_conc_exec 1 def_state {A, B} test_beh (process {A} : seq1) empty_trans) 2 C"
 value [code] "lookup (b_conc_exec 1 def_state {A, C} test_beh ((process {A} : seq1) || (process {C} : seq2)) empty_trans) 3 B"
 
 value [code] "quiet (empty_trans :: sig transaction) {}"
-
 
 lemma [code]:
   "Poly_Mapping.update k v (Pm_fmap xs) = Pm_fmap (fmupd k v xs)"
   by (transfer, auto simp add:fmlookup_default_def)
 
 value [code] "rem_curr_trans 0 (empty_trans :: sig transaction)"
-
 
 lemma lookup0_zero_fun:
   "lookup0 xs = (\<lambda>k. 0) \<longleftrightarrow> clearjunk0 xs = fmempty"
@@ -205,7 +202,6 @@ proof -
     by (simp add: fmfilter_alt_defs(1))
   finally show ?thesis by auto
 qed
-
 
 lemma sorted_list_fmdom_fmupd:
   "sorted_list_of_fset (fmdom (fmupd x y m)) = insort x (sorted_list_of_fset (fmdom (fmdrop x m)))"
@@ -259,8 +255,6 @@ proof -
   finally show ?thesis by auto
 qed
 
-
-
 lemma obtain_neq_empty':
   fixes m :: "('a, 'b \<rightharpoonup> 'c) fmap"
   assumes "clearjunk0 m \<noteq> fmempty"
@@ -297,7 +291,6 @@ lemma hd_after_insert_larger_key:
   assumes "hd xs < x"
   shows "hd (insort x xs) = hd xs"
   by (metis assms insort_key.simps(2) leD list.collapse list.sel(1))
-
 
 (* TODO : streamline this ugly proof! *)
 lemma least_fst_hd_sorted:

@@ -12,7 +12,7 @@ theory VHDL_Hoare
   imports Femto_VHDL
 begin
 
-text \<open>This theory is the first attempt for defining a Hoare logic for VHDL sequential statement. 
+text \<open>This theory is the first attempt for defining a Hoare logic for VHDL sequential statement.
 As the exploration continues, I realise that we can only prove the soundness in this first attempt
 but not the completeness. The second attempt is shown in @{theory_text "VHDL_Hoare_Complete"}. Even
 though we cannot show that it is complete, many theorems and definitions in this theory are useful
@@ -22,31 +22,31 @@ subsection \<open>Hoare Logic for @{typ "'signal seq_stmt"}\<close>
 
 type_synonym 'signal worldline = "'signal \<Rightarrow> nat \<Rightarrow> val"
 
-text \<open>The type @{typ "'signal worldline"} represent the concept of ``worlds'' which are required 
-for the axiomatic semantics of VHDL specified in @{cite Breuer1995}. As can be seen from the 
-definition, this type represents a function with two arguments: @{term "signal :: 'signal"} and 
-@{term "time :: nat"} to a set of value. 
+text \<open>The type @{typ "'signal worldline"} represent the concept of ``worlds'' which are required
+for the axiomatic semantics of VHDL specified in @{cite Breuer1995}. As can be seen from the
+definition, this type represents a function with two arguments: @{term "signal :: 'signal"} and
+@{term "time :: nat"} to a set of value.
 
 Compared to the standard ``worlds'' for defining the axiomatic semantics of sequential programming
 language --- e.g. @{typ "'variable \<Rightarrow> val"} --- we have added the notion of @{term "time :: nat"}
 here. For example, when we do assignment in VHDL, we can specify the time when this assignment will
 happen in the future. This construct is, of course, absent from the typical assignment in sequential
-programming language where assignments happen instantaneously. It is due to this notion of time, we 
+programming language where assignments happen instantaneously. It is due to this notion of time, we
 add a suffix ``line'' in the type @{typ "'signal worldline"}.
 
-What is the relationship between @{typ "'signal worldline"} with the context @{term "\<sigma> :: 'signal 
-state"}, @{term "\<gamma> :: 'signal event"}, @{term "\<theta> :: 'signal transaction"}, @{term "\<tau>' \<tau> :: 'signal 
+What is the relationship between @{typ "'signal worldline"} with the context @{term "\<sigma> :: 'signal
+state"}, @{term "\<gamma> :: 'signal event"}, @{term "\<theta> :: 'signal transaction"}, @{term "\<tau>' \<tau> :: 'signal
 transaction"} in the semantics @{term "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"}? The answer is that the latter
 is the refined version of the former. We shall show the formal relationship later in this theory.
 \<close>
 
-definition worldline_upd :: "'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline" 
+definition worldline_upd :: "'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline"
   ("_[_, _:= _]") where
   "worldline_upd w s t v = (\<lambda>s' t'. if s' \<noteq> s \<or> t' < t then w s' t' else v)"
-        
-definition worldline_inert_upd :: "'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline" 
+
+definition worldline_inert_upd :: "'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline"
   ("_[_, _, _ := _]") where
-  "worldline_inert_upd w s t dly v = (\<lambda>s' t'. if s' \<noteq> s \<or> t' < t then w s' t' else 
+  "worldline_inert_upd w s t dly v = (\<lambda>s' t'. if s' \<noteq> s \<or> t' < t then w s' t' else
                                               if t' < t + dly     then w s' t  else v)"
 
 text \<open>These are the two constructs we can use to update or modify a @{typ "'signal worldline"}. Note
@@ -57,7 +57,7 @@ assignment @{term "Bassign_trans"} and inertial delay assignment @{term "Bassign
 
 type_synonym 'signal assn = "'signal worldline \<Rightarrow> bool"
 
-text \<open>The type @{typ "'signal assn"} represents a predicate over a worldline, i.e., a property 
+text \<open>The type @{typ "'signal assn"} represents a predicate over a worldline, i.e., a property
 about a worldline. The pre- and post-condition of a VHDL sequential statement will be of this type.\<close>
 
 definition state_of_world :: "'signal worldline \<Rightarrow> nat \<Rightarrow> 'signal state" where
@@ -81,29 +81,29 @@ definition beval_world :: "'signal worldline \<Rightarrow> nat \<Rightarrow> 'si
 
 text \<open>As promised in the beginning of this theory, we show the first relationship from @{typ
 "'signal worldline"} to the realm of @{typ "'signal state"}, @{typ "'signal event"}, and @{typ
-"'signal transaction"}. 
+"'signal transaction"}.
 
 For @{term "state_of_world"}, the definition is obvious. We need a function abstraction --- instead
 of simply giving an argument to function @{term "w :: 'signal worldline"} to return another function
 --- here because the different order of the arguments: in @{typ "'signal worldline"} the name of the
 signal comes before the time.
 
-Event represents the set of signals whose values are different from the previous time. Here is the 
-dilemma: what happens at time @{term "0::nat"}? There is no such time as @{term "0 - 1"} as this 
+Event represents the set of signals whose values are different from the previous time. Here is the
+dilemma: what happens at time @{term "0::nat"}? There is no such time as @{term "0 - 1"} as this
 will evaluate to @{term "0"} in natural numbers. Nevertheless, event at time @{term "0 :: nat"}
-has different interpretation: it is the set of signals whose values are different from the default 
+has different interpretation: it is the set of signals whose values are different from the default
 values, i.e., @{term "False :: val"}. The expression for else-statement in @{term "event_of_world"}
-is obvious. 
+is obvious.
 
 Note that @{term "beh_of_world"} requires a lift_definition instead of standard definition
 construct; this is due to @{typ "'signal transaction"}. Its raw version @{term "beh_of_world_raw"}
-only maps until the time @{term "t"} only. This is because behaviour is synonymous with history in 
-our definition and, according to the order of time, we do not have any ``mapping'' from time now 
+only maps until the time @{term "t"} only. This is because behaviour is synonymous with history in
+our definition and, according to the order of time, we do not have any ``mapping'' from time now
 until the future.
 \<close>
 
 inductive
-  seq_hoare :: "nat \<Rightarrow> 'signal assn \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn \<Rightarrow> bool" 
+  seq_hoare :: "nat \<Rightarrow> 'signal assn \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn \<Rightarrow> bool"
   ("\<turnstile>\<^sub>_ ({(1_)}/ (_)/ {(1_)})" 50) where
 Null: "\<turnstile>\<^sub>t {P} Bnull {P}" |
 
@@ -119,9 +119,9 @@ If: "\<lbrakk>\<turnstile>\<^sub>t {\<lambda>w. P w \<and> beval_world w t g} s1
 Conseq: "\<lbrakk>\<forall>w. P' w \<longrightarrow> P w; \<turnstile>\<^sub>t {P} s {Q}; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>t {P'} s {Q'}"
 
 text \<open>The inductive definition @{term "seq_hoare"} is similar to the inductive definition @{term
-"hoare"} in @{theory_text "Hoare"}. Rules other than @{term "Assign"} and @{term "AssignI"} are 
+"hoare"} in @{theory_text "Hoare"}. Rules other than @{thm "Assign"} and @{thm "AssignI"} are
 standard; we explain those two only here. As can be seen, the construct @{term "worldline_upd"} and
-@{term "worldline_inert_upd"} are designed for the purpose of defining the axiomatic semantics 
+@{term "worldline_inert_upd"} are designed for the purpose of defining the axiomatic semantics
 of VHDL. We show how it makes sense later in the soundness property.\<close>
 
 inductive_cases seq_hoare_ic: "\<turnstile>\<^sub>t {P} s {Q}"
@@ -178,14 +178,14 @@ lemma Assign':
 
 subsection \<open>Validity of Hoare proof rules\<close>
 
-definition worldline :: 
+definition worldline ::
   "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> 'signal worldline" where
   "worldline t \<sigma> \<theta> \<tau> = (\<lambda>s' t'. if t' < t then signal_of2 False \<theta> s' t' else signal_of2 (\<sigma> s') \<tau> s' t')"
 
 text \<open>@{term "worldline"} is a constructor here. Note that we have used the same identifier (name)
 for the constructor and the type here. This construct is the link from the operational semantics's
-world such as @{typ "'signal state"}, @{typ "'signal transaction"} to the axiomatic semantics's 
-world @{typ "'signal worldline"}. 
+world such as @{typ "'signal state"}, @{typ "'signal transaction"} to the axiomatic semantics's
+world @{typ "'signal worldline"}.
 
 An observant reader might have noticed that there is no @{typ "'signal event"} when we construct
 @{typ "'signal worldline"}. This is because, as Breuer and Kloos~@{cite "Breuer1995"} argued, the
@@ -197,13 +197,13 @@ reconstructing the event at every time point.\<close>
 definition difference_raw :: "'signal worldline \<Rightarrow> nat \<Rightarrow> 'signal \<rightharpoonup> val" where
   "difference_raw w t = (\<lambda>s. if w s t \<noteq> w s (t - 1) then Some (w s t) else None)"
 
-(* 
-  - variable t represents current time; 
-  - variable d represents the degree of the world, i.e., point  at which the worldline does not 
-    change anymore. 
+(*
+  - variable t represents current time;
+  - variable d represents the degree of the world, i.e., point  at which the worldline does not
+    change anymore.
 *)
 
-lift_definition derivative_raw :: "'signal worldline \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal transaction" 
+lift_definition derivative_raw :: "'signal worldline \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal transaction"
   is "\<lambda>w d t n. if n < t \<or> d < n then Map.empty else  if n = t then Some o (\<lambda>s. w s t) else difference_raw w n "
   unfolding sym[OF eventually_cofinite] MOST_nat
 proof -
@@ -215,20 +215,20 @@ proof -
     by blast
 qed
 
-text \<open> The function @{term "derivative_raw"} is a function to obtain the transaction 
-@{term "\<tau> :: 'signal transaction"} in the operational semantics @{term "b_seq_exec"}. Note that to 
+text \<open> The function @{term "derivative_raw"} is a function to obtain the transaction
+@{term "\<tau> :: 'signal transaction"} in the operational semantics @{term "b_seq_exec"}. Note that to
 use @{typ "'signal worldline"} as a context to define the axiomatic semantics of VHDL, it is always
-paired with a time variable @{term "t :: time"}. This variable denotes the current time of the 
-computation; anything strictly before this time is a history (related to the notion of behaviour 
-@{term "\<theta> :: 'signal transaction"})  and anything after this time is a prediction (related to 
+paired with a time variable @{term "t :: time"}. This variable denotes the current time of the
+computation; anything strictly before this time is a history (related to the notion of behaviour
+@{term "\<theta> :: 'signal transaction"})  and anything after this time is a prediction (related to
 the notion of transaction @{term "\<tau> :: 'signal transaction"}).
 
-The naming ``derivative'' signifies that this function acts similarly to a derivative in the 
-real number calculus. Hence, the derivative here only record those values which are different 
+The naming ``derivative'' signifies that this function acts similarly to a derivative in the
+real number calculus. Hence, the derivative here only record those values which are different
 (via @{term "difference_raw"}) from the value at the previous time (hence the name ``difference''
 as the derivative counterpart for discrete-time signal).
 
-Why do we still have the suffix ``raw'' in @{term "derivative_raw"}? Because we will still lift 
+Why do we still have the suffix ``raw'' in @{term "derivative_raw"}? Because we will still lift
 this definition further as will be explained in @{theory_text "VHDL_Hoare_Complete"}.
 \<close>
 
@@ -280,7 +280,7 @@ proof (induction t')
   have lookup: "lookup (derivative_raw w d 0) 0 = Some o (\<lambda>s. w s 0)"
     by transfer' auto
   hence " signal_of2 (\<sigma> s') (derivative_raw w d t) s' 0 =  signal_of2 (\<sigma> s') (derivative_raw w d 0) s' 0"
-    unfolding `t = 0` by auto                                                                           
+    unfolding `t = 0` by auto
   also have "... = w s' 0"
     using lookup_some_signal_of2[OF lookup] by auto
   finally show ?case by auto
@@ -313,8 +313,8 @@ next
       { assume "w s' d = w s' (d - 1) \<and> difference_raw w d s' = None"
         hence "lookup (derivative_raw w d t) (Suc t') s' = None" and "w s' d = w s' (d - 1)"
           using * by auto
-        with signal_of2_less_sig[of "derivative_raw w d t" "Suc t'" "s'"] 
-        have **: "signal_of2 (\<sigma> s') (derivative_raw w d t) s' (Suc t') =  
+        with signal_of2_less_sig[of "derivative_raw w d t" "Suc t'" "s'"]
+        have **: "signal_of2 (\<sigma> s') (derivative_raw w d t) s' (Suc t') =
               signal_of2 (\<sigma> s') (derivative_raw w d t) s' t'"
           unfolding zero_option_def by auto
         have "t' \<le> d"
@@ -347,9 +347,9 @@ next
       { assume "w s' (Suc t') = w s' t'"
         with lookup have "lookup (derivative_raw w d t) (Suc t') s' = None"
           unfolding difference_raw_def by auto
-        moreover hence "signal_of2 (\<sigma> s') (derivative_raw w d t) s' (Suc t') = 
+        moreover hence "signal_of2 (\<sigma> s') (derivative_raw w d t) s' (Suc t') =
                signal_of2 (\<sigma> s') (derivative_raw w d t) s' t'"
-          using signal_of2_less_sig[of "derivative_raw w d t" "Suc t'" "s'"] unfolding zero_option_def 
+          using signal_of2_less_sig[of "derivative_raw w d t" "Suc t'" "s'"] unfolding zero_option_def
           by auto
         ultimately have ?case
           using IH `w s' (Suc t') = w s' t'` by auto }
@@ -357,7 +357,7 @@ next
       { assume "w s' (Suc t') \<noteq> w s' t'"
         with lookup have "lookup (derivative_raw w d t) (Suc t') s' = Some (w s' (Suc t'))"
           unfolding difference_raw_def by auto
-        from lookup_some_signal_of2'[where \<sigma>="\<lambda>s. w s (Suc t')", OF this]      
+        from lookup_some_signal_of2'[where \<sigma>="\<lambda>s. w s (Suc t')", OF this]
         have ?case by auto }
       ultimately have ?case by auto }
     ultimately have ?case by auto }
@@ -413,7 +413,7 @@ proof -
     thus "False"
       using kdom by auto
   qed
-  hence "inf_time (to_transaction2 (derivative_raw w d t)) s' t' = None"  
+  hence "inf_time (to_transaction2 (derivative_raw w d t)) s' t' = None"
     by (rule inf_time_noneI)
   thus ?thesis
     unfolding to_signal2_def comp_def by auto
@@ -432,7 +432,7 @@ proof (cases "\<tau> = 0")
       unfolding `\<tau> = 0` using signal_of2_empty by metis
     finally have "worldline t \<sigma> \<theta> \<tau> s k = signal_of2 (\<sigma> s) \<tau> s t"
       by auto }
-  then show ?thesis 
+  then show ?thesis
     by (meson worldline_def)
 next
   case False
@@ -446,11 +446,11 @@ next
       unfolding worldline_def using `t < Poly_Mapping.degree \<tau>` by auto
     have "\<And>n. Poly_Mapping.degree \<tau> - 1 < n \<Longrightarrow> n \<le> k \<Longrightarrow> lookup \<tau> n = 0"
       by (simp add: beyond_degree_lookup_zero)
-    hence " signal_of2 (\<sigma> s) \<tau> s k = signal_of2 (\<sigma> s) \<tau> s (Poly_Mapping.degree \<tau> - 1)"      
+    hence " signal_of2 (\<sigma> s) \<tau> s k = signal_of2 (\<sigma> s) \<tau> s (Poly_Mapping.degree \<tau> - 1)"
       by (meson \<open>Poly_Mapping.degree \<tau> - 1 < k\<close> signal_of2_less_ind)
     with expl and expr have "worldline t \<sigma> \<theta> \<tau> s k = worldline t \<sigma> \<theta> \<tau> s (Poly_Mapping.degree \<tau> - 1)"
       by auto }
-  then show ?thesis 
+  then show ?thesis
     by (meson worldline_def)
 qed
 
@@ -462,11 +462,11 @@ seq_hoare_valid :: "nat \<Rightarrow> 'signal assn \<Rightarrow> 'signal seq_stm
                                             \<and> (t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s, \<tau>> \<longrightarrow>\<^sub>s \<tau>')
                                             \<and>  w' = worldline t \<sigma> \<theta> \<tau>' \<longrightarrow> Q w')"
 
-text \<open>The definition @{term "seq_hoare_valid"} shall be the basis to define the soundness of the 
+text \<open>The definition @{term "seq_hoare_valid"} shall be the basis to define the soundness of the
 Hoare logic rules. Note that the symbol of `\<Turnstile>` has @{term "t"} as its subscript which indicates
-that the validity is a function of time. Here is the diagram explaining the definition of the 
+that the validity is a function of time. Here is the diagram explaining the definition of the
 validity:
-\<close>                                
+\<close>
 
 (*
          P w             \<longrightarrow>               Q w
@@ -507,8 +507,8 @@ proof (rule)+
   thus "R w'"
     using `\<Turnstile>\<^sub>t {Q} s2 {R}` `w'' = worldline t \<sigma> \<theta> \<tau>''` `Q w''` 1 2 unfolding seq_hoare_valid_def
     by auto
-qed                                 
-  
+qed
+
 lemma Bnull_sound:
   "\<turnstile>\<^sub>t {P} Bnull {Q} \<Longrightarrow> \<Turnstile>\<^sub>t {P} Bnull {Q}"
   by (auto dest!: BnullE' simp add: seq_hoare_valid_def)
@@ -686,9 +686,9 @@ lemma beval_beval_world_ci:
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau> "
   shows "beval t \<sigma> \<gamma> \<theta> exp = beval_world w t exp"
 proof -
-  have 0: "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0" and 
-       1: "\<gamma> = {s. \<sigma> s \<noteq> signal_of2 False \<theta> s (t - 1)}" and 
-       2: "\<And>s. s \<in> dom (lookup \<tau> t) \<Longrightarrow> \<sigma> s = the (lookup \<tau> t s)" and 
+  have 0: "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0" and
+       1: "\<gamma> = {s. \<sigma> s \<noteq> signal_of2 False \<theta> s (t - 1)}" and
+       2: "\<And>s. s \<in> dom (lookup \<tau> t) \<Longrightarrow> \<sigma> s = the (lookup \<tau> t s)" and
        3: "\<And>n. t \<le> n \<Longrightarrow> lookup \<theta> n = 0"
     using assms(2) unfolding context_invariant_def by auto
   show ?thesis
@@ -811,7 +811,7 @@ proof (rule ext, rule ext)
     ultimately have "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t' "
       by auto }
   ultimately show "worldline t \<sigma> \<theta> \<tau>' s' t' = \<omega>[sig, t + dly := beval_world \<omega> t exp] s' t'"
-    by auto 
+    by auto
 qed
 
 lemma Bassign_trans_sound:
@@ -848,7 +848,7 @@ proof -
 qed
 
 lemma lift_inr_post_worldline_upd:
-  assumes "\<omega> = worldline t \<sigma> \<theta> \<tau>" 
+  assumes "\<omega> = worldline t \<sigma> \<theta> \<tau>"
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
   assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
   assumes "0 < dly"
@@ -994,8 +994,8 @@ proof -
       by auto }
   thus " \<Turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q}"
     unfolding seq_hoare_valid_def by auto
-qed                                                             
- 
+qed
+
 lemma soundness:
   assumes "\<turnstile>\<^sub>t {P} s {R}"
   assumes "nonneg_delay s"

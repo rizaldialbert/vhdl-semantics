@@ -1398,7 +1398,7 @@ lemma signal_of2_zero:
   shows "signal_of2 def \<tau> sig 0 = def"
 proof -
   have "\<forall>t\<in>dom (lookup (to_transaction2 \<tau> sig)). 0 < t"
-    using assms 
+    using assms
     by (metis domIff neq0_conv to_trans_raw2_def to_transaction2.rep_eq zero_option_def)
   hence "inf_time (to_transaction2 \<tau>) sig 0 = None"
     by (intro inf_time_noneI)
@@ -2431,93 +2431,135 @@ and then merge its result. To merge the results of all of the processes, the fol
 @{term "clean_zip"} is used. Search for @{term "b_conc_exec"} for the semantics of concurrent
 statements. \<close>
 
-definition clean_zip_raw :: "'signal trans_raw \<Rightarrow> 'signal trans_raw \<Rightarrow> 'signal trans_raw \<Rightarrow>
+definition clean_zip_raw :: "'signal trans_raw \<Rightarrow> 'signal trans_raw \<times> 'signal set \<Rightarrow>
+                                                   'signal trans_raw \<times> 'signal set \<Rightarrow>
                                                                                   'signal trans_raw"
   where
-  "clean_zip_raw \<tau> \<tau>\<^sub>1 \<tau>\<^sub>2 = (let \<tau>\<^sub>1_stripped = \<lambda>n. map_diff (\<tau>\<^sub>1 n) (\<tau> n);
-                               \<tau>\<^sub>2_stripped = \<lambda>n. map_diff (\<tau>\<^sub>2 n) (\<tau> n);
-                               zipped = \<lambda>n. map_add (\<tau>\<^sub>1_stripped n) (\<tau>\<^sub>2_stripped n)
-                           in
-                            (\<lambda>n. map_add (\<tau> n) (zipped n))
-                          )"
-
-text \<open>These two properties are taken directly from @{cite "VanTassel1995"} directly. I prove them
-as a sanity check that this formalisation is a faithful formalisation.\<close>
-
-theorem van_tassel_first_prop:
-  "clean_zip_raw (\<lambda>n. Map.empty) \<tau>1 \<tau>2 = (\<lambda>n. map_add (\<tau>1 n) (\<tau>2 n))"
-  unfolding clean_zip_raw_def Let_def by auto
-
-theorem van_tassel_second_prop:
-  fixes t t1 t2
-  defines "dom1 n \<equiv> dom (map_diff (t1 n) (t n))"
-  defines "dom2 n \<equiv> dom (map_diff (t2 n) (t n))"
-  assumes "\<And>n. disjnt (dom1 n) (dom2 n)"
-  shows "clean_zip_raw t t1 t2 = clean_zip_raw t t2 t1"
-proof
-  fix x
-  define t1_stripped where "t1_stripped \<equiv> \<lambda>n. map_diff (t1 n) (t n)"
-  define t2_stripped where "t2_stripped \<equiv> \<lambda>n. map_diff (t2 n) (t n)"
-  define zipped where "zipped \<equiv> \<lambda>n. map_add (t1_stripped n) (t2_stripped n)"
-  define zipped' where "zipped' \<equiv> \<lambda>n. map_add (t2_stripped n) (t1_stripped n)"
-
-  have *: "\<And>n. dom (t1_stripped n) \<inter> dom (t2_stripped n) = {}"
-    using assms unfolding t1_stripped_def t2_stripped_def disjnt_def
-    by auto
-  have "zipped = zipped'"
-    unfolding zipped_def zipped'_def using * map_add_comm by metis
-  thus "clean_zip_raw t t1 t2 x = clean_zip_raw t t2 t1 x"
-    unfolding clean_zip_raw_def Let_def zipped_def zipped'_def t1_stripped_def t2_stripped_def
-    by metis
-qed
+  "clean_zip_raw \<tau> \<tau>s1 \<tau>s2 = (let (\<tau>1, s1) = \<tau>s1; (\<tau>2, s2) = \<tau>s2
+                              in (\<lambda>t s. if s \<in> s1 then \<tau>1 t s else if s \<in> s2 then \<tau>2 t s else \<tau> t s))"
 
 lemma dom_map_diff_clean_zip_union:
-  "\<And>n. dom (map_diff_trans_raw (clean_zip_raw \<tau> \<tau>' \<tau>'') \<tau> n) \<subseteq>
+  "\<And>n. dom (map_diff_trans_raw (clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'')) \<tau> n) \<subseteq>
                                   dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
 proof
   fix n x
-  assume prem: "x \<in> dom (map_diff (clean_zip_raw \<tau> \<tau>' \<tau>'' n) (\<tau> n))"
-  define  \<tau>\<^sub>1_stripped where "\<tau>\<^sub>1_stripped \<equiv> \<lambda>n. map_diff (\<tau>' n) (\<tau> n)"
-  define  \<tau>\<^sub>2_stripped where "\<tau>\<^sub>2_stripped \<equiv> \<lambda>n. map_diff (\<tau>'' n) (\<tau> n)"
-  define  zipped where "zipped \<equiv> \<lambda>n. map_add (\<tau>\<^sub>1_stripped n) (\<tau>\<^sub>2_stripped n)"
-
-  have "\<tau> n x \<noteq> None \<or> \<tau> n x = None" by auto
+  assume asm: "x \<in> dom (map_diff_trans_raw (clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'')) \<tau> n)"
+  have "\<tau> n x = None \<or> \<tau> n x \<noteq> None"
+    by auto
   moreover
   { assume "\<tau> n x \<noteq> None"
-    then obtain val1 and val2 where
-      "(clean_zip_raw \<tau> \<tau>' \<tau>'' n) x = Some val1" and "\<tau> n x = Some val2" and "val1 \<noteq> val2"
-      using mem_dom_map_diff_obtains[OF prem] by metis
-    hence "zipped n x = Some val1"
-      unfolding clean_zip_raw_def Let_def  \<tau>\<^sub>1_stripped_def \<tau>\<^sub>2_stripped_def zipped_def
-      by (simp add:  map_add_Some_iff)
-    hence "x \<in> dom (map_diff (\<tau>' n) (\<tau> n)) \<union> dom (map_diff (\<tau>'' n) (\<tau> n))"
-      unfolding zipped_def \<tau>\<^sub>1_stripped_def \<tau>\<^sub>2_stripped_def by auto }
+    then obtain v1 v2  where czr: "clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'') n x = Some v1" and "\<tau> n x = Some v2"
+      and "v1 \<noteq> v2" using mem_dom_map_diff_obtains
+      using \<open>x \<in> dom (map_diff_trans_raw (clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'')) \<tau> n)\<close> by fastforce
+    have "x \<in> s' \<or> x \<notin> s' \<and> x \<in> s'' \<or> x \<notin> s' \<and> x \<notin> s''"
+      by auto
+    moreover
+    { assume "x \<in> s'"
+      hence "clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'') n x = \<tau>' n x"
+        unfolding clean_zip_raw_def by auto
+      hence "\<tau>' n x = Some v1"
+        using czr by auto
+      with `\<tau> n x \<noteq> None` have "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n)"
+        using mem_dom_map_diff_obtains  by (simp add: \<open>\<tau> n x = Some v2\<close> \<open>v1 \<noteq> v2\<close> domIff map_diff_def)
+      hence "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+        by auto }
+    moreover
+    { assume "x \<notin> s' \<and> x \<in> s''"
+      hence "clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'') n x = \<tau>'' n x"
+        unfolding clean_zip_raw_def by auto
+      hence "\<tau>'' n x = Some v1"
+        using czr by auto
+      with `\<tau> n x \<noteq> None` have "x \<in> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+        by (simp add: \<open>\<tau> n x = Some v2\<close> \<open>v1 \<noteq> v2\<close> domIff map_diff_def)
+      hence "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+        by auto }
+    moreover
+    { assume "x \<notin> s' \<and> x \<notin> s''"
+      hence "clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'') n x = \<tau> n x"
+        unfolding clean_zip_raw_def by auto
+      hence False
+        using czr `v1 \<noteq> v2` `\<tau> n x = Some v2` by auto
+      hence "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+        by auto }
+    ultimately have "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+      by auto }
   moreover
   { assume "\<tau> n x = None"
-    hence "x \<in> dom (clean_zip_raw \<tau> \<tau>' \<tau>'' n)"
-      using prem  by (metis domIff map_diff_def)
-    hence "x \<in> dom (map_diff (\<tau>' n) (\<tau> n)) \<union> dom (map_diff (\<tau>'' n) (\<tau> n))"
-      using \<open>\<tau> n x = None\<close> unfolding zipped_def \<tau>\<^sub>1_stripped_def \<tau>\<^sub>2_stripped_def
-      by (metis (no_types, lifting) clean_zip_raw_def domIff dom_map_add map_add_dom_app_simps(3)
-          sup_commute) }
-  ultimately show "x \<in> dom (map_diff (\<tau>' n) (\<tau> n)) \<union> dom (map_diff (\<tau>'' n) (\<tau> n))"
+    hence xdom: "x \<in> dom (clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'') n)"
+      using asm by (metis domIff map_diff_def)
+    have "x \<in> s' \<or> x \<notin> s' \<and> x \<in> s'' \<or> x \<notin> s' \<and> x \<notin> s''"
+      by auto
+    moreover
+    { assume "x \<in> s'"
+      hence "clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'') n x = \<tau>' n x"
+        unfolding clean_zip_raw_def by auto
+      with xdom have "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n)"
+        using `\<tau> n x = None`  by (simp add: domIff map_diff_def)
+      hence "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+        by auto }
+    moreover
+    { assume "x \<notin> s' \<and> x \<in> s''"
+      hence "clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'') n x = \<tau>'' n x"
+        unfolding clean_zip_raw_def by auto
+      with xdom have "x \<in> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+        using `\<tau> n x = None`  by (simp add: domIff map_diff_def)
+      hence "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+        by auto }
+    moreover
+    { assume "x \<notin> s' \<and> x \<notin> s''"
+      hence "clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'') n x = \<tau> n x"
+        unfolding clean_zip_raw_def by auto
+      with xdom have False
+        by (simp add: \<open>\<tau> n x = None\<close> domIff)
+      hence "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+        by auto }
+    ultimately have "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
+      by auto }
+  ultimately show "x \<in> dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
     by auto
 qed
 
-lift_definition clean_zip :: "'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow>
+lift_definition clean_zip ::
+  "'signal transaction \<Rightarrow> 'signal transaction \<times> 'signal set \<Rightarrow>  'signal transaction \<times> 'signal set \<Rightarrow>
                                                                                 'signal transaction"
-  is clean_zip_raw unfolding clean_zip_raw_def sym[OF eventually_cofinite]
-  by (simp add: map_add_fin_variability map_diff_fin_variability)
+  is clean_zip_raw unfolding clean_zip_raw_def sym[OF eventually_cofinite] Let_def
+proof (auto split:prod.splits)
+  fix f x1 x1a:: "nat \<Rightarrow> 'signal \<Rightarrow> bool option"
+  fix x2 x2a
+  assume assm1: "\<forall>\<^sub>\<infinity>x. f x = 0"
+  assume assm2: "\<forall>\<^sub>\<infinity>x. x1 x = 0"
+  assume assm3: "\<forall>\<^sub>\<infinity>x. x1a x = 0"
+  have "\<And>i. x1a i = 0 \<Longrightarrow> f i = 0 \<Longrightarrow> (\<lambda>s. if s \<in> x2a then x1a i s else f i s) = 0"
+    unfolding zero_fun_def by (rule ext) auto
+  hence "\<forall>\<^sub>\<infinity>i. (\<lambda>s. if s \<in> x2a then x1a i s else f i s) = 0"
+    using eventually_elim2[where F="cofinite" and P="\<lambda>x. x1a x = 0" and Q="\<lambda>x. f x = 0"
+                          and R="\<lambda>x. (\<lambda>s. if s \<in> x2a then x1a x s else f x s) = 0"]
+    assm3 assm1 by auto
+  moreover have "\<And>i. x1 i = 0 \<Longrightarrow> (\<lambda>s. if s \<in> x2a then x1a i s else f i s) = 0 \<Longrightarrow> (\<lambda>s. if s \<in> x2 then x1 i s else if s \<in> x2a then x1a i s else f i s) = 0"
+    unfolding zero_fun_def
+    by (rule ext) meson
+  thus "\<forall>\<^sub>\<infinity>x. (\<lambda>s. if s \<in> x2 then x1 x s else if s \<in> x2a then x1a x s else f x s) = 0"
+    using eventually_elim2[where F="cofinite" and P="\<lambda>x. x1 x = 0" and Q="\<lambda>x. (\<lambda>s. if s \<in> x2a then x1a x s else f x s) = 0"
+                                              and R="\<lambda>x. (\<lambda>s. if s \<in> x2 then x1 x s else if s \<in> x2a then x1a x s else f x s) = 0", OF assm2]
+    using calculation by blast
+qed
 
 lemma clean_zip_same:
-  "clean_zip \<tau> \<tau> \<tau> = \<tau>"
-  apply transfer' unfolding clean_zip_raw_def by auto
+  "clean_zip \<tau> (\<tau>, s1) (\<tau>, s2) = \<tau>"
+  apply transfer' unfolding clean_zip_raw_def Let_def
+  by (auto split:prod.splits) presburger
+
+lemma van_tassel_second_prop':
+  assumes "disjnt s1 s2"
+  shows "clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2) = clean_zip \<tau> (\<tau>2, s2) (\<tau>1, s1)"
+  using assms apply transfer' unfolding clean_zip_raw_def Let_def
+  by (intro ext, auto split:prod.splits simp add: disjnt_def)
 
 text \<open>Note that in the following semantics, if the process is not activated --- meaning the
-sensitivity list does not contain recently changed signals --- then the returned transaction is an
-empty transaction.\<close>
+sensitivity list does not contain recently changed signals --- then the returned transaction is
+the original transaction.\<close>
 
-fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
+(* fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                              'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
   where
     "b_conc_exec t \<sigma> \<gamma> \<theta> (process sl : ss) \<tau> =
@@ -2525,13 +2567,57 @@ fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event
   | "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =
            (let \<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>;  \<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau> in clean_zip \<tau> \<tau>1 \<tau>2)"
 
+term "signals_from"
+ *)
+
+fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
+                             'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
+  where
+    "b_conc_exec t \<sigma> \<gamma> \<theta> (process sl : ss) \<tau> =
+                                                (if disjnt sl \<gamma> then \<tau> else b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>)"
+  | "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =
+           (let \<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>;  \<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau> in
+                              clean_zip \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2)))"
+
 abbreviation  b_conc_exec_abb :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                              'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> bool"
   ("_ , _ , _ , _ \<turnstile> <_ , _> \<longrightarrow>\<^sub>c _") where
   "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>') \<equiv> (b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>')"
 
+(*
+lemma
+  assumes "conc_stmt_wf cs"
+  shows "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau>"
+  using assms
+proof (induction cs arbitrary:\<tau>)
+  case (Bpar cs1 cs2)
+  obtain \<tau>1 where \<tau>1_def: "\<tau>1 = b_conc_exec  t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+    by auto
+  hence \<tau>1_def': "\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+    using Bpar by (simp add: conc_stmt_wf_def)
+  obtain \<tau>2 where "\<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>"
+    by auto
+  hence *: "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip \<tau> \<tau>1 \<tau>2"
+    using `\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>` by auto
+  obtain \<tau>' where "\<tau>' = clean_zip \<tau> \<tau>1 \<tau>2"
+    by auto
+  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1"
+    by (auto simp add: \<open>\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>\<close>)
+  also have "... = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1"
+    using Bpar  by (simp add: conc_stmt_wf_def)
+  also have "... = \<tau>'"
+    nitpick
+
+
+  finally show ?case
+    using * by auto
+next
+  case (Bsingle x1 x2)
+  then show ?case by auto
+qed *)
+
 theorem conc_stmts_modify_local_only_raw:
-  assumes "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>')"
+  assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
   shows "\<And>n. dom (map_diff (get_trans \<tau>' n) (get_trans \<tau> n)) \<subseteq> set (signals_from cs)"
   using assms
 proof (induction cs arbitrary:\<tau>')
@@ -2542,15 +2628,14 @@ proof (induction cs arbitrary:\<tau>')
   define \<tau>2 where "\<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>"
   hence **: "\<And>n. dom (map_diff (get_trans \<tau>2 n) (get_trans \<tau> n)) \<subseteq> set (signals_from cs2)"
     using Bpar(2) by auto
-  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip \<tau> \<tau>1 \<tau>2"
+  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
     unfolding \<tau>1_def \<tau>2_def by auto
   hence "... = \<tau>'"
     using Bpar(3) by auto
   hence "\<And>n. dom (map_diff (get_trans \<tau>' n) (get_trans \<tau> n))
                                                    \<subseteq> dom (map_diff (get_trans \<tau>1 n) (get_trans \<tau> n))
                                                    \<union> dom (map_diff (get_trans \<tau>2 n) (get_trans \<tau> n))"
-    using dom_map_diff_clean_zip_union
-    by (metis clean_zip.rep_eq)
+    by (transfer', meson dom_map_diff_clean_zip_union)
   then show ?case
     using * **  by fastforce
 next
@@ -2571,27 +2656,13 @@ theorem conc_stmts_modify_local_only:
 
 lemma parallel_comp_commute':
   assumes "conc_stmt_wf (cs1 || cs2)"
-  assumes "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1 || cs2, \<tau>> \<longrightarrow>\<^sub>c \<tau>')"
-  shows "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs2 || cs1, \<tau>> \<longrightarrow>\<^sub>c \<tau>')"
+  assumes "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = \<tau>'"
+  shows "b_conc_exec t \<sigma> \<gamma> \<theta> (cs2 || cs1) \<tau> = \<tau>'"
 proof -
-  define \<tau>1 where "\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>"
-  hence m_diff1: "\<And>n. dom (get_trans (map_diff_trans \<tau>1 \<tau>) n) \<subseteq> set (signals_from cs1)"
-    using conc_stmts_modify_local_only by metis
-  define \<tau>2 where "\<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>"
-  hence m_diff2: "\<And>n. dom (get_trans (map_diff_trans \<tau>2 \<tau>) n) \<subseteq> set (signals_from cs2)"
-    using conc_stmts_modify_local_only by metis
-  have "\<tau>' = clean_zip \<tau> \<tau>1 \<tau>2"
-    using assms(2) unfolding \<tau>1_def \<tau>2_def by auto
-  have "\<And>n. disjnt (dom (get_trans (map_diff_trans \<tau>1 \<tau>) n))
-                    (dom (get_trans (map_diff_trans \<tau>2 \<tau>) n))"
-    using m_diff1 m_diff2 assms(1)
-    by (metis conc_stmt_wf_def disjnt_def disjnt_subset1 disjnt_subset2 distinct_append
-              signals_from.simps(2))
-  hence "clean_zip \<tau> \<tau>1 \<tau>2 = clean_zip \<tau> \<tau>2 \<tau>1"
-    using van_tassel_second_prop[of "get_trans \<tau>1" "get_trans \<tau>" "get_trans \<tau>2"]
-    by (transfer) auto
+  have "disjnt (set (signals_from cs1)) (set (signals_from cs2))"
+    using assms(1) unfolding conc_stmt_wf_def by (simp add: disjnt_def)
   thus ?thesis
-    using assms(2) `\<tau>' = clean_zip \<tau> \<tau>1 \<tau>2` unfolding \<tau>1_def \<tau>2_def by auto
+    using van_tassel_second_prop' assms(2) by fastforce
 qed
 
 text \<open>The first property we prove for the semantics of the concurrent statement is that two
@@ -2602,50 +2673,16 @@ theorem parallel_comp_commute:
   shows "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1 || cs2, \<tau>> \<longrightarrow>\<^sub>c \<tau>') \<longleftrightarrow> (t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs2 || cs1, \<tau>> \<longrightarrow>\<^sub>c \<tau>')"
   using assms parallel_comp_commute' by metis
 
-(* TODO: smt solver can find solution; failed to reconstruct. *)
-lemma conjecture:
-  "\<And>n. map_diff (clean_zip_raw t t1 t2 n) (t n) = (map_diff (t1 n) (t n)) ++ (map_diff (t2 n) (t n))"
-  sorry
-
 lemma clean_zip_raw_assoc:
-  "clean_zip_raw t (clean_zip_raw t t1 t2) t3 = clean_zip_raw t t1 (clean_zip_raw t t2 t3)"
-proof
-  fix x
-
-  define \<tau>\<^sub>1_stripped where "\<tau>\<^sub>1_stripped \<equiv> \<lambda>n. map_diff (t1 n) (t n)"
-  define \<tau>\<^sub>2_stripped where "\<tau>\<^sub>2_stripped \<equiv> \<lambda>n. map_diff (t2 n) (t n)"
-  define \<tau>\<^sub>3_stripped where "\<tau>\<^sub>3_stripped \<equiv> \<lambda>n. map_diff (t3 n) (t n)"
-  define zipped12 where "zipped12 \<equiv> \<lambda>n. (\<tau>\<^sub>1_stripped n) ++ (\<tau>\<^sub>2_stripped n)"
-  define zipped23 where "zipped23 \<equiv> \<lambda>n. (\<tau>\<^sub>2_stripped n) ++ (\<tau>\<^sub>3_stripped n)"
-  define cz12_stripped where "cz12_stripped \<equiv> \<lambda>n. map_diff ((clean_zip_raw t t1 t2) n) (t n)"
-  define cz23_stripped where "cz23_stripped \<equiv> \<lambda>n. map_diff ((clean_zip_raw t t2 t3) n) (t n)"
-
-  have *: "cz12_stripped = (\<lambda>n. (\<tau>\<^sub>1_stripped n) ++ (\<tau>\<^sub>2_stripped n))"
-    using conjecture unfolding \<tau>\<^sub>1_stripped_def \<tau>\<^sub>2_stripped_def cz12_stripped_def
-    by metis
-  have **: "cz23_stripped = (\<lambda>n. (\<tau>\<^sub>2_stripped n) ++ (\<tau>\<^sub>3_stripped n))"
-    using conjecture unfolding \<tau>\<^sub>2_stripped_def \<tau>\<^sub>3_stripped_def cz23_stripped_def
-    by metis
-  have "clean_zip_raw t (clean_zip_raw t t1 t2) t3 x =
-                                          (t x) ++ (cz12_stripped x) ++ (\<tau>\<^sub>3_stripped x)"
-    unfolding clean_zip_raw_def Let_def cz12_stripped_def \<tau>\<^sub>3_stripped_def by auto
-  also have "... = (t x) ++ (\<tau>\<^sub>1_stripped x) ++ (\<tau>\<^sub>2_stripped x) ++ (\<tau>\<^sub>3_stripped x)"
-    using * by auto
-  finally have "clean_zip_raw t (clean_zip_raw t t1 t2) t3 x =
-                                      (t x) ++ (\<tau>\<^sub>1_stripped x) ++ (\<tau>\<^sub>2_stripped x) ++ (\<tau>\<^sub>3_stripped x)"
-    by auto
-  moreover have "clean_zip_raw t t1 (clean_zip_raw t t2 t3) x =
-                                      (t x) ++ (\<tau>\<^sub>1_stripped x) ++ (\<tau>\<^sub>2_stripped x) ++ (\<tau>\<^sub>3_stripped x)"
-    using ** unfolding clean_zip_raw_def Let_def cz23_stripped_def \<tau>\<^sub>1_stripped_def \<tau>\<^sub>2_stripped_def
-    \<tau>\<^sub>3_stripped_def by (metis map_add_assoc)
-  ultimately show " clean_zip_raw t (clean_zip_raw t t1 t2) t3 x =
-                                                        clean_zip_raw t t1 (clean_zip_raw t t2 t3) x"
-    by auto
-qed
+  "clean_zip_raw \<tau> (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2), s1 \<union> s2) (\<tau>3, s3) =
+   clean_zip_raw \<tau> (\<tau>1, s1) (clean_zip_raw \<tau> (\<tau>2, s2) (\<tau>3, s3), (s2 \<union> s3))"
+  unfolding clean_zip_raw_def Let_def by (auto intro!: ext)
 
 lemma clean_zip_assoc:
-  "clean_zip \<tau> (clean_zip \<tau> \<tau>1 \<tau>2) \<tau>3 = clean_zip \<tau> \<tau>1 (clean_zip \<tau> \<tau>2 \<tau>3)"
-  by transfer (simp add:clean_zip_raw_assoc)
+  assumes "disjnt s1 s2" and "disjnt s2 s3" and "disjnt s1 s3"
+  shows "clean_zip \<tau> (clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2), s1 \<union> s2) (\<tau>3, s3) =
+         clean_zip \<tau> (\<tau>1, s1) (clean_zip \<tau> (\<tau>2, s2) (\<tau>3, s3), s2 \<union> s3)"
+  using assms by (transfer', simp add: clean_zip_raw_assoc)
 
 text \<open>The second property of the semantics of concurrent statements: they are associative. Together
 with the first property of being commutative, they in some sense provide a guarantee that they are
@@ -2653,26 +2690,26 @@ truly parallel; we can execute whichever process in any order and the merging wi
 same.\<close>
 
 theorem parallel_comp_assoc:
-  "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <(cs1 ||  cs2) || cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>') \<longleftrightarrow>
-                                                   (t, \<sigma>, \<gamma>, \<theta> \<turnstile> < cs1 || (cs2  || cs3), \<tau>> \<longrightarrow>\<^sub>c \<tau>')"
-  by (auto simp add: clean_zip_assoc)
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  shows "b_conc_exec t \<sigma> \<gamma> \<theta> ((cs1 || cs2) || cs3) \<tau> = b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || (cs2 || cs3)) \<tau>"
+proof -
+  have "disjnt (set (signals_from cs1)) (set (signals_from cs2))"
+   and "disjnt (set (signals_from cs2)) (set (signals_from cs3))"
+   and "disjnt (set (signals_from cs1)) (set (signals_from cs3))"
+    using assms using conc_stmt_wf_def disjnt_def by force+
+  thus ?thesis
+    by (simp add: clean_zip_assoc)
+qed
 
 text \<open>The Language Reference Manual for VHDL stipulates that each process will be executed initially
 regardless of their sensitivity list.\<close>
-
-inductive init :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace
-                    \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> bool"
-  ("_ , _ , _ , _ \<turnstile> <_ , _> \<longrightarrow> start _") where
-  "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>') \<Longrightarrow> (t, \<sigma>, \<gamma>, \<theta> \<turnstile> <process sl : ss , \<tau>> \<longrightarrow> start \<tau>')"
-| "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1 , \<tau>> \<longrightarrow> start \<tau>') \<Longrightarrow> (t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs2 , \<tau>> \<longrightarrow> start \<tau>'') \<Longrightarrow>
-                                   (t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1 || cs2, \<tau>> \<longrightarrow> start (clean_zip \<tau> \<tau>' \<tau>''))"
 
 fun init' :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                              'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
   where
     "init' t \<sigma> \<gamma> \<theta> (process sl : ss) \<tau> =  b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>"
   | "init' t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =
-                       (let \<tau>1 = init' t \<sigma> \<gamma> \<theta> cs1 \<tau>;  \<tau>2 = init' t \<sigma> \<gamma> \<theta> cs2 \<tau> in clean_zip \<tau> \<tau>1 \<tau>2)"
+                       (let \<tau>1 = init' t \<sigma> \<gamma> \<theta> cs1 \<tau>;  \<tau>2 = init' t \<sigma> \<gamma> \<theta> cs2 \<tau> in clean_zip \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2)))"
 
 definition rem_curr_trans :: "time \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction" where
   "rem_curr_trans t \<tau> = Poly_Mapping.update t 0 \<tau>"
@@ -2806,19 +2843,18 @@ next
     by (metis (no_types, lifting) option.case_eq_if option.distinct(1) option.expand option.sel)
 qed
 
-
 lemma clean_zip_raw_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow> \<tau>  n = 0"
   assumes "\<And>n. n < t \<Longrightarrow> \<tau>1 n = 0"
   assumes "\<And>n. n < t \<Longrightarrow> \<tau>2 n = 0"
-  shows "\<And>n. n < t \<Longrightarrow> (clean_zip_raw \<tau> \<tau>1 \<tau>2) n = 0"
-  using assms  by (simp add: clean_zip_raw_def)
+  shows "\<And>n. n < t \<Longrightarrow> (clean_zip_raw \<tau> (\<tau>1,s1) (\<tau>2,s2)) n = 0"
+  using assms  unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
 
 lemma clean_zip_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow> get_trans \<tau>  n = 0"
   assumes "\<And>n. n < t \<Longrightarrow> get_trans \<tau>1 n = 0"
   assumes "\<And>n. n < t \<Longrightarrow> get_trans \<tau>2 n = 0"
-  shows "\<And>n. n < t \<Longrightarrow> get_trans (clean_zip \<tau> \<tau>1 \<tau>2) n = 0"
+  shows "\<And>n. n < t \<Longrightarrow> get_trans (clean_zip \<tau> (\<tau>1,s1) (\<tau>2,s2)) n = 0"
   using assms
   apply transfer'
   using clean_zip_raw_preserve_trans_removal by blast
@@ -2831,9 +2867,9 @@ proof (induction cs arbitrary: \<tau>)
   case (Bpar cs1 cs2)
   let ?\<tau>1 = "b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>"
   let ?\<tau>2 = "b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>"
-  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip \<tau> ?\<tau>1 ?\<tau>2"
+  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip \<tau> (?\<tau>1, set (signals_from cs1)) (?\<tau>2, set (signals_from cs2))"
     by auto
-  have "\<And>n. n < t \<Longrightarrow> get_trans (clean_zip \<tau> ?\<tau>1 ?\<tau>2) n = 0"
+  have "\<And>n. n < t \<Longrightarrow> get_trans (clean_zip \<tau> (?\<tau>1, set (signals_from cs1)) (?\<tau>2, set (signals_from cs2))) n = 0"
     using clean_zip_preserve_trans_removal[OF Bpar(4)] Bpar by auto
   then show ?case  using Bpar(3) by auto
 next
@@ -2861,15 +2897,14 @@ proof (induction cs arbitrary: \<tau> \<tau>')
   hence "s \<notin> set (signals_from cs1)" and "s \<notin> set (signals_from cs2)"
     by auto
   obtain \<tau>1 \<tau>2 where "b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau> = \<tau>1" and \<tau>2_def: "b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau> = \<tau>2"
-    and \<tau>'_def: "\<tau>' = clean_zip \<tau> \<tau>1 \<tau>2"
+    and \<tau>'_def: "\<tau>' = clean_zip \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
     using Bpar(5) by auto
   hence "lookup \<tau> i s = lookup \<tau>1 i s"
     using Bpar `s \<notin> set (signals_from cs1)` by blast
   moreover have "lookup \<tau> i s = lookup \<tau>2 i s"
     using \<tau>2_def `s \<notin> set (signals_from cs2)` Bpar(2) `i \<ge> t` by blast
-  ultimately have "lookup \<tau> i s = lookup (clean_zip \<tau> \<tau>1 \<tau>2) i s"
-    by (transfer', smt clean_zip_raw_def map_add_None map_add_dom_app_simps(1)
-        map_add_dom_app_simps(3)  map_diff_def)
+  ultimately have "lookup \<tau> i s = lookup (clean_zip \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))) i s"
+    by (transfer', simp add: clean_zip_raw_def)
   then show ?case
     by (auto simp add: \<tau>'_def)
 next
@@ -2917,27 +2952,15 @@ proof -
 qed
 
 lemma b_conc_exec_empty_event:
-  assumes "t, \<sigma>, {}, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
-  shows "\<tau> = \<tau>'"
-  using assms
-proof (induction cs arbitrary:\<tau>')
-  case (Bpar cs1 cs2)
-  then obtain tau1 tau2 where "tau1 = b_conc_exec t \<sigma> {} \<theta> cs1 \<tau>" and "tau2 = b_conc_exec t \<sigma> {} \<theta> cs2 \<tau>"
-    and *: "\<tau>' = clean_zip \<tau> tau1 tau2" by auto
-  with Bpar have "tau1 = \<tau>" and "tau2 = \<tau>" by presburger+
-  hence "\<tau>' = \<tau>" using * clean_zip_same by auto
-  thus ?case by auto
-next
-  case (Bsingle x1 x2)
-  then show ?case by auto
-qed
+  "b_conc_exec t \<sigma> {} \<theta> cs \<tau> = \<tau>"
+  by (induction cs, auto simp add: clean_zip_same)
 
 fun disjnts where
   "disjnts \<gamma> (Bsingle sl ss) \<longleftrightarrow> disjnt \<gamma> sl"
 | "disjnts \<gamma> (Bpar cs1 cs2) \<longleftrightarrow> disjnts \<gamma> cs1 \<and> disjnts \<gamma> cs2"
 
 lemma b_conc_exec_disjnts_event:
-  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+  assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
   assumes "disjnts \<gamma> cs"
   shows "\<tau> = \<tau>'"
   using assms
@@ -2983,7 +3006,6 @@ proof -
   ultimately show ?thesis
     using f1 by auto
 qed
-
 
 lemma [simp]:
   "next_time t 0 = t"
@@ -3238,7 +3260,6 @@ lemma next_state_fixed_point:
   assumes "sig \<notin> next_event t \<tau>' \<sigma>"
   shows "next_state t \<tau>' \<sigma> sig = \<sigma> sig"
   using assms next_event_alt_def by force
-
 
 text \<open>After we advance to the next interesting computation point, we need to save the behaviour so
 that we can return this as the result in the end of the computation (either when it is quiet or
@@ -3569,7 +3590,7 @@ proof (rule ccontr)
     hence "\<tau> = 0" using degree_zero_iff by auto
     with `\<tau> \<noteq> 0` have "False"
       by auto }
-  ultimately show "False" 
+  ultimately show "False"
     by auto
 qed
 
@@ -3713,7 +3734,7 @@ proof (rule Least_equality)
 next
   fix y
   { assume "y < Poly_Mapping.degree \<tau>"
-    hence "Poly_Mapping.degree \<tau> - 1 \<ge> y" and "0 < Poly_Mapping.degree \<tau>" 
+    hence "Poly_Mapping.degree \<tau> - 1 \<ge> y" and "0 < Poly_Mapping.degree \<tau>"
       by auto
     moreover have "lookup \<tau> (Poly_Mapping.degree \<tau> - 1) \<noteq> 0"
       using degree_greater_zero_in_keys[OF `0 < Poly_Mapping.degree \<tau>`] by auto
@@ -3721,11 +3742,11 @@ next
       by auto }
   thus "\<forall>t\<ge>y. lookup \<tau> t = 0 \<Longrightarrow> Poly_Mapping.degree \<tau> \<le> y "
     using leI by blast
-qed  
+qed
 
 lemma degree_alt_def:
   "Poly_Mapping.degree \<tau> = (LEAST n. \<forall>t \<ge> n. lookup \<tau> t = 0)"
-  using poly_mapping_degree[THEN sym] by auto 
+  using poly_mapping_degree[THEN sym] by auto
 
 lemma
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
