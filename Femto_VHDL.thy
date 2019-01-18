@@ -2399,12 +2399,55 @@ next
   then show ?case by auto
 qed
 
+lemma b_seq_exec_modifies_local_before_now:
+  assumes "b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau> = \<tau>'"
+  shows "\<And>i s. s \<notin> set (signals_in ss) \<Longrightarrow> i < t  \<Longrightarrow> lookup \<tau> i s = lookup \<tau>' i s"
+  using assms
+proof (induction ss arbitrary: \<tau> \<tau>')
+  case (Bcomp ss1 ss2)
+  define \<tau>'' where "\<tau>'' = b_seq_exec t \<sigma> \<gamma> \<theta> ss1 \<tau>"
+  hence "lookup \<tau> i s = lookup \<tau>'' i s"
+    using Bcomp(1) Bcomp(3-4)  by (metis Un_iff set_append set_remdups signals_in.simps(5))
+  have "b_seq_exec t \<sigma> \<gamma> \<theta> (Bcomp ss1 ss2) \<tau> = b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>''"
+    unfolding \<tau>''_def by auto
+  hence "lookup \<tau>'' i s = lookup \<tau>' i s"
+    using Bcomp(2-5) by (metis Un_iff set_append set_remdups signals_in.simps(5))
+  thus ?case
+    using `lookup \<tau> i s = lookup \<tau>'' i s` by auto
+next
+  case (Bguarded x1 ss1 ss2)
+  then show ?case
+    by (metis (no_types, lifting) Un_iff b_seq_exec.simps(3) set_append set_remdups signals_in.simps(4))
+next
+  case (Bassign_trans sig e dly)
+  hence "\<tau>' = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau> (t + dly)"
+    by auto
+  then show ?case
+    using `i < t` apply transfer' unfolding trans_post_raw_def by auto
+next
+  case (Bassign_inert x1 x2 x3)
+  hence "s \<noteq> x1" by auto
+  have "inr_post x1 (beval t \<sigma> \<gamma> \<theta> x2) (\<sigma> x1) \<tau> t x3 = \<tau>'"
+    using Bassign_inert by auto
+  then show ?case using `s \<noteq> x1`
+    unfolding inr_post_def apply transfer'
+    by (smt fun_upd_other purge_raw_does_not_affect_other_sig trans_post_raw_def)
+next
+  case Bnull
+  then show ?case by auto
+qed
+
 lemma b_seq_exec_modifies_local':
   assumes "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
   assumes "b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau> = \<tau>'"
   shows "\<And>s. s \<notin> set (signals_in ss) \<Longrightarrow> lookup \<tau> i s = lookup \<tau>' i s"
   using assms
   by (metis b_seq_exec_modifies_local b_seq_exec_preserve_trans_removal not_le)
+
+lemma b_seq_exec_modifies_local_strongest:
+  assumes "b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau> = \<tau>'"
+  shows "\<And>s. s \<notin> set (signals_in ss) \<Longrightarrow> lookup \<tau> i s = lookup \<tau>' i s"
+  by (metis assms b_seq_exec_modifies_local b_seq_exec_modifies_local_before_now not_le)
 
 lemma b_seq_does_not_modify_signals:
   assumes "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
@@ -2414,6 +2457,23 @@ lemma b_seq_does_not_modify_signals:
 proof -
   have "\<And>i. lookup \<tau> i s = lookup \<tau>' i s"
     using b_seq_exec_modifies_local'[OF assms(1-3)] by auto
+  hence *: "to_transaction2 \<tau> s = to_transaction2 \<tau>' s"
+    by (transfer', auto simp add: to_trans_raw2_def)
+  hence "\<And>i. inf_time (to_transaction2 \<tau>) s i = inf_time (to_transaction2 \<tau>') s i"
+    unfolding inf_time_def by auto
+  hence "\<And>i. to_signal (to_transaction2 \<tau>) s i = to_signal (to_transaction2 \<tau>') s i"
+    unfolding to_signal_def by (auto simp add: * split:option.splits)
+  thus "\<And>i. signal_of \<tau> s i = signal_of \<tau>' s i"
+    by auto
+qed
+
+lemma b_seq_does_not_modify_signals_strongest:
+  assumes "b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau> = \<tau>'"
+  assumes "s \<notin> set (signals_in ss)"
+  shows "\<And>i. signal_of \<tau> s i = signal_of \<tau>' s i"
+proof -
+  have "\<And>i. lookup \<tau> i s = lookup \<tau>' i s"
+    using b_seq_exec_modifies_local_strongest[OF assms(1-2)] by auto
   hence *: "to_transaction2 \<tau> s = to_transaction2 \<tau>' s"
     by (transfer', auto simp add: to_trans_raw2_def)
   hence "\<And>i. inf_time (to_transaction2 \<tau>) s i = inf_time (to_transaction2 \<tau>') s i"
@@ -2559,22 +2619,10 @@ text \<open>Note that in the following semantics, if the process is not activate
 sensitivity list does not contain recently changed signals --- then the returned transaction is
 the original transaction.\<close>
 
-(* fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
-                             'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
-  where
-    "b_conc_exec t \<sigma> \<gamma> \<theta> (process sl : ss) \<tau> =
-                                  (if disjnt sl \<gamma> then \<tau> else b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>)"
-  | "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =
-           (let \<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>;  \<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau> in clean_zip \<tau> \<tau>1 \<tau>2)"
-
-term "signals_from"
- *)
-
 fun b_conc_exec :: "time \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal trace \<Rightarrow>
                              'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction"
   where
-    "b_conc_exec t \<sigma> \<gamma> \<theta> (process sl : ss) \<tau> =
-                                                (if disjnt sl \<gamma> then \<tau> else b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>)"
+    "b_conc_exec t \<sigma> \<gamma> \<theta> (process sl : ss) \<tau> = (if disjnt sl \<gamma> then \<tau> else b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>)"
   | "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =
            (let \<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>;  \<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau> in
                               clean_zip \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2)))"
@@ -2926,12 +2974,55 @@ next
   ultimately show ?case by auto
 qed
 
+lemma b_conc_exec_modifies_local_before_now:
+  assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
+  shows "\<And>i s. s \<notin> set (signals_from cs) \<Longrightarrow> i < t \<Longrightarrow> lookup \<tau> i s = lookup \<tau>' i s"
+  using assms
+proof (induction cs arbitrary: \<tau> \<tau>')
+  case (Bpar cs1 cs2)
+  hence "s \<notin> set (signals_from cs1)" and "s \<notin> set (signals_from cs2)"
+    by auto
+  obtain \<tau>1 \<tau>2 where "b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau> = \<tau>1" and \<tau>2_def: "b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau> = \<tau>2"
+    and \<tau>'_def: "\<tau>' = clean_zip \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
+    using Bpar(5) by auto
+  hence "lookup \<tau> i s = lookup \<tau>1 i s"
+    using Bpar `s \<notin> set (signals_from cs1)` by blast
+  moreover have "lookup \<tau> i s = lookup \<tau>2 i s"
+    using \<tau>2_def `s \<notin> set (signals_from cs2)` Bpar(2) `i < t` by blast
+  ultimately have "lookup \<tau> i s = lookup (clean_zip \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))) i s"
+    by (transfer', simp add: clean_zip_raw_def)
+  then show ?case
+    by (auto simp add: \<tau>'_def)
+next
+  case (Bsingle x1 x2)
+  hence "s \<notin> set (signals_in x2)"
+    by auto
+  have "disjnt x1 \<gamma> \<or> \<not> disjnt x1 \<gamma>" by auto
+  moreover
+  { assume "disjnt x1 \<gamma>"
+    hence "\<tau>' = \<tau>"
+      using Bsingle by auto
+    hence ?case by auto }
+  moreover
+  { assume "\<not> disjnt x1 \<gamma>"
+    hence \<tau>'_def: "\<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> x2 \<tau>"
+      using Bsingle by auto
+    hence ?case
+      using b_seq_exec_modifies_local_before_now[OF _ `s \<notin> set (signals_in x2)` `i < t`] by metis }
+  ultimately show ?case by auto
+qed
+
 lemma b_conc_exec_modifies_local':
   assumes "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
   assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
   shows "\<And>s. s \<notin> set (signals_from cs) \<Longrightarrow> lookup \<tau> i s = lookup \<tau>' i s"
   using assms
   by (metis b_conc_exec_modifies_local b_conc_exec_preserve_trans_removal not_le)
+
+lemma b_conc_exec_modifies_local_strongest:
+  assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
+  shows "\<And>s. s \<notin> set (signals_from cs) \<Longrightarrow> lookup \<tau> i s = lookup \<tau>' i s"
+  by (metis assms b_conc_exec_modifies_local b_conc_exec_modifies_local_before_now not_le)
 
 lemma b_conc_exec_does_not_modify_signals:
   assumes "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
@@ -2941,6 +3032,23 @@ lemma b_conc_exec_does_not_modify_signals:
 proof -
   have "\<And>i. lookup \<tau> i s = lookup \<tau>' i s"
     using b_conc_exec_modifies_local'[OF assms(1-3)] by auto
+  hence *: "to_transaction2 \<tau> s = to_transaction2 \<tau>' s"
+    by (transfer', auto simp add: to_trans_raw2_def)
+  hence "\<And>i. inf_time (to_transaction2 \<tau>) s i = inf_time (to_transaction2 \<tau>') s i"
+    unfolding inf_time_def by auto
+  hence "\<And>i. to_signal (to_transaction2 \<tau>) s i = to_signal (to_transaction2 \<tau>') s i"
+    unfolding to_signal_def by (auto simp add: * split:option.splits)
+  thus "\<And>i. signal_of \<tau> s i = signal_of \<tau>' s i"
+    by auto
+qed
+
+lemma b_conc_exec_does_not_modify_signals_strongest:
+  assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
+  assumes "s \<notin> set (signals_from cs)"
+  shows "\<And>i. signal_of \<tau> s i = signal_of \<tau>' s i"
+proof -
+  have "\<And>i. lookup \<tau> i s = lookup \<tau>' i s"
+    using b_conc_exec_modifies_local_strongest[OF assms(1-2)] by auto
   hence *: "to_transaction2 \<tau> s = to_transaction2 \<tau>' s"
     by (transfer', auto simp add: to_trans_raw2_def)
   hence "\<And>i. inf_time (to_transaction2 \<tau>) s i = inf_time (to_transaction2 \<tau>') s i"
@@ -2978,6 +3086,425 @@ lemma b_conc_exec_trans_unchanged:
   assumes "\<gamma> = {} \<or> disjnts \<gamma> cs"
   shows "\<tau> = \<tau>'"
   using assms b_conc_exec_empty_event b_conc_exec_disjnts_event by metis
+
+lemma lookup_eq_means_is_stable_eq:
+  assumes "\<And>k. lookup \<tau>1 k sig = lookup \<tau>2 k sig"
+  shows "is_stable dly \<tau>1 t sig (\<sigma> sig) = is_stable dly \<tau>2 t sig (\<sigma> sig)"
+proof -
+  { fix m
+    assume "t < m \<and> m \<le> t + dly"
+    have "check (get_trans \<tau>1 m) sig (\<sigma> sig) = check (get_trans \<tau>2 m) sig (\<sigma> sig)"
+      using assms(1) by auto }
+  thus ?thesis
+    unfolding  is_stable_correct by auto
+qed
+
+lemma b_seq_exec_trans_post_lookup_same:
+  fixes sig e dly
+  defines "ss \<equiv> Bassign_trans sig e dly"
+  assumes "\<And>k s. s \<in> set (signals_in ss) \<Longrightarrow> lookup \<tau> k s = lookup \<tau>1 k s"
+  shows "\<And>k s. s \<in> set (signals_in ss) \<Longrightarrow> lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1) k s =  lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>) k s"
+  using assms
+proof (induction ss)
+  case (Bassign_trans)
+  hence "s = sig"
+    by auto
+  have "b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_trans sig e dly) \<tau>1 = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau>1 (t + dly)"
+    by auto
+  hence "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_trans sig e dly) \<tau>1) k s =
+         lookup (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau>1 (t + dly)) k s"
+    by auto
+  also have "... = lookup (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau> (t + dly)) k s"
+    using `s = sig` Bassign_trans(2) apply transfer'
+    unfolding trans_post_raw_def by auto
+  also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_trans sig e dly) \<tau>) k s"
+    by auto
+  finally show ?case by auto
+qed
+
+lemma b_seq_exec_inr_post_lookup_same:
+  fixes sig e dly
+  defines "ss \<equiv> Bassign_inert sig e dly"
+  assumes "\<And>k s. s \<in> set (signals_in ss) \<Longrightarrow> lookup \<tau> k s = lookup \<tau>1 k s"
+  shows "\<And>k s. s \<in> set (signals_in ss) \<Longrightarrow> lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1) k s =  lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>) k s"
+proof -
+  fix k s
+  assume "s \<in> set (signals_in ss)"
+  hence "s = sig"
+    unfolding ss_def by auto
+  hence 2: "\<And>k. lookup \<tau> k s = lookup \<tau>1 k s"
+    using assms(2) unfolding ss_def by auto
+  have 3: "b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1 = inr_post sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly"
+    by auto
+  have "is_stable dly \<tau>1 t sig (\<sigma> sig) \<or> \<not> is_stable dly \<tau>1 t sig (\<sigma> sig)"
+    by auto
+  moreover
+  { assume "is_stable dly \<tau>1 t sig (\<sigma> sig)"
+    hence "is_stable dly \<tau> t sig (\<sigma> sig)"
+      by (metis "2" \<open>s = sig\<close> lookup_eq_means_is_stable_eq)
+    have "inr_post sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau>1 (t + dly)"
+      using `is_stable dly \<tau>1 t sig (\<sigma> sig)` unfolding inr_post_def by auto
+    hence "lookup (inr_post sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly) k s =
+           lookup (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau>1 (t + dly)) k s"
+      by auto
+    also have "... = lookup (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau> (t + dly)) k s"
+      using `s = sig` 2 apply transfer' unfolding trans_post_raw_def by auto
+    also have "... = lookup (inr_post sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly) k s"
+      using `is_stable dly \<tau> t sig (\<sigma> sig)` unfolding inr_post_def by auto
+    also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
+      by auto
+    finally have "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1) k s =
+                  lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
+      using 3 by auto }
+  moreover
+  { assume "\<not> is_stable dly \<tau>1 t sig (\<sigma> sig)"
+    hence "\<not> is_stable dly \<tau> t sig (\<sigma> sig)"
+      by (metis "2" \<open>s = sig\<close> lookup_eq_means_is_stable_eq)
+    have in_tr: "inr_post  sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly =
+          trans_post sig (beval t \<sigma> \<gamma> \<theta> e) (purge dly \<tau>1 t sig (\<sigma> sig)) (t + dly) "
+      using `\<not> is_stable dly \<tau>1 t sig (\<sigma> sig)` unfolding inr_post_def by auto
+    have lookup_purged_eq: "lookup (purge dly \<tau>1 t sig (\<sigma> sig)) k s =  lookup (purge dly \<tau>  t sig (\<sigma> sig)) k s"
+      using 2 `s = sig`
+    proof transfer'
+      fix \<tau> \<tau>1 :: "nat \<Rightarrow> 'a \<Rightarrow> bool option"
+      fix s dly t sig \<sigma> k
+      assume *: "\<And>k. \<tau> k s = \<tau>1 k s"
+      assume "s = sig"
+      from * show "purge_raw dly \<tau>1 t sig (\<sigma> sig) k s = purge_raw dly \<tau> t sig (\<sigma> sig) k s"
+      proof (induction dly arbitrary: \<tau>1 \<tau>)
+        case 0
+        then show ?case by auto
+      next
+        case (Suc dly)
+        hence **: "purge_raw dly \<tau>1 t sig (\<sigma> sig) k s = purge_raw dly \<tau> t sig (\<sigma> sig) k s"
+          by blast
+        define f1 where "f1  = \<tau>1 (t + Suc dly)"
+        define f1' where "f1' = f1 (sig := None)"
+        define \<tau>1' where "\<tau>1' = \<tau>1 (t + Suc dly := f1')"
+
+        define f where "f  = \<tau> (t + Suc dly)"
+        define f' where "f' = f (sig := None)"
+        define \<tau>' where "\<tau>' = \<tau> (t + Suc dly := f')"
+        have ***: "\<And>k. \<tau>1' k s = \<tau>' k s"
+          unfolding \<tau>1'_def \<tau>'_def f1'_def f'_def f1_def f_def `s = sig` using Suc
+          by (simp add: \<open>s = sig\<close>)
+
+        have "f sig = f1 sig"
+          unfolding f_def f1_def using Suc unfolding `s = sig` by auto
+        moreover have "purge_raw dly \<tau>1' t sig (\<sigma> sig) k s = purge_raw dly \<tau>' t sig (\<sigma> sig) k s"
+          using *** Suc by metis
+        ultimately show ?case
+          using ** unfolding purge_raw.simps Let_def f_def f1_def \<tau>1'_def \<tau>'_def f1'_def f'_def by auto
+      qed
+    qed
+    define purged1 where "purged1 = purge dly \<tau>1 t sig (\<sigma> sig)"
+    define purged  where "purged  = purge dly \<tau>  t sig (\<sigma> sig)"
+    hence "lookup purged1 k s = lookup purged k s"
+      using lookup_purged_eq unfolding purged1_def by auto
+    hence tr_tr: "lookup (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) purged1 (t + dly)) k s =
+          lookup (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) purged (t + dly)) k s "
+      apply transfer' unfolding trans_post_raw_def by auto
+
+    have "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1) k s =
+          lookup (inr_post  sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly) k s"
+      by auto
+    also have "... =  lookup (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) (purge dly \<tau>1 t sig (\<sigma> sig)) (t + dly)) k s"
+      using in_tr by auto
+    also have "... =  lookup (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) (purge dly \<tau> t sig (\<sigma> sig)) (t + dly)) k s"
+      using tr_tr unfolding purged1_def purged_def by auto
+    also have "... =  lookup (inr_post  sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly) k s"
+      using `\<not> is_stable dly \<tau> t sig (\<sigma> sig)` unfolding inr_post_def by auto
+    also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
+      by auto
+    finally have "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1) k s =
+                  lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
+      by auto }
+  ultimately show "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1) k s =  lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>) k s"
+    unfolding ss_def by auto
+qed
+
+lemma b_seq_exec_lookup_same:
+  assumes "\<And>k s. s \<in> set (signals_in ss) \<Longrightarrow> lookup \<tau> k s = lookup \<tau>1 k s"
+  shows "\<And>k s. s \<in> set (signals_in ss) \<Longrightarrow> lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1) k s =  lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>) k s"
+  using assms
+proof (induction ss arbitrary: \<tau> \<tau>1)
+  case (Bcomp ss1 ss2)
+  define \<tau>' where "\<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> ss1 \<tau>"
+  hence "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+    by auto
+  define \<tau>1' where "\<tau>1' = b_seq_exec t \<sigma> \<gamma> \<theta> ss1 \<tau>1"
+  hence "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss1, \<tau>1> \<longrightarrow>\<^sub>s \<tau>1'"
+    by auto
+  have *: "\<And>k s. s \<in> set (signals_in ss1) \<Longrightarrow> lookup \<tau> k s = lookup \<tau>1 k s" and
+       **: "\<And>k s. s \<in> set (signals_in ss2) \<Longrightarrow> lookup \<tau> k s = lookup \<tau>1 k s"
+    using Bcomp by auto
+  hence inss1: "\<And>k s. s \<in> set (signals_in ss1) \<Longrightarrow> lookup \<tau>' k s = lookup \<tau>1' k s"
+    using Bcomp(1) unfolding \<tau>'_def \<tau>1'_def by metis
+  have ninss1: "\<And>k s. s \<notin> set (signals_in ss1) \<Longrightarrow> lookup \<tau>' k s = lookup \<tau> k s"
+    using b_seq_exec_modifies_local_strongest[OF `t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'`] by auto
+  have ninss1': "\<And>k s. s \<notin> set (signals_in ss1) \<Longrightarrow> lookup \<tau>1' k s = lookup \<tau>1 k s"
+    using b_seq_exec_modifies_local_strongest[OF `t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss1, \<tau>1> \<longrightarrow>\<^sub>s \<tau>1'`] by auto
+
+  have "s \<in> set (signals_in ss1) \<or> s \<notin> set (signals_in ss1)"
+    by auto
+  moreover
+  { assume "s \<in> set (signals_in ss1)"
+    have  "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss1 \<tau>) k s = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss1 \<tau>1) k s"
+      using Bcomp(1)[OF `s \<in> set (signals_in ss1)` *, of "k"]  by auto
+    hence "lookup \<tau>' k s = lookup \<tau>1' k s"
+      unfolding \<tau>'_def \<tau>1'_def by auto
+    have " s \<in> set (signals_in ss2) \<or> s \<notin> set (signals_in ss2)"
+      by auto
+    moreover
+    { assume "s \<in> set (signals_in ss2)"
+      have "\<And>k s. s \<in> set (signals_in ss2) \<Longrightarrow> lookup \<tau>' k s = lookup \<tau>1' k s"
+      proof -
+        fix k' s'
+        assume "s' \<in> set (signals_in ss2)"
+        have "s' \<in> set (signals_in ss1) \<or> s' \<notin> set (signals_in ss1)"
+          by auto
+        moreover
+        { assume "s' \<in> set (signals_in ss1)"
+          with inss1 have "lookup \<tau>' k' s' = lookup \<tau>1' k' s'"
+            by auto }
+        moreover
+        { assume "s' \<notin> set (signals_in ss1)"
+          hence "lookup \<tau>' k' s' = lookup \<tau> k' s'" and "lookup \<tau>1' k' s' = lookup \<tau>1 k' s'"
+            using ninss1' ninss1 by auto
+          hence "lookup \<tau>' k' s' = lookup \<tau>1' k' s'"
+            using **[OF `s' \<in> set (signals_in ss2)`] by auto }
+        ultimately show "lookup \<tau>' k' s' = lookup \<tau>1' k' s'"
+          by auto
+      qed
+      hence ***: "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>') k s = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>1') k s"
+        using Bcomp(2)[OF `s \<in> set (signals_in ss2)`] by metis
+
+      have "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bcomp ss1 ss2) \<tau>) k s = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>') k s"
+        unfolding \<tau>'_def by auto
+      also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>1') k s"
+        using *** by auto
+      also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bcomp ss1 ss2) \<tau>1) k s"
+        unfolding \<tau>1'_def by auto
+      finally have ?case by auto }
+    moreover
+    { assume "s \<notin> set (signals_in ss2)"
+      have "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bcomp ss1 ss2) \<tau>) k s = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>') k s"
+        unfolding \<tau>'_def by auto
+      also have "... = lookup \<tau>' k s"
+        using `s \<notin> set (signals_in ss2)` b_seq_exec_modifies_local_strongest by metis
+      also have "... = lookup \<tau>1' k s"
+        using inss1[OF `s \<in> set (signals_in ss1)`] by auto
+      also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>1') k s"
+        using `s \<notin> set (signals_in ss2)` b_seq_exec_modifies_local_strongest by  metis
+      also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bcomp ss1 ss2) \<tau>1) k s"
+        unfolding \<tau>1'_def by auto
+      finally have ?case by auto }
+    ultimately have ?case by auto }
+  moreover
+  { assume "s \<notin> set (signals_in ss1)"
+    hence "s \<in> set (signals_in ss2)"
+      using Bcomp by auto
+    have "\<And>k s. s \<in> set (signals_in ss2) \<Longrightarrow> lookup \<tau>' k s = lookup \<tau>1' k s"
+    proof -
+      fix k' s'
+      assume "s' \<in> set (signals_in ss2)"
+      have "s' \<in> set (signals_in ss1) \<or> s' \<notin> set (signals_in ss1)"
+        by auto
+      moreover
+      { assume "s' \<in> set (signals_in ss1)"
+        with inss1 have "lookup \<tau>' k' s' = lookup \<tau>1' k' s'"
+          by auto }
+      moreover
+      { assume "s' \<notin> set (signals_in ss1)"
+        hence "lookup \<tau>' k' s' = lookup \<tau> k' s'" and "lookup \<tau>1' k' s' = lookup \<tau>1 k' s'"
+          using ninss1' ninss1 by auto
+        hence "lookup \<tau>' k' s' = lookup \<tau>1' k' s'"
+          using **[OF `s' \<in> set (signals_in ss2)`] by auto }
+      ultimately show "lookup \<tau>' k' s' = lookup \<tau>1' k' s'"
+        by auto
+    qed
+    hence ***: "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>') k s = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>1') k s"
+      using Bcomp(2)[OF `s \<in> set (signals_in ss2)`] by metis
+    have "lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bcomp ss1 ss2) \<tau>) k s = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>') k s"
+      unfolding \<tau>'_def by auto
+    also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>1') k s"
+      using *** by auto
+    also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> (Bcomp ss1 ss2) \<tau>1) k s"
+      unfolding \<tau>1'_def by auto
+    finally have ?case by auto }
+  ultimately show ?case by auto
+next
+  case (Bguarded g ss1 ss2)
+  then show ?case
+    by (smt Un_iff b_seq_exec.simps(3) b_seq_exec_modifies_local_strongest set_append set_remdups
+        signals_in.simps(4))
+next
+  case (Bassign_trans sig e dly)
+  then show ?case
+    by (meson b_seq_exec_trans_post_lookup_same)
+next
+  case (Bassign_inert sig e dly)
+  then show ?case
+    by (meson b_seq_exec_inr_post_lookup_same)
+next
+  case Bnull
+  then show ?case by auto
+qed
+
+lemma b_conc_exec_lookup_same:
+  assumes "\<And>k s. s \<in> set (signals_from cs) \<Longrightarrow> lookup \<tau> k s = lookup \<tau>1 k s"
+  assumes "conc_stmt_wf cs"
+  shows "\<And>k s. s \<in> set (signals_from cs) \<Longrightarrow> lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau>1) k s = lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau>) k s"
+  using assms
+proof (induction cs)
+  case (Bpar cs1 cs2)
+  hence "conc_stmt_wf cs2" and "conc_stmt_wf cs1"
+    by (simp add: conc_stmt_wf_def)+
+  define \<tau>a where "\<tau>a = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>1"
+  define \<tau>b where "\<tau>b = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1"
+
+  define \<tau>a' where "\<tau>a' = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+  define \<tau>b' where "\<tau>b' = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>"
+  have "\<And>k. get_trans \<tau> k s = get_trans \<tau>1 k s"
+    using Bpar by auto
+  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau>1 = clean_zip \<tau>1 (\<tau>a, set (signals_from cs1)) (\<tau>b, set (signals_from cs2))"
+    unfolding \<tau>a_def \<tau>b_def by auto
+  hence *: "lookup (b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau>1) k s =
+         lookup (clean_zip \<tau>1 (\<tau>a, set (signals_from cs1)) (\<tau>b, set (signals_from cs2))) k s"
+    by auto
+  have "s \<in> set (signals_from cs1) \<or> s \<in> set (signals_from cs2)"
+    using Bpar by auto
+  moreover
+  { assume "s \<in> set (signals_from cs1)"
+    hence "lookup (clean_zip \<tau>1 (\<tau>a, set (signals_from cs1)) (\<tau>b, set (signals_from cs2))) k s =
+           lookup \<tau>a k s"
+      apply transfer' unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+    also have "... = lookup \<tau>a' k s"
+      using Bpar(1)[OF `s \<in> set (signals_from cs1)`] Bpar(4) `conc_stmt_wf cs1` unfolding \<tau>a_def \<tau>a'_def by auto
+    also have "... = lookup (clean_zip \<tau> (\<tau>a', set (signals_from cs1)) (\<tau>b', set (signals_from cs2))) k s"
+      using `s \<in> set (signals_from cs1)`
+      apply transfer' unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+    finally have ?case
+      using *  by (simp add: \<tau>a'_def \<tau>b'_def) }
+  moreover
+  { assume "s \<in> set (signals_from cs2)"
+    moreover hence "s \<notin> set (signals_from cs1)"
+      using ` conc_stmt_wf (cs1 || cs2)`
+      by (metis conc_stmt_wf_def disjnt_def disjnt_iff distinct_append signals_from.simps(2))
+    ultimately have "lookup (clean_zip \<tau>1 (\<tau>a, set (signals_from cs1)) (\<tau>b, set (signals_from cs2))) k s =
+           lookup \<tau>b k s"
+      apply transfer' unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+    also have "... = lookup \<tau>b' k s"
+      using Bpar(2)[OF `s \<in> set (signals_from cs2)`] Bpar(4) `conc_stmt_wf cs2` unfolding \<tau>b_def \<tau>b'_def
+      by auto
+    also have "... = lookup (clean_zip \<tau> (\<tau>a', set (signals_from cs1)) (\<tau>b', set (signals_from cs2))) k s"
+      using `s \<in> set (signals_from cs2)` `s \<notin> set (signals_from cs1)`
+      apply transfer' unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+    finally have ?case
+      using *  by (simp add: \<tau>a'_def \<tau>b'_def) }
+  ultimately show ?case
+    by auto
+next
+  case (Bsingle sl ss)
+  hence *: "\<And>k s.  s \<in> set (signals_in ss) \<Longrightarrow> get_trans \<tau> k s = get_trans \<tau>1 k s"
+    by auto
+  have "disjnt sl \<gamma> \<or> \<not> disjnt sl \<gamma>"
+    by auto
+  moreover
+  { assume "disjnt sl \<gamma>"
+    hence "b_conc_exec t \<sigma> \<gamma> \<theta> (Bsingle sl ss) \<tau>1 = \<tau>1"
+      by auto
+    hence "lookup (b_conc_exec t \<sigma> \<gamma> \<theta> (Bsingle sl ss) \<tau>1) k s =
+           lookup \<tau>1 k s"
+      by auto
+    also have "... = lookup \<tau> k s"
+      using * Bsingle by auto
+    also have "... = lookup (b_conc_exec t \<sigma> \<gamma> \<theta> (Bsingle sl ss) \<tau>) k s"
+      using `disjnt sl \<gamma>` by auto
+    finally have ?case by auto }
+  moreover
+  { assume "\<not> disjnt sl \<gamma>"
+    hence "b_conc_exec t \<sigma> \<gamma> \<theta> (Bsingle sl ss) \<tau>1 = b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1"
+      by auto
+    hence "lookup (b_conc_exec t \<sigma> \<gamma> \<theta> (Bsingle sl ss) \<tau>1) k s =
+           lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1) k s"
+      by auto
+    also have "... = lookup (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>) k s"
+      using b_seq_exec_lookup_same[OF *] Bsingle by auto
+    also have "... = lookup (b_conc_exec t \<sigma> \<gamma> \<theta> (Bsingle sl ss) \<tau>) k s"
+      using `\<not> disjnt sl \<gamma>` by auto
+    finally have ?case
+      by auto }
+  ultimately show ?case by auto
+qed
+
+lemma b_conc_exec_sequential:
+  assumes "conc_stmt_wf (cs1 || cs2)"
+  shows "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 (b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>)"
+proof -
+  have "conc_stmt_wf cs2"
+    using assms by (simp add: conc_stmt_wf_def)
+  define \<tau>1 where "\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+  define \<tau>2 where "\<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>"
+  define s1 where "s1 = set (signals_from cs1)"
+  define s2 where "s2 = set (signals_from cs2)"
+  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2)"
+    unfolding \<tau>1_def \<tau>2_def s1_def s2_def by auto
+  also have "... = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1"
+  proof (rule poly_mapping_eqI, rule)
+    fix k s
+    have "s \<in> s1 \<or> s \<in> s2 \<or> s \<notin> s1 \<and> s \<notin> s2"
+      by auto
+    moreover
+    { assume "s \<in> s1"
+      hence *: "lookup (clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s = lookup \<tau>1 k s"
+        apply transfer' unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+      moreover have "s \<notin> set (signals_from cs2)"
+        using `s \<in> s1` assms(1)
+        by (metis conc_stmt_wf_def disjoint_insert(1) distinct_append mk_disjoint_insert s1_def
+            signals_from.simps(2))
+      have "lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s = lookup \<tau>1 k s"
+        by (metis \<open>s \<notin> set (signals_from cs2)\<close> b_conc_exec_modifies_local_strongest)
+      with * have " lookup (clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s = lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
+        by auto }
+    moreover
+    { assume "s \<in> s2"
+      moreover have "s \<notin> s1" using assms(1)
+        by (metis calculation conc_stmt_wf_def disjoint_insert(1) distinct_append mk_disjoint_insert
+            s1_def s2_def signals_from.simps(2))
+      ultimately have *: "lookup (clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s = lookup \<tau>2 k s"
+        apply transfer' unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+      have "s \<in> set (signals_from cs2)" and "s \<notin> set (signals_from cs1)"
+        using `s \<in> s2` `s \<notin> s1` unfolding s2_def s1_def by auto
+      have "\<And>k s. s \<in> set (signals_from cs2) \<Longrightarrow> get_trans \<tau> k s = get_trans \<tau>1 k s"
+        using b_conc_exec_modifies_local_strongest[OF _ `s \<notin> set (signals_from cs1)`]
+        by (metis \<tau>1_def assms b_conc_exec_modifies_local_strongest conc_stmt_wf_def disjoint_insert(1)
+            distinct_append mk_disjoint_insert signals_from.simps(2))
+      hence "lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s = lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>) k s"
+        using b_conc_exec_lookup_same[OF _ `conc_stmt_wf cs2` `s \<in> set (signals_from cs2)`] by blast
+      also have "... = lookup \<tau>2 k s"
+        unfolding \<tau>2_def by auto
+      finally have "lookup (clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s = lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
+        using * by auto }
+    moreover
+    { assume "s \<notin> s1 \<and> s \<notin> s2"
+      hence *: "lookup (clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s = lookup \<tau> k s"
+        apply transfer' unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+      have "s \<notin> set (signals_from cs2)" and "s \<notin> set (signals_from cs1)"
+        using `s \<notin> s1 \<and> s \<notin> s2` unfolding s2_def s1_def by auto
+      have "lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s = lookup \<tau>1 k s"
+        using b_conc_exec_modifies_local_strongest[OF _ ` s \<notin> set (signals_from cs2)`]  by presburger
+      also have "... = lookup \<tau> k s"
+        unfolding \<tau>1_def  using b_conc_exec_modifies_local_strongest[OF _ ` s \<notin> set (signals_from cs1)`]
+        by presburger
+      finally have "lookup (clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s = lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
+        using * by auto }
+    ultimately show "lookup (clean_zip \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s = lookup (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
+      by auto
+  qed
+  finally show ?thesis
+    unfolding \<tau>1_def by auto
+qed
 
 subsubsection \<open>Semantics of simulation\<close>
 
