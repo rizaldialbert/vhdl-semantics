@@ -240,7 +240,11 @@ the process it guards.\<close>
 
 datatype 'signal conc_stmt =
       Bpar "'signal conc_stmt" "'signal conc_stmt" ( "_ || _" [81, 82]80)
-    | Bsingle "'signal set" (get_seq: "'signal seq_stmt") (" process _ : _" [81, 82]80)
+      | Bsingle "'signal set" (get_seq: "'signal seq_stmt") (" process _ : _" [81, 82]80)
+
+fun nonneg_delay_conc :: "'signal conc_stmt \<Rightarrow> bool" where
+  "nonneg_delay_conc (Bsingle sl ss) \<longleftrightarrow> nonneg_delay ss"
+| "nonneg_delay_conc (Bpar cs1 cs2) \<longleftrightarrow> nonneg_delay_conc cs1 \<and> nonneg_delay_conc cs2"
 
 fun signals_from :: "'signal conc_stmt \<Rightarrow> 'signal list" where
   "signals_from (Bsingle _ s) = signals_in s"
@@ -4251,6 +4255,89 @@ proof -
     using nonneg_delay_lookup_same[OF assms(3) assms(2)] by auto
   with 0 show ?thesis
     using assms(1) unfolding context_invariant_def by auto
+qed
+
+lemma b_conc_exec_preserves_context_invariant:
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+  assumes "nonneg_delay_conc cs"
+  shows "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
+  using assms
+proof (induction cs arbitrary: \<tau> \<tau>')
+  case (Bpar cs1 cs2)
+  define \<tau>1 where "\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+  define \<tau>2 where "\<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>"
+  have \<tau>'_def: "\<tau>' = clean_zip \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
+    using Bpar(4) unfolding \<tau>1_def \<tau>2_def by auto
+  have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>1"
+    using Bpar(1) Bpar(3) Bpar(5)  using \<tau>1_def nonneg_delay_conc.simps(2) by blast
+  have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>2"
+    using Bpar.IH(2) Bpar.prems(1) Bpar.prems(3) \<tau>2_def nonneg_delay_conc.simps(2) by blast
+  hence *: "\<And>s. s \<in> dom (lookup \<tau>' t) \<Longrightarrow> \<sigma> s = the (lookup \<tau>' t s)"
+  proof -
+    fix s
+    assume "s \<in> dom (lookup \<tau>' t)"
+    hence "s \<in> set (signals_from cs1) \<or> s \<notin> set (signals_from cs1) \<and> s \<in> set (signals_from cs2) \<or>
+           s \<notin> set (signals_from cs1) \<and> s \<notin> set (signals_from cs2)"
+      by auto
+    moreover
+    { assume "s \<in> set (signals_from cs1)"
+      hence "lookup \<tau>' t s = lookup \<tau>1 t s"
+        using \<tau>'_def apply transfer' unfolding clean_zip_raw_def by auto
+      hence "s \<in> dom (lookup \<tau>1 t)"
+        using `s \<in> dom (lookup \<tau>' t)`  by (simp add: domIff)
+      hence "\<sigma> s = the (lookup \<tau>1 t s)"
+        using `context_invariant t \<sigma> \<gamma> \<theta> \<tau>1` unfolding context_invariant_def by auto
+      hence "\<sigma> s = the (lookup \<tau>' t s )"
+        using `lookup \<tau>' t s = lookup \<tau>1 t s` by auto }
+    moreover
+    { assume "s \<notin> set (signals_from cs1) \<and> s \<in> set (signals_from cs2)"
+      hence "lookup \<tau>' t s = lookup \<tau>2 t s"
+        using \<tau>'_def by (transfer', auto simp add: clean_zip_raw_def)
+      hence "s \<in> dom (lookup \<tau>2 t)"
+        using `s \<in> dom (lookup \<tau>' t)`  by (simp add: domIff)
+      hence "\<sigma> s = the (lookup \<tau>2 t s)"
+        using `context_invariant t \<sigma> \<gamma> \<theta> \<tau>2` unfolding context_invariant_def by auto
+      hence "\<sigma> s = the (lookup \<tau>' t s )"
+        using `lookup \<tau>' t s = lookup \<tau>2 t s` by auto }
+    moreover
+    { assume "s \<notin> set (signals_from cs1) \<and> s \<notin> set (signals_from cs2)"
+      hence "lookup \<tau>' t s = lookup \<tau> t s"
+        using \<tau>'_def by (transfer', auto simp add: clean_zip_raw_def)
+      hence "s \<in> dom (lookup \<tau> t)"
+        using `s \<in> dom (lookup \<tau>' t)`  by (simp add: domIff)
+      hence "\<sigma> s = the (lookup \<tau> t s)"
+        using `context_invariant t \<sigma> \<gamma> \<theta> \<tau>` unfolding context_invariant_def by auto
+      hence "\<sigma> s = the (lookup \<tau>' t s )"
+        using `lookup \<tau>' t s = lookup \<tau> t s` by auto }
+    ultimately show "\<sigma> s = the (lookup \<tau>' t s )"
+      by auto
+  qed
+  have "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
+    using Bpar(3) unfolding context_invariant_def by auto
+  hence "\<And>n. n < t \<Longrightarrow> lookup \<tau>' n = 0"
+    using b_conc_exec_preserve_trans_removal Bpar(4) by blast
+  then show ?case
+    using * Bpar(3) unfolding context_invariant_def by auto
+next
+  case (Bsingle sl ss)
+  have "disjnt sl \<gamma> \<or> \<not> disjnt sl \<gamma>"
+    by auto
+  moreover
+  { assume "disjnt sl \<gamma>"
+    hence "\<tau>' = \<tau>"
+      using Bsingle by auto
+    hence "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
+      using Bsingle(1) by auto }
+  moreover
+  { assume "\<not> disjnt sl \<gamma>"
+    hence "\<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>"
+      using Bsingle by auto
+    moreover have "nonneg_delay ss"
+      using Bsingle by auto
+    hence ?case
+      using b_seq_exec_preserves_context_invariant Bsingle by fastforce }
+  ultimately show ?case by auto
 qed
 
 lemma poly_mapping_degree:
