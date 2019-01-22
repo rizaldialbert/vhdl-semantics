@@ -218,7 +218,7 @@ lemma Assign'_hoare2:
   shows "\<turnstile>\<^sub>t [P] Bassign_trans sig exp dly [Q]"
   using assms by (simp add: strengthen_pre_hoare2)
 
-subsection \<open>Validity of Hoare proof rules\<close>
+subsubsection \<open>Validity of Hoare proof rules\<close>
 
 lift_definition worldline2 ::
   "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> 'signal worldline2"
@@ -1660,7 +1660,7 @@ proof rule+
     by auto
 qed
 
-subsection \<open>Soundness and completeness\<close>
+subsubsection \<open>Soundness and completeness\<close>
 
 lemma soundness_hoare2:
   assumes "\<turnstile>\<^sub>t [P] s [R]"
@@ -1818,7 +1818,7 @@ corollary hoare_sound_complete:
   shows "\<turnstile>\<^sub>t [P] ss [Q] \<longleftrightarrow> \<Turnstile>\<^sub>t [P] ss [Q]"
   using hoare_complete soundness_hoare2 assms by auto
 
-subsection \<open>Hoare logic for VHDL's concurrent statement\<close>
+subsection \<open>A sound and complete Hoare logic for VHDL's concurrent statement\<close>
 
 definition event_of :: "'signal worldline2  \<Rightarrow> nat \<Rightarrow> 'signal event" where
   "event_of w t = (fst o snd) (destruct_worldline w t)"
@@ -1831,6 +1831,12 @@ Single:  "\<turnstile>\<^sub>t [\<lambda>w. P w \<and> \<not> disjnt sl (event_o
     \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>P\<rbrace> process sl : ss \<lbrace>Q\<rbrace>"
 | Parallel:  "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>1 \<lbrace>R\<rbrace> \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>R\<rbrace> cs\<^sub>2 \<lbrace>Q\<rbrace> \<Longrightarrow> conc_stmt_wf (cs\<^sub>1 || cs\<^sub>2) \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>1 || cs\<^sub>2 \<lbrace>Q\<rbrace>"
 | Parallel2: "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>2 \<lbrace>R\<rbrace> \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>R\<rbrace> cs\<^sub>1 \<lbrace>Q\<rbrace> \<Longrightarrow> conc_stmt_wf (cs\<^sub>1 || cs\<^sub>2) \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>1 || cs\<^sub>2 \<lbrace>Q\<rbrace>"
+| Conseq': "\<lbrakk>\<forall>w. P' w \<longrightarrow> P w; \<turnstile>\<^sub>t \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>P'\<rbrace> c \<lbrace>Q\<rbrace>"
+
+lemma strengthen_pre_conc_hoare:
+  assumes "\<forall>w. P' w \<longrightarrow> P w" and "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> s \<lbrace>Q\<rbrace>"
+  shows "\<turnstile>\<^sub>t \<lbrace>P'\<rbrace> s \<lbrace>Q\<rbrace>"
+  using assms by (blast intro: Conseq')
 
 definition world_conc_exec :: "'signal worldline2 \<Rightarrow> nat \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal worldline2"
   where
@@ -1866,6 +1872,39 @@ proof -
   thus ?thesis
     using assms(2) unfolding world_conc_exec_def Let_def
     using \<open>destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)\<close> \<open>worldline2 t \<sigma> \<theta> \<tau>' = w1\<close> by auto
+qed
+
+lemma world_conc_exec_disjnt:
+  assumes "disjnt sl (event_of w t)" shows "w, t, (process sl : ss) \<Rightarrow>\<^sub>c w"
+proof -
+  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
+    ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <process sl : ss, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    using destruct_worldline_exist by blast
+  moreover have "disjnt sl \<gamma>"
+    using assms unfolding event_of_def des by auto
+  ultimately have "\<tau>' = \<tau>"
+    by auto
+  hence "worldline2 t \<sigma> \<theta> \<tau>' = w"
+    using des  worldline2_constructible by blast
+  with des ex show ?thesis
+    by (simp add: world_conc_exec_def)
+qed
+
+lemma world_conc_exec_not_disjnt:
+  assumes "\<not> disjnt sl (event_of w t)" and "w, t, ss \<Rightarrow>\<^sub>s w'"
+  shows "w, t, (process sl : ss) \<Rightarrow>\<^sub>c w'"
+proof -
+  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
+    ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <process sl : ss, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    using destruct_worldline_exist by blast
+  moreover have "\<not> disjnt sl \<gamma>"
+    using assms unfolding event_of_def des by auto
+  ultimately have "\<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>"
+    by auto
+  hence "worldline2 t \<sigma> \<theta> \<tau>' = w'"
+    using assms(2) des by (simp add: world_seq_exec_def)
+  thus ?thesis
+    using des ex by (simp add: world_conc_exec_def)
 qed
 
 definition
@@ -1947,6 +1986,54 @@ next
     hence ?case
       using helper'[OF tau1' Bsingle(2-3) tau2' Bsingle(5-6)] by auto }
   ultimately show ?case by auto
+qed
+
+lemma world_conc_exec_parallel:
+  assumes "conc_stmt_wf (cs1 || cs2)" and "nonneg_delay_conc (cs1 || cs2)"
+  shows "w, t, (cs1 || cs2) \<Rightarrow>\<^sub>c (world_conc_exec (world_conc_exec w t cs1) t cs2)"
+proof -
+  have "nonneg_delay_conc cs1" and "nonneg_delay_conc cs2"
+    using assms by auto
+  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
+    ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1, \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and ci: "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+    using destruct_worldline_exist worldline2_constructible by blast
+  have ci': "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
+    using b_conc_exec_preserves_context_invariant[OF ci ex `nonneg_delay_conc cs1`] by auto
+  hence wcs1: "world_conc_exec w t cs1 = worldline2 t \<sigma> \<theta> \<tau>'"
+    using des ex by (simp add: world_conc_exec_def)
+  obtain theta tau' where des2: "destruct_worldline (worldline2 t \<sigma> \<theta> \<tau>') t = (\<sigma>, \<gamma>, theta, tau')"
+    and beh_same: "\<And>k s. signal_of2 False \<theta> s k = signal_of2 False theta s k" and
+        trans_same: "\<And>k s. signal_of2 (\<sigma> s) \<tau>' s k = signal_of2 (\<sigma> s) tau' s k"
+    using destruct_worldline_correctness[OF ci'] by (metis prod_cases4)
+  have ci2: "context_invariant t \<sigma> \<gamma> theta tau'" and "worldline2 t \<sigma> \<theta> \<tau>' = worldline2 t \<sigma> theta tau'"
+    using worldline2_constructible[OF des2] by auto
+  have "\<And>k s. signal_of2 (\<sigma> s) (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>') s  k =
+              signal_of2  (\<sigma> s) (b_conc_exec t \<sigma> \<gamma> theta cs2 tau') s k"
+    using helper_b_conc[OF _ beh_same trans_same _ ci' ci2 `nonneg_delay_conc cs2`]
+    by auto
+  hence *: "worldline2 t \<sigma> theta (b_conc_exec t \<sigma> \<gamma> theta cs2 tau') =
+        worldline2 t \<sigma> \<theta> (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>')"
+    using beh_same apply transfer' unfolding worldline_def by auto
+  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =  b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>'"
+    using b_conc_exec_sequential[OF assms(1)] ex by auto
+  hence "world_conc_exec w t (cs1 || cs2) = worldline2 t \<sigma> \<theta> (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>')"
+    using des ex by (auto simp add: world_conc_exec_def)
+  hence "(world_conc_exec w t cs1), t , cs2 \<Rightarrow>\<^sub>c (world_conc_exec w t (cs1 || cs2))"
+    using des2 wcs1 *  by (simp add: world_conc_exec_def)
+  thus ?thesis
+    by simp
+qed
+
+lemma world_conc_exec_parallel2:
+  assumes "conc_stmt_wf (cs1 || cs2)" and "nonneg_delay_conc (cs1 || cs2)"
+  shows "w, t, (cs1 || cs2) \<Rightarrow>\<^sub>c (world_conc_exec (world_conc_exec w t cs2) t cs1)"
+proof -
+  have wf: "conc_stmt_wf (cs2 || cs1)" and nd: "nonneg_delay_conc (cs2 || cs1)"
+    using assms unfolding conc_stmt_wf_def by auto
+  have "w , t, (cs1 || cs2) \<Rightarrow>\<^sub>c world_conc_exec w t (cs2 || cs1)"
+    using world_conc_exec_commute[OF _ _ assms(1)] by blast
+  with world_conc_exec_parallel[OF wf nd] show ?thesis
+    by auto
 qed
 
 lemma parallel_valid:
@@ -2081,10 +2168,64 @@ next
     using parallel_valid[OF cs2 cs1]   by auto
   thus ?case
     using world_conc_exec_commute[OF _ _ Parallel2(3)]  by (metis conc_hoare_valid_def)
+next
+  case (Conseq' P' P t c Q Q')
+  then show ?case by (auto simp add: conc_hoare_valid_def)
 qed
 
+definition wp_conc :: "'signal conc_stmt \<Rightarrow> nat \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal assn2" where
+  "wp_conc cs t Q = (\<lambda>w. \<forall>w'. (w, t, cs \<Rightarrow>\<^sub>c w') \<longrightarrow> Q w')"
 
+lemma wp_conc_single:
+  "wp_conc (process sl : ss) t Q =
+  (\<lambda>w. if disjnt sl (event_of w t) then Q w else wp ss t Q w)"
+  by (rule ext) (auto simp add: wp_conc_def wp_def world_conc_exec_disjnt world_conc_exec_not_disjnt)
 
+lemma wp_conc_parallel:
+  assumes "conc_stmt_wf (cs1 || cs2)" and "nonneg_delay_conc (cs1 || cs2)"
+  shows "wp_conc (cs1 || cs2) t Q =  wp_conc cs1 t (wp_conc cs2 t Q)"
+  by (rule ext)(auto simp add: wp_conc_def world_conc_exec_parallel[OF assms])
 
+lemma wp_conc_parallel2:
+  assumes "conc_stmt_wf (cs1 || cs2)" and "nonneg_delay_conc (cs1 || cs2)"
+  shows "wp_conc (cs1 || cs2) t Q =  wp_conc cs2 t (wp_conc cs1 t Q)"
+  by (rule ext)(auto simp add: wp_conc_def world_conc_exec_parallel2[OF assms])
+
+lemma wp_conc_is_pre:
+  assumes "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  shows "\<turnstile>\<^sub>t \<lbrace>wp_conc cs t Q\<rbrace> cs \<lbrace>Q\<rbrace>"
+  using assms
+proof (induction cs arbitrary:Q)
+  case (Bpar cs1 cs2)
+  hence "conc_stmt_wf cs1" and "conc_stmt_wf cs2" and "nonneg_delay_conc cs1" and "nonneg_delay_conc cs2"
+    by auto
+  hence "\<And>Q.  \<turnstile>\<^sub>t \<lbrace>wp_conc cs1 t Q\<rbrace> cs1 \<lbrace>Q\<rbrace>" and "\<And>Q.  \<turnstile>\<^sub>t \<lbrace>wp_conc cs2 t Q\<rbrace> cs2 \<lbrace>Q\<rbrace>"
+    using Bpar(1-2) by auto
+  then show ?case
+    unfolding wp_conc_parallel[OF Bpar(3-4)]
+    by (auto intro!: Parallel simp add: Bpar)
+next
+  case (Bsingle sl ss)
+  hence "nonneg_delay ss"
+    by auto
+  then show ?case  unfolding wp_conc_single
+    by (auto intro!: Single simp add: hoare_complete seq_hoare_valid2_def wp_def)
+qed
+
+lemma conc_hoare_complete:
+  assumes "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  assumes "\<Turnstile>\<^sub>t \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>" shows "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>"
+proof (rule strengthen_pre_conc_hoare)
+  show " \<forall>w. P w \<longrightarrow> wp_conc cs t Q w" using assms
+    by (auto simp add: conc_hoare_valid_def wp_conc_def)
+next
+  show "\<turnstile>\<^sub>t \<lbrace>wp_conc cs t Q\<rbrace> cs \<lbrace>Q\<rbrace>"
+    using assms by (intro wp_conc_is_pre)
+qed
+
+corollary conc_hoare_sound_and_complete:
+  assumes "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  shows "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace> \<longleftrightarrow> \<Turnstile>\<^sub>t \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>"
+  using conc_hoare_complete soundness_conc_hoare assms by auto
 
 end

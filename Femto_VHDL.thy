@@ -264,6 +264,14 @@ lemma
   "conc_stmt_wf (cs1 || cs2) \<Longrightarrow> conc_stmt_wf (cs2 || cs1)"
   unfolding conc_stmt_wf_def by auto
 
+lemma [elim]:
+  "conc_stmt_wf (cs1 || cs2) \<Longrightarrow> conc_stmt_wf cs1"
+  unfolding conc_stmt_wf_def by auto
+
+lemma [elim]:
+  "conc_stmt_wf (cs1 || cs2) \<Longrightarrow> conc_stmt_wf cs2"
+  unfolding conc_stmt_wf_def by auto
+
 subsection "Operational Semantics"
 
 type_synonym time = nat
@@ -2635,38 +2643,6 @@ abbreviation  b_conc_exec_abb :: "time \<Rightarrow> 'signal state \<Rightarrow>
                              'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> bool"
   ("_ , _ , _ , _ \<turnstile> <_ , _> \<longrightarrow>\<^sub>c _") where
   "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>') \<equiv> (b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>')"
-
-(*
-lemma
-  assumes "conc_stmt_wf cs"
-  shows "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau>"
-  using assms
-proof (induction cs arbitrary:\<tau>)
-  case (Bpar cs1 cs2)
-  obtain \<tau>1 where \<tau>1_def: "\<tau>1 = b_conc_exec  t \<sigma> \<gamma> \<theta> cs1 \<tau>"
-    by auto
-  hence \<tau>1_def': "\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>"
-    using Bpar by (simp add: conc_stmt_wf_def)
-  obtain \<tau>2 where "\<tau>2 = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>"
-    by auto
-  hence *: "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip \<tau> \<tau>1 \<tau>2"
-    using `\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>` by auto
-  obtain \<tau>' where "\<tau>' = clean_zip \<tau> \<tau>1 \<tau>2"
-    by auto
-  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1"
-    by (auto simp add: \<open>\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>\<close>)
-  also have "... = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1"
-    using Bpar  by (simp add: conc_stmt_wf_def)
-  also have "... = \<tau>'"
-    nitpick
-
-
-  finally show ?case
-    using * by auto
-next
-  case (Bsingle x1 x2)
-  then show ?case by auto
-qed *)
 
 theorem conc_stmts_modify_local_only_raw:
   assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
