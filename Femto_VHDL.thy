@@ -288,7 +288,7 @@ type_synonym 'signal valuation = "'signal \<rightharpoonup> val"
 \<comment> \<open> represents scheduling \<close>
 type_synonym 'signal trans_raw = "nat \<Rightarrow> 'signal valuation"
 type_synonym 'signal transaction = "(nat, 'signal valuation) poly_mapping"
-                                                                 
+
 abbreviation get_trans :: "'signal transaction \<Rightarrow> time \<Rightarrow> 'signal \<rightharpoonup> val" where
   "get_trans \<tau> n \<equiv> Poly_Mapping.lookup \<tau> n"
 
@@ -2823,66 +2823,53 @@ lemma inf_time_rem_curr_trans:
   using assms inf_time_rem_curr_trans1 inf_time_rem_curr_trans2
   by fastforce
 
-lemma inf_time_rem_curr_trans_at_t:
-  assumes " inf_time (to_transaction2 \<tau>) sig i = Some t"
-  assumes " \<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
-  shows "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) sig i = None"
-proof -
-  have "\<forall>k \<in> dom (lookup (to_transaction2 \<tau> sig)). k \<le> i \<longrightarrow> k \<le> t"
-    using assms by (auto dest!:inf_time_someE)
-  hence "\<forall>k \<in> dom (lookup (to_transaction2 \<tau> sig)). t < k \<longrightarrow> i < k"
-    using not_le by auto
-  hence "\<forall>k \<in> dom (lookup (to_transaction2 \<tau> sig)) - {t}. i < k"
-    using assms(2) by (metis Diff_iff domIff insertI1 leI nat_less_le to_trans_raw2_def 
-    to_transaction2.rep_eq zero_fun_def zero_option_def)
-  moreover have "dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) sig)) = dom (lookup (to_transaction2 \<tau> sig)) - {t}"
-    unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by (auto simp add: zero_map split:if_splits)
-  ultimately have "\<forall>t \<in> dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) sig)). i < t"
-    by auto
-  thus "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) sig i = None"
-    by (auto intro!: inf_time_noneI)
-qed
-
 lemma inf_time_rem_curr_trans_at_0:
   assumes " inf_time (to_transaction2 \<tau>) sig i = Some 0"
   shows "inf_time (to_transaction2 (rem_curr_trans 0 \<tau>)) sig i = None"
-  using inf_time_rem_curr_trans_at_t[OF assms(1)] by auto
-
-lemma signal_of2_rem_curr_trans_at_t:
-  assumes "\<And>s. s \<in> dom (lookup \<tau> t) \<Longrightarrow> \<sigma> s = the (lookup \<tau> t s)"
-  assumes "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
-  shows "signal_of2 (\<sigma> A) (rem_curr_trans t \<tau>) A i = signal_of2 (\<sigma> A) \<tau> A i"
-proof (cases "inf_time (to_transaction2 \<tau>) A i = Some t")
-  case True
-  hence el: "t \<in> dom (lookup (to_transaction2 \<tau> A))"
-    by (auto dest!: inf_time_someE2)
-  hence "signal_of2 (\<sigma> A) \<tau> A i =  the (lookup (to_transaction2 \<tau> A) t)"
-    using True unfolding to_signal2_def comp_def by auto
-  also have "... = \<sigma> A"
-    using assms el apply transfer' unfolding to_trans_raw2_def by auto
-  finally have "signal_of2 (\<sigma> A) \<tau> A i = \<sigma> A"
+proof -
+  have "\<forall>t \<in> dom (lookup (to_transaction2 \<tau> sig)). t \<le> i \<longrightarrow> t \<le> 0"
+    using assms by (auto dest!:inf_time_someE)
+  hence "\<forall>t \<in> dom (lookup (to_transaction2 \<tau> sig)). 0 < t \<longrightarrow> i < t"
+    using not_le by auto
+  hence "\<forall>t \<in> dom (lookup (to_transaction2 \<tau> sig)) - {0}. i < t"
     by auto
-  have "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) A i = None"
-    using inf_time_rem_curr_trans_at_t[OF True assms(2)] by auto
-  hence "signal_of2 (\<sigma> A) (rem_curr_trans t \<tau>) A i = \<sigma> A"
-    unfolding to_signal2_def comp_def by auto
-  then show ?thesis
-    using `signal_of2 (\<sigma> A) \<tau> A i = \<sigma> A` by auto
-next
-  case False
-  have "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) A i = inf_time (to_transaction2 \<tau>) A i"
-    using inf_time_rem_curr_trans[OF False] by auto
-  moreover have "\<And>t'. t' \<noteq> t \<Longrightarrow> the (lookup (to_transaction2 (rem_curr_trans t \<tau>) A) t') = the (lookup (to_transaction2 \<tau> A) t')"
-    unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by auto
-  ultimately show ?thesis
-    using False unfolding to_signal2_def comp_def
-    by (metis (no_types, lifting) option.case_eq_if option.distinct(1) option.expand option.sel)
+  moreover have "dom (lookup (to_transaction2 (rem_curr_trans 0 \<tau>) sig)) = dom (lookup (to_transaction2 \<tau> sig)) - {0}"
+    unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by (auto simp add: zero_map split:if_splits)
+  ultimately have "\<forall>t \<in> dom (lookup (to_transaction2 (rem_curr_trans 0 \<tau>) sig)). i < t"
+    by auto
+  thus "inf_time (to_transaction2 (rem_curr_trans 0 \<tau>)) sig i = None"
+    by (auto intro!: inf_time_noneI)
 qed
 
 lemma signal_of2_rem_curr_trans_at_0:
   assumes "\<And>s. s \<in> dom (lookup \<tau> 0) \<Longrightarrow> \<sigma> s = the (lookup \<tau> 0 s)"
   shows "signal_of2 (\<sigma> A) (rem_curr_trans 0 \<tau>) A i = signal_of2 (\<sigma> A) \<tau> A i"
-  using signal_of2_rem_curr_trans_at_t[OF assms] by auto
+proof (cases "inf_time (to_transaction2 \<tau>) A i = Some 0")
+  case True
+  hence el: "0 \<in> dom (lookup (to_transaction2 \<tau> A))"
+    by (auto dest!: inf_time_someE2)
+  hence "signal_of2 (\<sigma> A) \<tau> A i =  the (lookup (to_transaction2 \<tau> A) 0)"
+    using True unfolding to_signal2_def comp_def by auto
+  also have "... = \<sigma> A"
+    using assms el apply transfer' unfolding to_trans_raw2_def by auto
+  finally have "signal_of2 (\<sigma> A) \<tau> A i = \<sigma> A"
+    by auto
+  have "inf_time (to_transaction2 (rem_curr_trans 0 \<tau>)) A i = None"
+    using True inf_time_rem_curr_trans_at_0 by metis
+  hence "signal_of2 (\<sigma> A) (rem_curr_trans 0 \<tau>) A i = \<sigma> A"
+    unfolding to_signal2_def comp_def by auto
+  then show ?thesis
+    using `signal_of2 (\<sigma> A) \<tau> A i = \<sigma> A` by auto
+next
+  case False
+  have "inf_time (to_transaction2 (rem_curr_trans 0 \<tau>)) A i = inf_time (to_transaction2 \<tau>) A i"
+    using inf_time_rem_curr_trans[OF False] by auto
+  moreover have "\<And>t'. t' \<noteq> 0 \<Longrightarrow> the (lookup (to_transaction2 (rem_curr_trans 0 \<tau>) A) t') = the (lookup (to_transaction2 \<tau> A) t')"
+    unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by auto
+  ultimately show ?thesis
+    using False unfolding to_signal2_def comp_def
+    by (metis (no_types, lifting) option.case_eq_if option.distinct(1) option.expand option.sel)
+qed
 
 lemma clean_zip_raw_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow> \<tau>  n = 0"
@@ -4090,11 +4077,6 @@ definition context_invariant :: "nat \<Rightarrow> 'signal state \<Rightarrow> '
                                \<and> (\<gamma> = {s. \<sigma> s \<noteq> signal_of2 False \<theta> s (t - 1)})
                                \<and> (\<forall>s. s \<in> dom (lookup \<tau> t) \<longrightarrow> \<sigma> s = the (lookup \<tau> t s))
                                \<and> (\<forall>n. t \<le> n \<longrightarrow> lookup \<theta> n = 0)"
-
-lemma context_invariant_rem_curr_trans:
-  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>" shows "context_invariant t \<sigma> \<gamma> \<theta> (rem_curr_trans t \<tau>)"
-  using assms unfolding context_invariant_def rem_curr_trans_def 
-  by (simp add: domIff lookup_update zero_map)
 
 lemma trans_degree_gt_t:
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>" and "\<tau> \<noteq> 0"
