@@ -12,7 +12,7 @@ theory VHDL_Hoare_Complete
   imports Femto_VHDL VHDL_Hoare
 begin
 
-subsection "A sound and complete Hoare logic for VHDL's sequential statements"
+subsection \<open>A sound and complete Hoare logic for VHDL's sequential statements\<close>
 
 text \<open>This theory is the second attempt for defining a Hoare logic for VHDL's sequential statement.
 As shown in the very last part of this theory, we prove that this definition is both sound and
@@ -61,75 +61,91 @@ lemma property_of_degree:
   using LeastI_ex[OF existence_of_degree] unfolding d_def worldline_deg_def by auto
 
 lift_definition worldline_upd2 ::
-  "'signal worldline2 \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline2" ("_[_, _:=\<^sub>2 _]")
-  is worldline_upd
-proof -
-  fix w :: "'signal \<Rightarrow> nat \<Rightarrow> val"
-  fix sig v
-  fix t :: nat
-  assume "\<exists>t. \<forall>t'>t. (\<lambda>s'. w s' t') = (\<lambda>s'. w s' t)"
-  then obtain tcurr :: "nat" where *: "\<forall>t' > tcurr. (\<lambda>s'. w s' t') = (\<lambda>s'. w s' tcurr)"
+  "nat \<times> 'signal worldline2 \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> nat \<times> 'signal worldline2" ("_[ _, _ :=\<^sub>2 _]")
+  is "\<lambda>tw sig dly val. (fst tw, worldline_upd (snd tw) sig (fst tw + dly) val)"
+proof
+  fix tw :: "nat \<times> ('signal \<Rightarrow> nat \<Rightarrow> val)"
+  show "top (fst tw)"
     by auto
-  have "t < tcurr \<or> tcurr \<le> t"
+next
+  fix tw :: "nat \<times> ('signal \<Rightarrow> nat \<Rightarrow> val)"
+  fix sig dly v
+  assume " pred_prod top (\<lambda>w. \<exists>t. \<forall>t'>t. (\<lambda>s. w s t') = (\<lambda>s. w s t)) tw"
+  hence "\<exists>t. \<forall>t'>t. (\<lambda>s'. snd tw s' t') = (\<lambda>s'. snd tw s' t)"
+    by (auto simp add: prod.pred_set intro!:snds.intros)
+  then obtain tcurr :: "nat" where *: "\<forall>t' > tcurr. (\<lambda>s'. snd tw s' t') = (\<lambda>s'. snd tw s' tcurr)"
+    by auto
+  hence **: "\<And>t' s'. t' > tcurr \<Longrightarrow> snd tw s' t' = snd tw s' tcurr"
+    by meson
+  have "fst tw + dly < tcurr \<or> tcurr \<le> fst tw + dly"
     by auto
   moreover
-  { assume "t < tcurr"
-    hence "\<forall>t'> tcurr. (\<lambda>s. w[sig, t:= v] s t') = (\<lambda>s. w[sig, t:= v] s tcurr)"
-      by (metis * less_trans not_less_iff_gr_or_eq worldline_upd_def)
-    hence "\<exists>t''. \<forall>t'> t''. (\<lambda>s. w[sig, t:= v] s t') = (\<lambda>s. w[sig, t:= v] s t'')"
+  { assume "fst tw + dly < tcurr"
+    hence "\<forall>t'> tcurr. (\<lambda>s. snd tw[sig, fst tw + dly := v] s t') = (\<lambda>s. snd tw[sig, fst tw + dly := v] s tcurr)"
+      unfolding worldline_upd_def using ** by auto
+    hence "\<exists>t''. \<forall>t'> t''. (\<lambda>s. snd tw[sig, fst tw + dly := v] s t') = (\<lambda>s. snd tw[sig, fst tw + dly := v] s t'')"
       by auto }
   moreover
-  { assume "tcurr \<le> t"
-    hence "\<forall>t'> t. (\<lambda>s. w[sig, t:= v] s t') = (\<lambda>s. w[sig, t:= v] s t)"
-      by (metis (full_types) "*" le_less_trans nat_less_le worldline_upd_def)
-    hence "\<exists>t''. \<forall>t'> t''. (\<lambda>s. w[sig, t:= v] s t') = (\<lambda>s. w[sig, t:= v] s t'')"
+  { assume "tcurr \<le> fst tw + dly"
+    hence "\<forall>t'> fst tw + dly. (\<lambda>s. (snd tw)[sig, fst tw + dly:= v] s t') = (\<lambda>s. (snd tw)[sig, fst tw + dly := v] s (fst tw + dly))"
+      unfolding worldline_upd_def using **
+      by (metis (no_types, hide_lams) "*" add_less_mono1 le_antisym le_eq_less_or_eq le_neq_implies_less le_trans less_irrefl_nat)
+    hence "\<exists>t''. \<forall>t'> t''. (\<lambda>s. (snd tw)[sig, fst tw + dly := v] s t') = (\<lambda>s. (snd tw)[sig, fst tw + dly := v] s t'')"
       by auto }
-  ultimately show "\<exists>t''. \<forall>t'>t''. (\<lambda>s. w[sig, t:= v] s t') = (\<lambda>s. w[sig, t:= v] s t'')"
+  ultimately show "\<exists>t''. \<forall>t'>t''. (\<lambda>s. (snd tw)[sig, fst tw + dly := v] s t') = (\<lambda>s. (snd tw)[sig, fst tw + dly := v] s t'')"
     by auto
 qed
 
 lift_definition worldline_inert_upd2 ::
-  "'signal worldline2 \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline2" ("_[_, _, _ :=\<^sub>2 _]")
-  is worldline_inert_upd
-proof -
-  fix w :: "'signal \<Rightarrow> nat \<Rightarrow> val"
-  fix sig v
-  fix t1 t2 :: nat
-  assume "\<exists>t. \<forall>t'>t. (\<lambda>s'. w s' t') = (\<lambda>s'. w s' t)"
-  then obtain tcurr :: "nat" where *: "\<forall>t' > tcurr. (\<lambda>s'. w s' t') = (\<lambda>s'. w s' tcurr)"
+  "nat \<times> 'signal worldline2 \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> nat \<times> 'signal worldline2" ("_\<lbrakk> _, _ :=\<^sub>2 _\<rbrakk>")
+  is "\<lambda>tw sig dly v. (fst tw, worldline_inert_upd (snd tw) sig (fst tw) dly v)"
+proof
+  fix tw :: "nat \<times> ('signal \<Rightarrow> nat \<Rightarrow> val)"
+  show "top (fst tw)"
     by auto
-  have "t1 + t2 < tcurr \<or> tcurr \<le> t1 + t2"
+next
+  fix tw :: "nat \<times> ('signal \<Rightarrow> nat \<Rightarrow> val)"
+  fix sig v
+  fix dly :: nat
+  assume "pred_prod top (\<lambda>w. \<exists>t. \<forall>t'>t. (\<lambda>s. w s t') = (\<lambda>s. w s t)) tw"
+  hence "\<exists>t. \<forall>t'>t. (\<lambda>s'. snd tw s' t') = (\<lambda>s'. snd tw s' t)"
+    by (auto simp add: prod.pred_set intro!:snds.intros)
+  then obtain tcurr :: "nat" where *: "\<forall>t' > tcurr. (\<lambda>s'. snd tw s' t') = (\<lambda>s'. snd tw s' tcurr)"
+    by auto
+  hence **: "\<And>t' s'. t' > tcurr \<Longrightarrow> snd tw s' t' = snd tw s' tcurr"
+    by meson
+  have "fst tw + dly < tcurr \<or> tcurr \<le> fst tw + dly"
     by auto
   moreover
-  { assume "t1 + t2 < tcurr"
-    hence "\<forall>t'> tcurr. (\<lambda>s. w[sig, t1, t2 := v] s t') = (\<lambda>s. w[sig, t1, t2 := v] s tcurr)"
-      by (metis "*" le_add1 le_less_trans less_irrefl_nat order.strict_trans  worldline_inert_upd_def)
-    hence "\<exists>t''. \<forall>t'> t''. (\<lambda>s. w[sig, t1, t2:= v] s t') = (\<lambda>s. w[sig, t1, t2:= v] s t'')"
+  { assume "fst tw + dly < tcurr"
+    hence "\<forall>t'> tcurr. (\<lambda>s. (snd tw)[sig, fst tw, dly := v] s t') = (\<lambda>s. (snd tw)[sig, fst tw, dly := v] s tcurr)"
+      unfolding worldline_inert_upd_def using ** by auto
+    hence "\<exists>t''. \<forall>t'> t''. (\<lambda>s. (snd tw)[sig, fst tw, dly:= v] s t') = (\<lambda>s. (snd tw)[sig, fst tw, dly:= v] s t'')"
       by auto }
   moreover
-  { assume "tcurr \<le> t1 + t2"
-    have "\<forall>t'> t1 + t2. (\<lambda>s. w[sig, t1, t2 := v] s t') = (\<lambda>s. w[sig, t1, t2 := v] s (t1 + t2))"
+  { assume "tcurr \<le> fst tw + dly"
+    have "\<forall>t'> fst tw + dly. (\<lambda>s. (snd tw)[sig, fst tw, dly := v] s t') = (\<lambda>s. (snd tw)[sig, (fst tw), dly := v] s (fst tw + dly))"
     proof (rule, rule)
       fix t'
-      assume "t' > t1 + t2" hence "t' > tcurr" using `t1 + t2 \<ge> tcurr` by auto
+      assume "t' > fst tw + dly" hence "t' > tcurr" using `fst tw + dly \<ge> tcurr` by auto
       { fix s
         have "s \<noteq> sig \<or> s = sig" by auto
         moreover
         { assume "s \<noteq> sig"
-          hence "w[sig, t1, t2:= v] s t' = w[sig, t1, t2 := v] s (t1 + t2)"
-            by (metis "*" \<open>tcurr < t'\<close> \<open>tcurr \<le> t1 + t2\<close> le_less option.sel worldline_inert_upd_def) }
+          hence "(snd tw)[sig, fst tw, dly:= v] s t' = (snd tw)[sig, fst tw, dly := v] s (fst tw + dly)"
+            by (metis "*" \<open>tcurr < t'\<close> \<open>tcurr \<le> fst tw + dly\<close> le_less worldline_inert_upd_def) }
         moreover
         { assume "s = sig"
-          hence "w[sig, t1, t2 := v] s t' = w[sig, t1, t2 := v] s (t1 + t2)"
-            by (metis \<open>t1 + t2 < t'\<close> not_less_iff_gr_or_eq trans_less_add1 worldline_inert_upd_def) }
-        ultimately have "w[sig, t1, t2 := v] s t' = w[sig, t1, t2 := v] s (t1 + t2)"
+          hence "(snd tw)[sig, fst tw, dly := v] s t' = (snd tw)[sig, fst tw, dly := v] s (fst tw + dly)"
+            by (metis \<open>fst tw + dly < t'\<close> not_less_iff_gr_or_eq trans_less_add1 worldline_inert_upd_def) }
+        ultimately have "(snd tw)[sig, fst tw, dly := v] s t' = (snd tw)[sig, fst tw, dly := v] s (fst tw + dly)"
           by auto }
-      thus " (\<lambda>s. w[sig, t1, t2 := v] s t') = (\<lambda>s. w[sig, t1, t2 := v] s (t1 + t2))"
+      thus " (\<lambda>s. (snd tw)[sig, fst tw, dly := v] s t') = (\<lambda>s. (snd tw)[sig, fst tw, dly := v] s (fst tw + dly))"
         by auto
     qed
-    hence "\<exists>t''. \<forall>t'> t''. (\<lambda>s. w[sig, t1, t2:= v] s t') = (\<lambda>s. w[sig, t1, t2:= v] s t'')"
+    hence "\<exists>t''. \<forall>t'> t''. (\<lambda>s. (snd tw)[sig, fst tw, dly:= v] s t') = (\<lambda>s. (snd tw)[sig, fst tw, dly:= v] s t'')"
       by auto }
-  ultimately show "\<exists>t''. \<forall>t'> t''. (\<lambda>s. w[sig, t1, t2:= v] s t') = (\<lambda>s. w[sig, t1, t2:= v] s t'')"
+  ultimately show "\<exists>t''. \<forall>t'> t''. (\<lambda>s. (snd tw)[sig, fst tw, dly:= v] s t') = (\<lambda>s. (snd tw)[sig, fst tw, dly:= v] s t'')"
     by auto
 qed
 
@@ -146,57 +162,63 @@ lemma [simp]:
   "beh_of_world2 w 0 = 0"
   by (transfer', auto simp add:  beh_of_world_raw_def zero_option_def zero_fun_def)
 
-lift_definition beval_world2 :: "'signal worldline2 \<Rightarrow> nat \<Rightarrow> 'signal bexp \<Rightarrow> val"
-  is beval_world .
+lift_definition beval_world2 :: "nat \<times> 'signal worldline2 \<Rightarrow> 'signal bexp \<Rightarrow> val"
+  is "\<lambda>tw exp. beval_world (snd tw) (fst tw) exp" .
 
-type_synonym 'signal assn2 = "'signal worldline2 \<Rightarrow> bool"
+type_synonym 'signal assn2 = "nat \<times> 'signal worldline2 \<Rightarrow> bool"
 
 inductive
-  seq_hoare2 :: "nat \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("\<turnstile>\<^sub>_ ([(1_)]/ (_)/ [(1_)])" 50)
+  seq_hoare2 :: "'signal assn2 \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("\<turnstile> ([(1_)]/ (_)/ [(1_)])" 50)
   where
-Null2: "\<turnstile>\<^sub>t [P] Bnull [P]" |
-Assign2: "\<turnstile>\<^sub>t [\<lambda>w. P(w[sig, t + dly :=\<^sub>2 beval_world2 w t exp])] Bassign_trans sig exp dly [P]" |
+Null2: "\<turnstile> [P] Bnull [P]" |
+Assign2: "\<turnstile> [\<lambda>tw. P(  tw[sig, dly :=\<^sub>2 beval_world2 tw exp] )] Bassign_trans sig exp dly [P]" |
 
-AssignI2: "\<turnstile>\<^sub>t [\<lambda>w. P(w[sig, t, dly :=\<^sub>2 beval_world2 w t exp])] Bassign_inert sig exp dly [P]" |
+AssignI2: "\<turnstile> [\<lambda>tw. P( tw\<lbrakk>sig, dly :=\<^sub>2 (beval_world2 tw exp)\<rbrakk>  )] Bassign_inert sig exp dly [P]" |
 
-Comp2: "\<lbrakk> \<turnstile>\<^sub>t [P] s1 [Q]; \<turnstile>\<^sub>t [Q] s2 [R]\<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>t [P] Bcomp s1 s2 [R]" |
+Comp2: "\<lbrakk> \<turnstile> [P] s1 [Q]; \<turnstile> [Q] s2 [R]\<rbrakk> \<Longrightarrow> \<turnstile> [P] Bcomp s1 s2 [R]" |
 
-If2: "\<lbrakk>\<turnstile>\<^sub>t [\<lambda>w. P w \<and> beval_world2 w t g] s1 [Q]; \<turnstile>\<^sub>t [\<lambda>w. P w \<and> \<not> beval_world2 w t  g] s2 [Q]\<rbrakk>
-        \<Longrightarrow>  \<turnstile>\<^sub>t [P] Bguarded g s1 s2 [Q]" |
+If2: "\<lbrakk>\<turnstile> [\<lambda>tw. P tw \<and> beval_world2 tw g] s1 [Q]; \<turnstile> [\<lambda>tw. P tw \<and> \<not> beval_world2 tw g] s2 [Q]\<rbrakk>
+        \<Longrightarrow>  \<turnstile> [P] Bguarded g s1 s2 [Q]" |
 
-Conseq2: "\<lbrakk>\<forall>w. P' w \<longrightarrow> P w; \<turnstile>\<^sub>t [P] s [Q]; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>t [P'] s [Q']"
+Conseq2: "\<lbrakk>\<forall>w. P' w \<longrightarrow> P w; \<turnstile> [P] s [Q]; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<turnstile> [P'] s [Q']"
 
-inductive_cases seq_hoare2_ic: "\<turnstile>\<^sub>t [P] s [Q]"
+inductive_cases seq_hoare2_ic: "\<turnstile> [P] s [Q]"
 
 lemma BnullE_hoare2:
-  assumes "\<turnstile>\<^sub>t [P] s [Q]"
+  assumes "\<turnstile> [P] s [Q]"
   assumes "s = Bnull"
-  shows "\<forall>w. P w \<longrightarrow> Q w"
+  shows "\<forall>tw. P tw \<longrightarrow> Q tw"
   using assms
   by (induction rule:seq_hoare2.induct, auto)
 
 lemma BnullE'_hoare2:
-  "\<turnstile>\<^sub>t [P] Bnull [Q] \<Longrightarrow> \<forall>w. P w \<longrightarrow> Q w"
+  "\<turnstile> [P] Bnull [Q] \<Longrightarrow> \<forall>tw. P tw \<longrightarrow> Q tw"
   using BnullE_hoare2 by blast
 
 lemma BassignE_hoare2:
-  assumes "\<turnstile>\<^sub>t [P] s [Q]"
+  assumes "\<turnstile> [P] s [Q]"
   assumes "s = Bassign_trans sig exp dly"
-  shows "\<forall>w. P w \<longrightarrow> Q(w[sig, t + dly :=\<^sub>2 beval_world2 w t exp])"
+  shows "\<forall>tw. P tw \<longrightarrow> Q(tw[sig, dly :=\<^sub>2 beval_world2 tw exp])"
   using assms
-  by (induction rule: seq_hoare2.induct, auto)
+proof (induction rule: seq_hoare2.induct)
+  case (Conseq2 P' P s Q Q')
+  then show ?case by blast
+qed auto
 
 lemma Bassign_inertE_hoare2:
-  assumes "\<turnstile>\<^sub>t [P] s [Q]"
+  assumes "\<turnstile> [P] s [Q]"
   assumes "s = Bassign_inert sig exp dly"
-  shows "\<forall>w. P w \<longrightarrow> Q(w[sig, t, dly :=\<^sub>2 beval_world2 w t exp])"
+  shows "\<forall>tw. P tw \<longrightarrow> Q(tw \<lbrakk> sig, dly :=\<^sub>2 beval_world2 tw exp\<rbrakk> )"
   using assms
-  by (induction rule: seq_hoare2.induct, auto)
+proof (induction rule: seq_hoare2.induct)
+  case (Conseq2 P' P s Q Q')
+  then show ?case by blast
+qed auto
 
 lemma BcompE_hoare2:
-  assumes "\<turnstile>\<^sub>t [P] s [R]"
+  assumes "\<turnstile> [P] s [R]"
   assumes "s = Bcomp s1 s2"
-  shows "\<exists>Q. \<turnstile>\<^sub>t [P] s1 [Q] \<and> \<turnstile>\<^sub>t [Q] s2 [R]"
+  shows "\<exists>Q. \<turnstile> [P] s1 [Q] \<and> \<turnstile> [Q] s2 [R]"
   using assms Conseq2
   by (induction rule:seq_hoare2.induct, auto) (blast)
 
@@ -204,26 +226,30 @@ lemmas [simp] = seq_hoare2.Null2 seq_hoare2.Assign2 seq_hoare2.Comp2 seq_hoare2.
 lemmas [intro!] = seq_hoare2.Null2 seq_hoare2.Assign2 seq_hoare2.Comp2 seq_hoare2.If2
 
 lemma strengthen_pre_hoare2:
-  assumes "\<forall>w. P' w \<longrightarrow> P w" and "\<turnstile>\<^sub>t [P] s [Q]"
-  shows "\<turnstile>\<^sub>t [P'] s [Q]"
+  assumes "\<forall>tw. P' tw \<longrightarrow> P tw" and "\<turnstile> [P] s [Q]"
+  shows "\<turnstile> [P'] s [Q]"
   using assms by (blast intro: Conseq2)
 
 lemma weaken_post_hoare2:
-  assumes "\<forall>w. Q w \<longrightarrow> Q' w" and "\<turnstile>\<^sub>t [P] s [Q]"
-  shows "\<turnstile>\<^sub>t [P] s [Q']"
+  assumes "\<forall>tw. Q tw \<longrightarrow> Q' tw" and "\<turnstile> [P] s [Q]"
+  shows "\<turnstile> [P] s [Q']"
   using assms by (blast intro: Conseq2)
 
 lemma Assign'_hoare2:
-  assumes "\<forall>w. P w \<longrightarrow> Q (worldline_upd2 w sig (t + dly) (beval_world2 w t exp))"
-  shows "\<turnstile>\<^sub>t [P] Bassign_trans sig exp dly [Q]"
-  using assms by (simp add: strengthen_pre_hoare2)
+  assumes "\<forall>tw. P tw \<longrightarrow> Q (worldline_upd2 tw sig dly (beval_world2 tw exp))"
+  shows "\<turnstile> [P] Bassign_trans sig exp dly [Q]"
+  using assms by (metis (no_types, lifting) Assign2 strengthen_pre_hoare2)
 
 subsubsection \<open>Validity of Hoare proof rules\<close>
 
 lift_definition worldline2 ::
-  "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> 'signal worldline2"
-  is worldline
-proof -
+  "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> nat \<times> 'signal worldline2"
+  is "\<lambda>t \<sigma> \<theta> \<tau>. (t, worldline t \<sigma> \<theta> \<tau>)"
+proof
+  fix t :: nat
+  show "top t"
+    by auto
+next
   fix t0 :: nat
   fix \<sigma> :: "'signal state"
   fix \<theta> \<tau> :: "'signal transaction"
@@ -286,16 +312,17 @@ proof -
 qed
 
 definition destruct_worldline ::
-  "'signal worldline2 \<Rightarrow> nat \<Rightarrow> ('signal state \<times> 'signal event \<times> 'signal transaction \<times> 'signal transaction)"
+  "nat \<times> 'signal worldline2 \<Rightarrow> (nat \<times> 'signal state \<times> 'signal event \<times> 'signal transaction \<times> 'signal transaction)"
   where
-  "destruct_worldline w t = (let \<sigma> = (\<lambda>s. Rep_worldline w s t);
+  "destruct_worldline tw = (let  t = fst tw; w = snd tw;
+                                 \<sigma> = (\<lambda>s. Rep_worldline w s t);
                                  \<theta> = poly_mapping_of_fun (\<lambda>t. Some o (\<lambda>s. (Rep_worldline w) s t)) 0 t;
                                  \<gamma> = {s. \<sigma> s \<noteq> signal_of2 False \<theta> s (t - 1)};
                                  \<tau> = derivative_raw (Rep_worldline w) (worldline_deg w) t
-                             in (\<sigma>, \<gamma>, \<theta>, \<tau>))"
+                             in (t, \<sigma>, \<gamma>, \<theta>, \<tau>))"
 
 text \<open>One might concern about the event @{term "\<gamma> :: 'signal event"} obtained from the destruction
-@{term "destruct_worldline w t"} above. What happens if @{term "t = 0"}? This is a valid concern
+@{term "destruct_worldline tw"} above. What happens if @{term "t = 0"}? This is a valid concern
 since we have the expression @{term "t - 1"} in the definition of @{term "\<gamma>"} above.
 
 Note that, we impose the requirement of @{term "context_invariant"} here. When this is the case,
@@ -305,43 +332,47 @@ subsequently, equals to @{term "False"}. Hence, when @{term "t = 0"}, the @{term
 signals which are different with the default value @{term "False :: val"}.\<close>
 
 lemma destruct_worldline_exist:
-  "\<exists>\<sigma> \<gamma> \<theta> \<tau>. destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)"
+  "\<exists>t \<sigma> \<gamma> \<theta> \<tau>. destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)"
   unfolding destruct_worldline_def Let_def by auto
 
 lemma worldline2_constructible:
-  fixes w :: "'signal worldline2"
-  assumes "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)"
-  shows "w = worldline2 t \<sigma> \<theta> \<tau> \<and> context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  fixes tw :: "nat \<times> 'signal worldline2"
+  assumes "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)"
+  shows "tw = worldline2 t \<sigma> \<theta> \<tau> \<and> context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
 proof -
-  have "\<exists>t. \<forall>t'>t. (\<lambda>s. Rep_worldline w s t') = (\<lambda>s. Rep_worldline w s t)"
+  have "\<exists>t. \<forall>t'>t. (\<lambda>s. Rep_worldline (snd tw) s t') = (\<lambda>s. Rep_worldline (snd tw) s t)"
     by transfer auto
   thus ?thesis
     using assms unfolding destruct_worldline_def Let_def worldline_deg_def
   proof transfer'
-    fix w :: "'signal worldline"
+    fix tw :: "nat \<times> 'signal worldline"
     fix t \<sigma> \<gamma>
     fix \<theta> \<tau> :: "'signal transaction"
-    assume *: "\<exists>t. \<forall>t'>t. (\<lambda>s. w s t') = (\<lambda>s. w s t)"
-    then obtain d where d_def: "d = (LEAST t. \<forall>t'>t. (\<lambda>s. w s t') = (\<lambda>s. w s t))"
+    let ?w = "snd tw"
+    assume *: "\<exists>t. \<forall>t'>t. (\<lambda>s. ?w s t') = (\<lambda>s. ?w s t)"
+    then obtain d where d_def: "d = (LEAST t. \<forall>t'>t. (\<lambda>s. ?w s t') = (\<lambda>s. ?w s t))"
       by auto
-    have d_prop: "\<forall>t'>d. (\<lambda>s. w s t') = (\<lambda>s. w s d)"
+    have d_prop: "\<forall>t'>d. (\<lambda>s. ?w s t') = (\<lambda>s. ?w s d)"
       using LeastI_ex[OF *] unfolding d_def  by blast
-    hence d_prop': "\<And>n s. d < n \<Longrightarrow> w s n = w s d"
+    hence d_prop': "\<And>n s. d < n \<Longrightarrow> ?w s n = ?w s d"
       by meson
-    have d_def': "d = (LEAST n. \<forall>t>n. \<forall>s. w s t = w s n)"
+    have d_def': "d = (LEAST n. \<forall>t>n. \<forall>s. ?w s t = ?w s n)"
       unfolding d_def  by metis
     assume **:
-      "(\<lambda>s. w s t,
-        {s. w s t \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. w s t)) 0 t) s (t - 1)},
-        poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. w s t)) 0 t,
-        derivative_raw w (LEAST n. \<forall>t>n. \<forall>s. w s t = w s n) t) = (\<sigma>, \<gamma>, \<theta>, \<tau>)"
-    hence \<sigma>_def: "\<sigma> = (\<lambda>s. w s t)" and
-          \<gamma>_def: "\<gamma> = {s. w s t \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. w s t)) 0 t) s (t - 1)}" and
-          \<theta>_def: "\<theta> = poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. w s t)) 0 t"
+      "(fst tw,
+        \<lambda>s. snd tw s (fst tw),
+        {s. snd tw s (fst tw) \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. snd tw s t)) 0 (fst tw)) s (fst tw - 1)},
+        poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. snd tw s t)) 0 (fst tw),
+        derivative_raw (snd tw) (LEAST n. \<forall>t>n. \<forall>s. snd tw s t = snd tw s n) (fst tw)) =
+        (t, \<sigma>, \<gamma>, \<theta>, \<tau>)"
+    hence \<sigma>_def: "\<sigma> = (\<lambda>s. ?w s t)" and
+          \<gamma>_def: "\<gamma> = {s. ?w s t \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. ?w s t)) 0 t) s (t - 1)}" and
+          \<theta>_def: "\<theta> = poly_mapping_of_fun (\<lambda>t. Some \<circ> (\<lambda>s. ?w s t)) 0 t" and
+          "fst tw = t"
       by auto
-    have \<tau>_def: "\<tau> = derivative_raw w d t"
+    have \<tau>_def: "\<tau> = derivative_raw ?w d t"
       using ** unfolding d_def' by auto
-    have "w = worldline t \<sigma> \<theta> \<tau>"
+    have "?w = worldline t \<sigma> \<theta> \<tau>"
     proof (rule ext, rule ext, cases "t \<le> d")
       case True
       fix s' t'
@@ -350,19 +381,19 @@ proof -
       { assume "t' < t"
         hence "worldline t \<sigma> \<theta> \<tau> s' t' =  signal_of2 False \<theta> s' t'"
           unfolding worldline_def by auto
-        also have "... = w s' t'"
+        also have "... = ?w s' t'"
           using signal_of2_poly_mapping_fun[OF `t' < t`] unfolding \<theta>_def by metis
-        finally have "w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+        finally have "?w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
           by auto }
       moreover
       { assume "t \<le> t'"
         hence "worldline t \<sigma> \<theta> \<tau> s' t' = signal_of2 (\<sigma> s') \<tau> s' t'"
           unfolding worldline_def by auto
-        also have "... = w s' t'"
+        also have "... = ?w s' t'"
           unfolding \<tau>_def using signal_of2_derivative_raw'[OF `t \<le> t'` True] d_prop' by metis
-        finally have "w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+        finally have "?w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
           by auto }
-      ultimately show "w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+      ultimately show "?w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
         by auto
     next
       case False
@@ -372,9 +403,9 @@ proof -
       { assume "t' < t"
         hence "worldline t \<sigma> \<theta> \<tau> s' t' =  signal_of2 False \<theta> s' t'"
           unfolding worldline_def by auto
-        also have "... = w s' t'"
+        also have "... = ?w s' t'"
           using signal_of2_poly_mapping_fun[OF `t' < t`] unfolding \<theta>_def by metis
-        finally have "w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+        finally have "?w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
           by auto }
       moreover
       { assume "t \<le> t'"
@@ -384,13 +415,13 @@ proof -
           unfolding \<tau>_def using derivative_raw_zero False  by (metis le_less_linear)
         also have "... = \<sigma> s'"
           using signal_of2_empty by fastforce
-        also have "... = w s' t"
+        also have "... = ?w s' t"
           unfolding \<sigma>_def by auto
-        also have "... = w s' t'"
+        also have "... = ?w s' t'"
           using d_prop'[of "t"] d_prop'[of "t'"] False `t \<le> t'` by auto
-        finally have "w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+        finally have "?w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
           by auto }
-      ultimately show "w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
+      ultimately show "?w s' t' = worldline t \<sigma> \<theta> \<tau> s' t'"
         by auto
     qed
     have "\<forall>n. t \<le> n \<longrightarrow> lookup \<theta> n = 0"
@@ -402,20 +433,19 @@ proof -
       unfolding \<tau>_def \<sigma>_def by transfer' auto
     ultimately have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
       unfolding \<gamma>_def context_invariant_def \<sigma>_def \<theta>_def by auto
-    thus " w = worldline t \<sigma> \<theta> \<tau> \<and> context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-      using `w = worldline t \<sigma> \<theta> \<tau>` by auto
+    thus " tw = (t, worldline t \<sigma> \<theta> \<tau>) \<and> context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+      using `?w = worldline t \<sigma> \<theta> \<tau>` `fst tw = t` surjective_pairing[of "tw"] by auto
   qed
 qed
 
 lemma worldline2_constructible':
-  fixes w :: "'signal worldline2"
-  fixes t :: nat
-  shows "\<exists>\<sigma> \<gamma> \<theta> \<tau>. w = worldline2 t \<sigma> \<theta> \<tau> \<and> context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-  by (meson destruct_worldline_def worldline2_constructible)
+  fixes tw :: "nat \<times> 'signal worldline2"
+  shows "\<exists>t \<sigma> \<gamma> \<theta> \<tau>. tw = worldline2 t \<sigma> \<theta> \<tau> \<and> context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  using destruct_worldline_exist worldline2_constructible by blast
 
 lemma state_worldline2:
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-  shows "(\<lambda>s. Rep_worldline (worldline2 t \<sigma> \<theta> \<tau>) s t) = \<sigma>"
+  shows "(\<lambda>s. (Rep_worldline o snd) (worldline2 t \<sigma> \<theta> \<tau>) s t) = \<sigma>"
   using assms
 proof (intro ext, transfer')
   fix s t \<sigma>
@@ -459,13 +489,13 @@ proof (intro ext, transfer')
       unfolding to_signal2_def comp_def by auto
     hence "worldline t \<sigma> \<theta> \<tau> s t = \<sigma> s"
       unfolding worldline_def by auto }
-  ultimately show "worldline t \<sigma> \<theta> \<tau> s t = \<sigma> s"
+  ultimately show "((\<lambda>x. x) \<circ> snd) (t, worldline t \<sigma> \<theta> \<tau>) s t = \<sigma> s"
     by auto
 qed
 
 lemma history_worldline2:
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-  shows "signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. Rep_worldline (worldline2 t \<sigma> \<theta> \<tau>) s ta)) 0 t) s (t - 1) =
+  shows "signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. (Rep_worldline o snd) (worldline2 t \<sigma> \<theta> \<tau>) s ta)) 0 t) s (t - 1) =
          signal_of2 False \<theta> s (t - 1)"
   using assms
 proof transfer'
@@ -505,13 +535,13 @@ proof transfer'
       using `t = 0` by auto
     finally have "signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. worldline t \<sigma> \<theta> \<tau> s ta)) 0 t) s (t - 1) = signal_of2 False \<theta> s (t - 1)"
       by auto }
-  ultimately show "signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. worldline t \<sigma> \<theta> \<tau> s ta)) 0 t) s (t - 1) = signal_of2 False \<theta> s (t - 1)"
+  ultimately show "signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. ((\<lambda>x. x) \<circ> snd) (t, worldline t \<sigma> \<theta> \<tau>) s ta)) 0 t) s (t - 1) = signal_of2 False \<theta> s (t - 1)"
     by auto
 qed
 
 lemma beh_of_worldline:
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-  shows "\<And>k. signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. Rep_worldline (worldline2 t \<sigma> \<theta> \<tau>) s ta)) 0 t) s k =
+  shows "\<And>k. signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. (Rep_worldline o snd) (worldline2 t \<sigma> \<theta> \<tau>) s ta)) 0 t) s k =
              signal_of2 False \<theta> s k"
   using assms
 proof transfer'
@@ -582,38 +612,38 @@ proof transfer'
         using step using "**" by blast }
     ultimately have "signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. worldline t \<sigma> \<theta> \<tau> s ta)) 0 t) s k = signal_of2 False \<theta> s k"
       by auto }
-  ultimately show "signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. worldline t \<sigma> \<theta> \<tau> s ta)) 0 t) s k = signal_of2 False \<theta> s k"
+  ultimately show " signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. ((\<lambda>x. x) \<circ> snd) (t, worldline t \<sigma> \<theta> \<tau>) s ta)) 0 t) s k = signal_of2 False \<theta> s k"
     by auto
 qed
 
 lemma event_worldline2:
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-  shows "{s. Rep_worldline (worldline2 t \<sigma> \<theta> \<tau>) s t \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. Rep_worldline (worldline2 t \<sigma> \<theta> \<tau>) s ta)) 0 t) s (t - 1)} = \<gamma>"
+  shows "{s. (Rep_worldline o snd) (worldline2 t \<sigma> \<theta> \<tau>) s t \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. (Rep_worldline o snd) (worldline2 t \<sigma> \<theta> \<tau>) s ta)) 0 t) s (t - 1)} = \<gamma>"
   using assms state_worldline2[OF assms]
 proof transfer'
   fix t \<sigma>
   fix \<gamma> :: "'a event"
   fix \<theta> \<tau>
   assume "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-  assume *: "(\<lambda>s. worldline t \<sigma> \<theta> \<tau> s t) = \<sigma>"
+  assume *: "(\<lambda>s. ((\<lambda>x. x) \<circ> snd) (t, worldline t \<sigma> \<theta> \<tau>) s t) = \<sigma>"
   have **: "\<gamma> = {s. \<sigma> s \<noteq> signal_of2 False \<theta> s (t - 1)}"
     using `context_invariant t \<sigma> \<gamma> \<theta> \<tau>` unfolding context_invariant_def by auto
   have "{s. worldline t \<sigma> \<theta> \<tau> s t \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. worldline t \<sigma> \<theta> \<tau> s ta)) 0 t) s (t - 1)} =
         {s. \<sigma> s \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. worldline t \<sigma> \<theta> \<tau> s ta)) 0 t) s (t - 1)}"
-    using * by metis
+    using * by (metis comp_apply snd_conv)
   moreover have "\<And>s. signal_of2 False \<theta> s (t - 1) =
             signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. worldline t \<sigma> \<theta> \<tau> s ta)) 0 t) s (t - 1)"
-    using history_worldline2 by (metis \<open>context_invariant t \<sigma> \<gamma> \<theta> \<tau>\<close> worldline2.rep_eq)
+    using history_worldline2[OF \<open>context_invariant t \<sigma> \<gamma> \<theta> \<tau>\<close>] by transfer' auto
   ultimately have "{s. worldline t \<sigma> \<theta> \<tau> s t \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. worldline t \<sigma> \<theta> \<tau> s ta)) 0 t) s (t - 1)} =
                    {s. \<sigma> s \<noteq> signal_of2 False \<theta> s (t - 1)}"
     by auto
-  thus " {s. worldline t \<sigma> \<theta> \<tau> s t \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. worldline t \<sigma> \<theta> \<tau> s ta)) 0 t) s (t - 1)} = \<gamma>"
+  thus " {s. ((\<lambda>x. x) \<circ> snd) (t, worldline t \<sigma> \<theta> \<tau>) s t \<noteq> signal_of2 False (poly_mapping_of_fun (\<lambda>ta. Some \<circ> (\<lambda>s. ((\<lambda>x. x) \<circ> snd) (t, worldline t \<sigma> \<theta> \<tau>) s ta)) 0 t) s (t - 1)} = \<gamma>"
     using ** by auto
 qed
 
 lemma transaction_worldline2:
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-  shows "\<And>k s . signal_of2 (\<sigma> s) (derivative_raw (Rep_worldline (worldline2 t \<sigma> \<theta> \<tau>)) (worldline_deg (worldline2 t \<sigma> \<theta> \<tau>)) t) s k =
+  shows "\<And>k s . signal_of2 (\<sigma> s) (derivative_raw ((Rep_worldline o snd) (worldline2 t \<sigma> \<theta> \<tau>)) ((worldline_deg o snd) (worldline2 t \<sigma> \<theta> \<tau>)) t) s k =
                 signal_of2 (\<sigma> s) \<tau> s k"
   using assms unfolding worldline_deg_def
 proof transfer'
@@ -713,8 +743,8 @@ proof transfer'
           have "worldline t \<sigma> \<theta> \<tau> s t = signal_of2 (\<sigma> s) \<tau> s t"
             unfolding worldline_def by auto
           also have "... = \<sigma> s"
-            using `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
-            by (metis calculation state_worldline2 worldline2.rep_eq)
+            using calculation state_worldline2[OF `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`]
+            by (transfer', metis fun.map_ident snd_conv)
           finally have "worldline t \<sigma> \<theta> \<tau> s t = \<sigma> s"
             by auto
           hence ?thesis
@@ -729,15 +759,19 @@ proof transfer'
                     signal_of2 (\<sigma> s) \<tau> s k" by auto }
   ultimately have "signal_of2 (\<sigma> s) (derivative_raw (worldline t \<sigma> \<theta> \<tau>) deg t) s k =
                     signal_of2 (\<sigma> s) \<tau> s k" by auto
-  thus "signal_of2 (\<sigma> s) (derivative_raw (worldline t \<sigma> \<theta> \<tau>) (LEAST n. \<forall>ta>n. \<forall>s. worldline t \<sigma> \<theta> \<tau> s ta = worldline t \<sigma> \<theta> \<tau> s n) t) s k =
+  thus "signal_of2 (\<sigma> s) (derivative_raw (((\<lambda>x. x) \<circ> snd) (t, worldline t \<sigma> \<theta> \<tau>)) (((\<lambda>w. LEAST n. \<forall>t>n. \<forall>s. w s t = w s n) \<circ> snd) (t, worldline t \<sigma> \<theta> \<tau>)) t) s k =
         signal_of2 (\<sigma> s) \<tau> s k"
     unfolding deg_def by auto
 qed
 
+lemma [simp]:
+  "fst (worldline2 t \<sigma> \<theta> \<tau>) = t"
+  unfolding worldline2_def by auto
+
 lemma destruct_worldline_correctness:
   assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-  assumes "destruct_worldline (worldline2 t \<sigma> \<theta> \<tau>) t = (\<sigma>', \<gamma>', \<theta>', \<tau>')"
-  shows "\<sigma> = \<sigma>'" and "\<gamma> = \<gamma>'"
+  assumes "destruct_worldline (worldline2 t \<sigma> \<theta> \<tau>) = (t', \<sigma>', \<gamma>', \<theta>', \<tau>')"
+  shows "t = t'" and "\<sigma> = \<sigma>'" and "\<gamma> = \<gamma>'"
     and "\<And>k s. signal_of2 False \<theta> s k = signal_of2 False \<theta>' s k"
     and "\<And>k s. signal_of2 (\<sigma> s) \<tau> s k = signal_of2 (\<sigma> s) \<tau>' s k"
   using assms(2) state_worldline2[OF assms(1)] event_worldline2[OF assms(1)] beh_of_worldline[OF assms(1)]
@@ -765,16 +799,16 @@ signal to @{term "True"} where we have previously posted (maps) the same value i
 
 However, even though the transaction @{term "\<tau>'"} and history @{term "\<theta>"} are not guaranteed to be
 the same with @{term "\<tau>"} and @{term "\<theta>"} any longer, the ``integrals'' are still the same; see
-property 3 and 4 in the theorem above.\<close>
+property 4 and 5 in the theorem above.\<close>
 
-definition world_seq_exec :: "'signal worldline2 \<Rightarrow> nat \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal worldline2" where
-  "world_seq_exec w t s = (let (\<sigma>, \<gamma>, \<theta>, \<tau>) = destruct_worldline w t;
-                                         \<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> s \<tau>
+definition world_seq_exec :: "nat \<times> 'signal worldline2 \<Rightarrow> 'signal seq_stmt \<Rightarrow> nat \<times> 'signal worldline2" where
+  "world_seq_exec tw s = (let (t, \<sigma>, \<gamma>, \<theta>, \<tau>) = destruct_worldline tw;
+                                           \<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> s \<tau>
                            in worldline2 t \<sigma> \<theta> \<tau>')"
 
-abbreviation world_seq_exec_abb :: "'signal worldline2 \<Rightarrow> nat \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal worldline2 \<Rightarrow> bool"
-  ("(_, _ , _) \<Rightarrow>\<^sub>s _")
-  where "world_seq_exec_abb w t s w' \<equiv> (world_seq_exec w t s = w')"
+abbreviation world_seq_exec_abb :: "nat \<times> 'signal worldline2 \<Rightarrow> 'signal seq_stmt \<Rightarrow> nat \<times> 'signal worldline2 \<Rightarrow> bool"
+  ("(_ , _) \<Rightarrow>\<^sub>s _")
+  where "world_seq_exec_abb tw s tw' \<equiv> (world_seq_exec tw s = tw')"
 
 (* Diagram for lifting the sequential execution to the worldline level
  *
@@ -786,9 +820,14 @@ abbreviation world_seq_exec_abb :: "'signal worldline2 \<Rightarrow> nat \<Right
  *
  *)
 
+lemma time_invariant:
+  assumes "tw, s \<Rightarrow>\<^sub>s tw'" shows "fst tw = fst tw'"
+  using assms unfolding world_seq_exec_def Let_def
+  by (auto dest!: worldline2_constructible split:prod.splits)
+
 definition
-seq_hoare_valid2 :: "nat \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("\<Turnstile>\<^sub>_ [(1_)]/ (_)/ [(1_)]" 50)
-where "\<Turnstile>\<^sub>t [P] s [Q] \<longleftrightarrow>  (\<forall>w w'.  P w \<and> (w, t, s \<Rightarrow>\<^sub>s w') \<longrightarrow> Q w')"
+seq_hoare_valid2 :: "'signal assn2 \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("\<Turnstile> [(1_)]/ (_)/ [(1_)]" 50)
+where "\<Turnstile> [P] s [Q] \<longleftrightarrow>  (\<forall>tw tw'.  P tw \<and> (tw, s \<Rightarrow>\<^sub>s tw') \<longrightarrow> Q tw')"
 
 text \<open>This is a cleaner definition of the validity compared to @{term "seq_hoare_valid"} in
 @{theory "Draft.VHDL_Hoare"}. This also has the same spirit as the definition of validity in
@@ -1437,34 +1476,34 @@ lemma helper:
   using helper'[OF assms(1-3) _ assms(4-5) `nonneg_delay ss`] by auto
 
 lemma Bcomp_hoare_valid':
-  assumes "\<Turnstile>\<^sub>t [P] s1 [Q]" and "\<Turnstile>\<^sub>t [Q] s2 [R]"
+  assumes "\<Turnstile> [P] s1 [Q]" and "\<Turnstile> [Q] s2 [R]"
   assumes "nonneg_delay (Bcomp s1 s2)"
-  shows "\<Turnstile>\<^sub>t [P] Bcomp s1 s2 [R]"
+  shows "\<Turnstile> [P] Bcomp s1 s2 [R]"
   unfolding seq_hoare_valid2_def
 proof (rule)+
-  fix w w'
+  fix tw tw' :: "nat \<times> 'a worldline2"
   have "nonneg_delay s1" and "nonneg_delay s2"
     using assms(3) by auto
-  assume "P w \<and> (w, t, Bcomp s1 s2 \<Rightarrow>\<^sub>s w')"
-  hence "P w" and "w, t, Bcomp s1 s2 \<Rightarrow>\<^sub>s w'" by auto
-  then obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
-    "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bcomp s1 s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>')" and "w'= worldline2 t \<sigma> \<theta> \<tau>'"
+  assume "P tw \<and> (tw, Bcomp s1 s2 \<Rightarrow>\<^sub>s tw')"
+  hence "P tw" and "tw, Bcomp s1 s2 \<Rightarrow>\<^sub>s tw'" by auto
+  then obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and
+    "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bcomp s1 s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>')" and "tw'= worldline2 t \<sigma> \<theta> \<tau>'"
     unfolding world_seq_exec_def Let_def using destruct_worldline_exist by fastforce
   then obtain \<tau>'' where tau1: "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'')" and tau2: "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s2, \<tau>''> \<longrightarrow>\<^sub>s \<tau>')"
     by auto
-  define w'' where "w'' = worldline2 t \<sigma> \<theta> \<tau>''"
-  hence "w, t, s1 \<Rightarrow>\<^sub>s w''"
+  define tw'' where "tw'' = worldline2 t \<sigma> \<theta> \<tau>''"
+  hence "tw, s1 \<Rightarrow>\<^sub>s tw''"
     using des tau1 unfolding world_seq_exec_def Let_def by auto
-  with assms(1) have "Q w''"
-    unfolding seq_hoare_valid2_def using `P w` by auto
+  with assms(1) have "Q tw''"
+    unfolding seq_hoare_valid2_def using `P tw` by fastforce
   have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
     using worldline2_constructible[OF des] by auto
   hence "context_invariant t \<sigma> \<gamma> \<theta> \<tau>''"
     using b_seq_exec_preserves_context_invariant[OF _ tau1] assms(3) by auto
-  obtain \<theta>''' \<tau>''' where des2: "destruct_worldline w'' t = (\<sigma>, \<gamma>, \<theta>''', \<tau>''')" and
+  obtain \<theta>''' \<tau>''' where des2: "destruct_worldline tw'' = (t, \<sigma>, \<gamma>, \<theta>''', \<tau>''')" and
     sig_beh: "\<And>k s. signal_of2 False \<theta> s k = signal_of2 False \<theta>''' s k" and
     sig_trans: "\<And>k s. signal_of2 (\<sigma> s) \<tau>'' s k = signal_of2 (\<sigma> s) \<tau>''' s k"
-    unfolding w''_def using destruct_worldline_correctness[OF `context_invariant t \<sigma> \<gamma> \<theta> \<tau>''`]
+    unfolding tw''_def using destruct_worldline_correctness[OF `context_invariant t \<sigma> \<gamma> \<theta> \<tau>''`]
     by (metis destruct_worldline_exist)
   have "context_invariant t \<sigma> \<gamma> \<theta>''' \<tau>'''"
     using worldline2_constructible[OF des2] by auto
@@ -1479,36 +1518,38 @@ proof (rule)+
     fix \<tau>'' \<tau>''' \<tau>4 t \<tau>'
     assume 1: "\<And>s k. signal_of2 False \<theta> s k = signal_of2 False \<theta>''' s k"
     assume  "\<And>s k. signal_of2 (\<sigma> s) \<tau>4 s k = signal_of2 (\<sigma> s) \<tau>' s k"
-    thus " worldline t \<sigma> \<theta> \<tau>' = worldline t \<sigma> \<theta>''' \<tau>4"
+    thus " (t, worldline t \<sigma> \<theta> \<tau>') = (t, worldline t \<sigma> \<theta>''' \<tau>4)"
       unfolding worldline_def using 1 by auto
   qed
-  hence "w'', t, s2 \<Rightarrow>\<^sub>s w'"
-    unfolding world_seq_exec_def using des2 tau3 `w'= worldline2 t \<sigma> \<theta> \<tau>'` by auto
-  with `Q w''` show "R w'"
-    using assms(2) unfolding seq_hoare_valid2_def by auto
+  hence "tw'', s2 \<Rightarrow>\<^sub>s tw'"
+    unfolding world_seq_exec_def using des2 tau3 `tw'= worldline2 t \<sigma> \<theta> \<tau>'`
+    by (smt \<open>t, \<sigma> , \<gamma> , \<theta> \<turnstile> <Bcomp s1 s2 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close> \<open>tw , Bcomp s1 s2 \<Rightarrow>\<^sub>s tw'\<close> case_prod_conv
+    des fst_conv world_seq_exec_def)
+  with `Q tw''` show "R tw'"
+    using assms(2) unfolding seq_hoare_valid2_def by blast
 qed
 
 lemma Bnull_sound_hoare2:
-  "\<turnstile>\<^sub>t [P] Bnull [Q] \<Longrightarrow> \<Turnstile>\<^sub>t [P] Bnull [Q]"
+  "\<turnstile> [P] Bnull [Q] \<Longrightarrow> \<Turnstile> [P] Bnull [Q]"
   by (auto dest!: BnullE'_hoare2 worldline2_constructible  simp add: seq_hoare_valid2_def world_seq_exec_def
-      split: prod.splits)
+           split: prod.splits)
 
 lemma Bguarded_hoare_valid2:
-  assumes "\<Turnstile>\<^sub>t [\<lambda>a. P a \<and> beval_world2 a t g] s1 [Q]" and "\<Turnstile>\<^sub>t [\<lambda>a. P a \<and> \<not> beval_world2 a t g] s2 [Q]"
-  shows "\<Turnstile>\<^sub>t [P] Bguarded g s1 s2 [Q]"
+  assumes "\<Turnstile> [\<lambda>tw. P tw \<and> beval_world2 tw g] s1 [Q]" and "\<Turnstile> [\<lambda>tw. P tw \<and> \<not> beval_world2 tw g] s2 [Q]"
+  shows "\<Turnstile> [P] Bguarded g s1 s2 [Q]"
   unfolding seq_hoare_valid2_def
 proof (rule)+
-  fix w w'
-  assume "P w \<and> (w, t, Bguarded g s1 s2 \<Rightarrow>\<^sub>s w')"
-  hence "P w" and "w, t, Bguarded g s1 s2 \<Rightarrow>\<^sub>s w'" by auto
-  obtain \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)"
+  fix tw  tw':: "nat \<times> 'a worldline2"
+  assume "P tw \<and> (tw, Bguarded g s1 s2 \<Rightarrow>\<^sub>s tw')"
+  hence "P tw" and "tw, Bguarded g s1 s2 \<Rightarrow>\<^sub>s tw'" by auto
+  obtain t \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)"
     by (meson destruct_worldline_def)
-  hence "w = worldline2 t \<sigma> \<theta> \<tau> " and "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  hence "fst tw = t" and "tw = worldline2 t \<sigma> \<theta> \<tau> " and "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
     by(auto dest!: worldline2_constructible)
   obtain \<tau>' where "t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bguarded g s1 s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     by auto
-  hence "w' = worldline2 t \<sigma> \<theta> \<tau>'"
-    using `w, t, Bguarded g s1 s2 \<Rightarrow>\<^sub>s w'` `destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)`
+  hence "tw' = worldline2 t \<sigma> \<theta> \<tau>'"
+    using `tw, Bguarded g s1 s2 \<Rightarrow>\<^sub>s tw'` `destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)`
     unfolding world_seq_exec_def by auto
   have "beval t \<sigma> \<gamma> \<theta> g \<or> \<not> beval t \<sigma> \<gamma> \<theta> g"
     by auto
@@ -1516,187 +1557,194 @@ proof (rule)+
   { assume "beval t \<sigma> \<gamma> \<theta> g"
     hence "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       using `t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bguarded g s1 s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'` by auto
-    hence "beval_world2 w t g"
-      using `beval t \<sigma> \<gamma> \<theta> g` `w = worldline2 t \<sigma> \<theta> \<tau>` `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
+    hence "beval_world2 tw g"
+      using `beval t \<sigma> \<gamma> \<theta> g` `tw = worldline2 t \<sigma> \<theta> \<tau>` `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
       by (transfer', simp add: beval_beval_world_ci)
-    have "w, t , s1 \<Rightarrow>\<^sub>s w'"
-      using `destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)` `t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'`
-      `w' = worldline2 t \<sigma> \<theta> \<tau>'` unfolding world_seq_exec_def Let_def by auto
-    with assms(1) and `P w` have "Q w'"
-      using `beval_world2 w t g` unfolding seq_hoare_valid2_def by auto }
+    have "tw , s1 \<Rightarrow>\<^sub>s tw'"
+      using `destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)` `t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'`
+      `tw' = worldline2 t \<sigma> \<theta> \<tau>'` unfolding world_seq_exec_def Let_def  by simp
+    with assms(1) and `P tw` have "Q tw'"
+      using `beval_world2 tw g` `fst tw = t` unfolding seq_hoare_valid2_def by blast }
   moreover
   { assume "\<not> beval t \<sigma> \<gamma> \<theta> g"
     hence "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       using `t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bguarded g s1 s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'` by auto
-    hence "\<not> beval_world2 w t g"
-      using `\<not> beval t \<sigma> \<gamma> \<theta> g` `w = worldline2 t \<sigma> \<theta> \<tau>` `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
+    hence "\<not> beval_world2 tw g"
+      using `\<not> beval t \<sigma> \<gamma> \<theta> g` `tw = worldline2 t \<sigma> \<theta> \<tau>` `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
       by (transfer', simp add: beval_beval_world_ci)
-    have "w, t, s2 \<Rightarrow>\<^sub>s w'"
-      using `destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)` `t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'`
-      `w' = worldline2 t \<sigma> \<theta> \<tau>'` unfolding world_seq_exec_def Let_def by auto
-    with assms(2) and `P w` have "Q w'"
-      using `\<not> beval_world2 w t g` unfolding seq_hoare_valid2_def by auto }
-  ultimately show "Q w'"
+    have "tw, s2 \<Rightarrow>\<^sub>s tw'"
+      using `destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)` `t, \<sigma>, \<gamma>, \<theta> \<turnstile> <s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'`
+      `tw' = worldline2 t \<sigma> \<theta> \<tau>'` unfolding world_seq_exec_def Let_def
+      by simp
+    with assms(2) and `P tw` have "Q tw'"
+      using `\<not> beval_world2 tw g` `fst tw = t` unfolding seq_hoare_valid2_def by blast }
+  ultimately show "Q tw'"
     by auto
 qed
 
 lemma lift_world_trans_worldline_upd2:
-  assumes "w, t, Bassign_trans sig exp dly \<Rightarrow>\<^sub>s w'"
-  shows "w' = w[sig, t + dly :=\<^sub>2 beval_world2 w t exp]"
+  assumes "tw, Bassign_trans sig exp dly \<Rightarrow>\<^sub>s tw'"
+  shows "tw' = tw[sig, dly :=\<^sub>2 beval_world2 tw exp]"
   using assms
 proof transfer'
-  fix w t sig
+  fix tw tw' :: "nat \<times> 'a worldline2"
+  fix sig
   fix exp :: "'a bexp"
-  fix dly w'
-  assume "w, t , Bassign_trans sig exp dly \<Rightarrow>\<^sub>s w'"
-  obtain \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)"
+  fix dly
+  assume "tw, Bassign_trans sig exp dly \<Rightarrow>\<^sub>s tw'"
+  obtain t \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)"
     by (meson destruct_worldline_def)
-  hence w_def: "w = worldline2 t \<sigma> \<theta> \<tau> " and "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  hence "fst tw = t" and w_def: "tw = worldline2 t \<sigma> \<theta> \<tau> " and "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
     by(auto dest!: worldline2_constructible)
   obtain \<tau>' where "t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bassign_trans sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     and "\<tau>' = trans_post sig (beval t \<sigma> \<gamma> \<theta> exp) \<tau> (t + dly)"
     by auto
-  moreover have "beval t \<sigma> \<gamma> \<theta> exp = beval_world2 w t exp"
-    using `w = worldline2 t \<sigma> \<theta> \<tau> ` and `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
+  moreover have "beval t \<sigma> \<gamma> \<theta> exp = beval_world2 tw exp"
+    using `tw = worldline2 t \<sigma> \<theta> \<tau> ` and `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
     by (transfer', simp add: beval_beval_world_ci)
-  ultimately have \<tau>'_def: "\<tau>' = trans_post sig (beval_world2 w t exp) \<tau> (t + dly)"
+  ultimately have \<tau>'_def: "\<tau>' = trans_post sig (beval_world2 tw exp) \<tau> (t + dly)"
       by auto
-  have "w' = worldline2 t \<sigma> \<theta> \<tau>'"
-    using `w, t , Bassign_trans sig exp dly \<Rightarrow>\<^sub>s w'` `destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)`
+  have "tw' = (worldline2 t \<sigma> \<theta> \<tau>')"
+    using `tw, Bassign_trans sig exp dly \<Rightarrow>\<^sub>s tw'` `destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)`
     unfolding world_seq_exec_def  using \<open>t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bassign_trans sig exp dly , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close>
     by auto
-  also have "... = w[sig, t + dly:=\<^sub>2 beval_world2 w t exp]"
-    using w_def \<tau>'_def by (transfer', meson lift_trans_post_worldline_upd)
-  finally show "w' = w[sig, t + dly:=\<^sub>2 beval_world2 w t exp]"
-    by auto
+  also have "... = tw[sig, dly:=\<^sub>2 beval_world2 tw exp]"
+    using w_def \<tau>'_def
+    by (transfer', metis eq_fst_iff eq_snd_iff lift_trans_post_worldline_upd)
+  finally show "tw' = tw[sig, dly:=\<^sub>2 beval_world2 tw exp]"
+    using `fst tw = t` by auto
 qed
 
 lemma Bassign_trans_sound_hoare2:
-  "\<turnstile>\<^sub>t [P] Bassign_trans sig exp dly [Q] \<Longrightarrow> \<Turnstile>\<^sub>t [P] Bassign_trans sig exp dly [Q]"
+  "\<turnstile> [P] Bassign_trans sig exp dly [Q] \<Longrightarrow> \<Turnstile> [P] Bassign_trans sig exp dly [Q]"
   unfolding seq_hoare_valid2_def
 proof rule+
-  fix w w'
-  assume "\<turnstile>\<^sub>t [P] Bassign_trans sig exp dly [Q]"
-  hence imp: "\<forall>w. P w \<longrightarrow> Q(w[sig, t + dly :=\<^sub>2 beval_world2 w t exp])"
+  fix tw tw' :: "nat \<times> 'a worldline2"
+  assume "\<turnstile> [P] Bassign_trans sig exp dly [Q]"
+  hence imp: "\<forall>tw. P tw \<longrightarrow> Q( tw[sig, dly :=\<^sub>2 beval_world2 tw exp])"
     by (auto dest!: BassignE_hoare2)
-  assume " P w \<and> (w, t , Bassign_trans sig exp dly \<Rightarrow>\<^sub>s w')"
-  hence "P w" and "w, t, Bassign_trans sig exp dly \<Rightarrow>\<^sub>s w'" by auto
-  obtain \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)"
-    by (meson destruct_worldline_def)
+  assume " P tw \<and> (tw, Bassign_trans sig exp dly \<Rightarrow>\<^sub>s tw')"
+  hence "P tw" and "tw, Bassign_trans sig exp dly \<Rightarrow>\<^sub>s tw'" by auto
+  obtain t \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and "fst tw = t"
+    by (metis (no_types, lifting) destruct_worldline_def)
   obtain \<tau>' where "t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bassign_trans sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     by auto
-  hence "w' = worldline2 t \<sigma> \<theta> \<tau>'"
-    using `w, t , Bassign_trans sig exp dly \<Rightarrow>\<^sub>s w'` `destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)`
+  hence "tw' = worldline2 t \<sigma> \<theta> \<tau>'"
+    using `tw, Bassign_trans sig exp dly \<Rightarrow>\<^sub>s tw'` `destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)`
     unfolding world_seq_exec_def  using \<open>t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bassign_trans sig exp dly , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close> by auto
-  have "w' = w[sig, t + dly :=\<^sub>2 beval_world2 w t exp]"
-    unfolding `w' = worldline2 t \<sigma> \<theta> \<tau>'`
-    by (simp add: \<open>w' = worldline2 t \<sigma> \<theta> \<tau>'\<close> \<open>w, t , Bassign_trans sig exp dly \<Rightarrow>\<^sub>s w'\<close> lift_world_trans_worldline_upd2)
-  with imp and `P w` have "Q(w[sig, t + dly :=\<^sub>2 beval_world2 w t exp])"
-    by auto
-  thus "Q w'"
-    using `Q(w[sig, t + dly :=\<^sub>2 beval_world2 w t exp])` `w' = w[sig, t + dly :=\<^sub>2 beval_world2 w t exp]`
-    by auto
+  hence "fst tw' = t"
+    by transfer'  auto
+  have "tw' = tw[sig, dly :=\<^sub>2 beval_world2 tw exp]"
+    unfolding `tw' = worldline2 t \<sigma> \<theta> \<tau>'` using `fst tw = t`
+    by (metis \<open>tw' = worldline2 t \<sigma> \<theta> \<tau>'\<close> \<open>tw , Bassign_trans sig exp dly \<Rightarrow>\<^sub>s tw'\<close>
+    lift_world_trans_worldline_upd2)
+  with imp and `P tw` have "Q(tw[sig, dly :=\<^sub>2 beval_world2 tw exp])"
+    using `fst tw = t` by blast
+  thus "Q tw'"
+    using `tw' = tw[sig, dly :=\<^sub>2 beval_world2 tw exp]`
+    `fst tw = t` surjective_pairing[of "tw'"]  `fst tw' = t` by auto
 qed
 
 lemma lift_world_inert_worldline_upd2:
-  assumes "w, t, Bassign_inert sig exp dly \<Rightarrow>\<^sub>s w'"
+  assumes "tw, Bassign_inert sig exp dly \<Rightarrow>\<^sub>s tw'"
   assumes "0 < dly"
-  shows "w' = w[sig, t, dly :=\<^sub>2 beval_world2 w t exp]"
+  shows "tw' = tw\<lbrakk>sig, dly :=\<^sub>2 beval_world2 tw exp\<rbrakk>"
   using assms
 proof transfer'
-  fix w t sig
+  fix tw tw' :: "nat \<times> 'a worldline2"
+  fix sig
   fix exp :: "'a bexp"
-  fix dly w'
-  assume "w, t , Bassign_inert sig exp dly \<Rightarrow>\<^sub>s w'"
+  fix dly
+  assume "tw, Bassign_inert sig exp dly \<Rightarrow>\<^sub>s tw'"
   assume "0 < dly"
-  obtain \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)"
+  obtain t \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)"
     by (meson destruct_worldline_def)
-  hence w_def: "w = worldline2 t \<sigma> \<theta> \<tau> " and "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  hence "fst tw = t" and w_def: "tw = worldline2 t \<sigma> \<theta> \<tau> " and "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
     by(auto dest!: worldline2_constructible)
   obtain \<tau>' where "t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     and "\<tau>' = inr_post sig (beval t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly"
     by auto
-  moreover have "beval t \<sigma> \<gamma> \<theta> exp = beval_world2 w t exp"
-    using `w = worldline2 t \<sigma> \<theta> \<tau> ` and `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
+  moreover have "beval t \<sigma> \<gamma> \<theta> exp = beval_world2 tw exp"
+    using `tw = worldline2 t \<sigma> \<theta> \<tau> ` and `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
     by (transfer', simp add: beval_beval_world_ci)
-  ultimately have \<tau>'_def: "\<tau>' = inr_post sig (beval_world2 w t exp) (\<sigma> sig) \<tau> t dly"
+  ultimately have \<tau>'_def: "\<tau>' = inr_post sig (beval_world2 tw exp) (\<sigma> sig) \<tau> t dly"
     by auto
-  have "w' = worldline2 t \<sigma> \<theta> \<tau>'"
-    using `w, t , Bassign_inert sig exp dly \<Rightarrow>\<^sub>s w'` `destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)`
+  have "tw' = (worldline2 t \<sigma> \<theta> \<tau>')"
+    using `tw, Bassign_inert sig exp dly \<Rightarrow>\<^sub>s tw'` `destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)`
     unfolding world_seq_exec_def  using \<open>t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bassign_inert sig exp dly , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close>
     by auto
-  also have "... = w[sig, t, dly:=\<^sub>2 beval_world2 w t exp]"
-    using `w = worldline2 t \<sigma> \<theta> \<tau>` `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
+  also have "... = tw\<lbrakk>sig, dly:=\<^sub>2 beval_world2 tw exp\<rbrakk>"
+    using `tw = worldline2 t \<sigma> \<theta> \<tau>` `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`
     `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'` `0 < dly`
     by (transfer', simp add: lift_inr_post_worldline_upd)
-  finally show "w' = w[sig, t, dly:=\<^sub>2 beval_world2 w t exp]"
-    by auto
+  finally show "tw' = tw\<lbrakk>sig, dly :=\<^sub>2 beval_world2 tw exp\<rbrakk>"
+    using `fst tw = t` by auto
 qed
 
 lemma Bassign_inert_sound_hoare2:
   assumes "0 < dly"
-  shows "\<turnstile>\<^sub>t [P] Bassign_inert sig exp dly [Q] \<Longrightarrow> \<Turnstile>\<^sub>t [P] Bassign_inert sig exp dly [Q]"
+  shows "\<turnstile> [P] Bassign_inert sig exp dly [Q] \<Longrightarrow> \<Turnstile> [P] Bassign_inert sig exp dly [Q]"
   unfolding seq_hoare_valid2_def
 proof rule+
-  fix w w'
-  assume "\<turnstile>\<^sub>t [P] Bassign_inert sig exp dly [Q]"
-  hence imp: "\<forall>w. P w \<longrightarrow> Q(w[sig, t, dly :=\<^sub>2 beval_world2 w t exp])"
+  fix tw tw' :: "nat \<times> 'a worldline2"
+  assume "\<turnstile> [P] Bassign_inert sig exp dly [Q]"
+  hence imp: "\<forall>tw. P tw \<longrightarrow> Q(tw \<lbrakk>sig, dly :=\<^sub>2 beval_world2 tw exp\<rbrakk>)"
     by (auto dest!: Bassign_inertE_hoare2)
-  assume "P w \<and> (w, t , Bassign_inert sig exp dly \<Rightarrow>\<^sub>s w')"
-  hence "P w" and "w, t , (Bassign_inert sig exp dly) \<Rightarrow>\<^sub>s w'" by auto
-  obtain \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)"
-    by (meson destruct_worldline_def)
+  assume "P tw \<and> (tw, Bassign_inert sig exp dly \<Rightarrow>\<^sub>s tw')"
+  hence "P tw" and "tw, (Bassign_inert sig exp dly) \<Rightarrow>\<^sub>s tw'" by auto
+  obtain t \<sigma> \<gamma> \<theta> \<tau> where "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and "fst tw = t"
+    by (metis (no_types, lifting) destruct_worldline_def)
   obtain \<tau>' where "t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     by auto
-  hence "w' = worldline2 t \<sigma> \<theta> \<tau>'"
-    using `w, t , Bassign_inert sig exp dly \<Rightarrow>\<^sub>s w'` `destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)`
+  hence "tw' = (worldline2 t \<sigma> \<theta> \<tau>')"
+    using `tw, Bassign_inert sig exp dly \<Rightarrow>\<^sub>s tw'` `destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)`
     unfolding world_seq_exec_def  using \<open>t , \<sigma> , \<gamma> , \<theta> \<turnstile> <Bassign_inert sig exp dly , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close> by auto
-  have "w' = w[sig, t, dly :=\<^sub>2 beval_world2 w t exp]"
-    by (simp add: \<open>w, t , Bassign_inert sig exp dly \<Rightarrow>\<^sub>s w'\<close> assms lift_world_inert_worldline_upd2)
-  with imp and `P w` have "Q(w[sig, t, dly :=\<^sub>2 beval_world2 w t exp])"
-    by auto
-  thus "Q w'"
-    using `Q(w[sig, t,  dly :=\<^sub>2 beval_world2 w t exp])` `w' = w[sig, t, dly :=\<^sub>2 beval_world2 w t exp]`
-    by auto
+  hence "fst tw' = t"
+    by transfer' auto
+  have "tw' = tw\<lbrakk>sig, dly :=\<^sub>2 beval_world2 tw exp\<rbrakk>"
+    by (metis \<open>fst tw = t\<close> \<open>tw , Bassign_inert sig exp dly \<Rightarrow>\<^sub>s tw'\<close> assms lift_world_inert_worldline_upd2)
+  with imp and `P tw` have "Q(tw\<lbrakk>sig, dly :=\<^sub>2 beval_world2 tw exp\<rbrakk>)"
+    using `fst tw = t` by blast
+  thus "Q tw'"
+    using `tw' = tw \<lbrakk> sig, dly :=\<^sub>2 beval_world2 tw exp\<rbrakk>` `fst tw = t` `fst tw' = t`
+    surjective_pairing[of "tw'"] by auto
 qed
 
 subsubsection \<open>Soundness and completeness\<close>
 
 lemma soundness_hoare2:
-  assumes "\<turnstile>\<^sub>t [P] s [R]"
+  assumes "\<turnstile> [P] s [R]"
   assumes "nonneg_delay s"
-  shows "\<Turnstile>\<^sub>t [P] s [R]"
+  shows "\<Turnstile> [P] s [R]"
   using assms
 proof (induction rule:seq_hoare2.induct)
-  case (AssignI2 t P sig dly exp)
+  case (AssignI2 P sig dly exp)
   hence "0 < dly" by auto
   then show ?case
     using Bassign_inert_sound_hoare2[OF `0 < dly`]  using seq_hoare2.AssignI2 by fastforce
 next
-  case (Conseq2 P' P t s Q Q')
-  then show ?case  by (auto simp add: seq_hoare_valid2_def)
+  case (Conseq2 P' P s Q Q')
+  then show ?case by (metis seq_hoare_valid2_def)
 qed (auto simp add: Bnull_sound_hoare2 Bassign_trans_sound_hoare2 Bcomp_hoare_valid' Bguarded_hoare_valid2)
 
 lemma  world_seq_exec_bnull:
-  "w, t, Bnull \<Rightarrow>\<^sub>s w"
+  "tw, Bnull \<Rightarrow>\<^sub>s tw"
   unfolding world_seq_exec_def Let_def
-  by (metis (mono_tags, lifting) b_seq_exec.simps(1) destruct_worldline_exist old.prod.case
-      worldline2_constructible)
+  by (auto split:prod.splits dest!:worldline2_constructible)
 
 lemma world_seq_exec_comp:
   assumes "nonneg_delay (Bcomp ss1 ss2)"
-  shows "w, t, (Bcomp ss1 ss2) \<Rightarrow>\<^sub>s (world_seq_exec (world_seq_exec w t ss1) t ss2)"
+  shows "tw, (Bcomp ss1 ss2) \<Rightarrow>\<^sub>s (world_seq_exec (world_seq_exec tw ss1) ss2)"
 proof -
-  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des1: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
+  obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des1: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and
     "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bcomp ss1 ss2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and ci1: "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-    using destruct_worldline_exist worldline2_constructible by blast
+    using destruct_worldline_exist worldline2_constructible by metis
   then obtain \<tau>'' where "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss1, \<tau>> \<longrightarrow>\<^sub>s \<tau>''" and exec1: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss2, \<tau>''> \<longrightarrow>\<^sub>s \<tau>'"
     and ci2: "context_invariant t \<sigma> \<gamma> \<theta> \<tau>''" using b_seq_exec_preserves_context_invariant
     using assms by fastforce
-  hence *: "worldline2 t \<sigma> \<theta> \<tau>'' = world_seq_exec w t ss1"
+  hence *: "worldline2 t \<sigma> \<theta> \<tau>'' = world_seq_exec tw ss1"
     unfolding world_seq_exec_def Let_def using des1 by auto
-
-  obtain \<theta>2 \<tau>2 \<tau>3 where des2: "destruct_worldline (worldline2 t \<sigma> \<theta> \<tau>'') t = (\<sigma>, \<gamma>, \<theta>2, \<tau>2)" and
+  obtain \<theta>2 \<tau>2 \<tau>3 where des2: "destruct_worldline (worldline2 t \<sigma> \<theta> \<tau>'') = (t, \<sigma>, \<gamma>, \<theta>2, \<tau>2)" and
     beh_same:"\<And>s k. signal_of2 False \<theta> s k = signal_of2 False \<theta>2 s k" and
     trans_same: "\<And>s k. signal_of2 (\<sigma> s) \<tau>'' s k = signal_of2 (\<sigma> s) \<tau>2 s k" and
     exec2: "t, \<sigma>, \<gamma>, \<theta>2 \<turnstile> <ss2, \<tau>2> \<longrightarrow>\<^sub>s \<tau>3"
@@ -1714,13 +1762,13 @@ proof -
     fix t
     assume 1: "\<And>s k. signal_of2 (\<sigma> s) \<tau>' s k = signal_of2 (\<sigma> s) \<tau>3 s k"
     assume "\<And>s k. signal_of2 False \<theta> s k = signal_of2 False \<theta>2 s k"
-    thus " worldline t \<sigma> \<theta> \<tau>' = worldline t \<sigma> \<theta>2 \<tau>3 "
+    thus " (t, worldline t \<sigma> \<theta> \<tau>') = (t, worldline t \<sigma> \<theta>2 \<tau>3) "
       unfolding worldline_def  using 1 by auto
   qed
-  also have "... = world_seq_exec (worldline2 t \<sigma> \<theta> \<tau>'') t ss2"
+  also have "... = world_seq_exec (worldline2 t \<sigma> \<theta> \<tau>'') ss2"
     using des2 `t, \<sigma>, \<gamma>, \<theta>2 \<turnstile> <ss2, \<tau>2> \<longrightarrow>\<^sub>s \<tau>3` unfolding world_seq_exec_def Let_def
     by auto
-  finally have "worldline2 t \<sigma> \<theta> \<tau>' = world_seq_exec (worldline2 t \<sigma> \<theta> \<tau>'') t ss2"
+  finally have "worldline2 t \<sigma> \<theta> \<tau>' = world_seq_exec (worldline2 t \<sigma> \<theta> \<tau>'') ss2"
     by auto
   thus ?thesis
     using des1 `t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bcomp ss1 ss2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'` unfolding  *
@@ -1728,14 +1776,17 @@ proof -
 qed
 
 lemma world_seq_exec_guarded:
-  assumes "beval_world2 w t g"
-  shows "world_seq_exec w t (Bguarded g ss1 ss2) = world_seq_exec w t ss1"
+  fixes tw :: "nat \<times> 'a worldline2"
+  assumes "beval_world2 tw g"
+  shows "world_seq_exec tw (Bguarded g ss1 ss2) = world_seq_exec tw ss1"
 proof -
-  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des1: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
+  obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des1: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and
     "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bguarded g ss1 ss2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and ci1: "context_invariant t \<sigma> \<gamma> \<theta> \<tau>" and
-    "w = worldline2 t \<sigma> \<theta> \<tau>" using destruct_worldline_exist worldline2_constructible by blast
+    "tw = worldline2 t \<sigma> \<theta> \<tau>" and "fst tw = t" using destruct_worldline_exist worldline2_constructible
+    by (metis (no_types, lifting) destruct_worldline_def)
   moreover have "beval t \<sigma> \<gamma> \<theta> g"
-    using assms `w = worldline2 t \<sigma> \<theta> \<tau>` ci1  apply transfer' using beval_beval_world_ci by metis
+    using assms `tw = worldline2 t \<sigma> \<theta> \<tau>` ci1  `fst tw = t`
+    by (transfer', simp add: beval_beval_world_ci)
   ultimately have "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     by auto
   thus ?thesis
@@ -1744,14 +1795,17 @@ proof -
 qed
 
 lemma world_seq_exec_guarded_not:
-  assumes "\<not> beval_world2 w t g"
-  shows "world_seq_exec w t (Bguarded g ss1 ss2) = world_seq_exec w t ss2"
+  fixes tw :: "nat \<times> 'a worldline2"
+  assumes "\<not> beval_world2 tw g"
+  shows "world_seq_exec tw (Bguarded g ss1 ss2) = world_seq_exec tw ss2"
 proof -
-  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des1: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
+  obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des1: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and
     "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <Bguarded g ss1 ss2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and ci1: "context_invariant t \<sigma> \<gamma> \<theta> \<tau>" and
-    "w = worldline2 t \<sigma> \<theta> \<tau>" using destruct_worldline_exist worldline2_constructible by blast
+    "tw = worldline2 t \<sigma> \<theta> \<tau>" and "fst tw = t" using destruct_worldline_exist worldline2_constructible
+    by (metis (no_types, lifting) destruct_worldline_def fst_def snd_def)
   moreover have "\<not> beval t \<sigma> \<gamma> \<theta> g"
-    using assms `w = worldline2 t \<sigma> \<theta> \<tau>` ci1  apply transfer' using beval_beval_world_ci by metis
+    using assms `tw = worldline2 t \<sigma> \<theta> \<tau>` ci1  using `fst tw = t`
+    by (transfer', auto simp add: beval_beval_world_ci)
   ultimately have "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     by auto
   thus ?thesis
@@ -1759,33 +1813,33 @@ proof -
         des1 world_seq_exec_def)
 qed
 
-definition wp :: "'signal seq_stmt \<Rightarrow> nat \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal assn2" where
-  "wp ss t Q = (\<lambda>w. \<forall>w'. (w, t, ss \<Rightarrow>\<^sub>s w') \<longrightarrow> Q w')"
+definition wp :: "'signal seq_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal assn2" where
+  "wp ss Q = (\<lambda>tw. \<forall>tw'. (tw, ss \<Rightarrow>\<^sub>s tw') \<longrightarrow> Q tw')"
 
 lemma wp_bnull:
-  "wp Bnull t Q = Q"
+  "wp Bnull Q = Q"
   by (rule ext)(auto simp add: wp_def world_seq_exec_bnull)
 
 lemma wp_bcomp:
-  "nonneg_delay (Bcomp ss1 ss2) \<Longrightarrow> wp (Bcomp ss1 ss2) t Q = wp ss1 t (wp ss2 t Q)"
+  "nonneg_delay (Bcomp ss1 ss2) \<Longrightarrow> wp (Bcomp ss1 ss2) Q = wp ss1 (wp ss2 Q)"
   by (rule ext) (auto simp add: wp_def world_seq_exec_comp)
 
 lemma wp_guarded:
-  "wp (Bguarded g ss1 ss2) t Q =
-  (\<lambda>w. if beval_world2 w t g then wp ss1 t Q w else wp ss2 t Q w)"
+  "wp (Bguarded g ss1 ss2) Q =
+  (\<lambda>tw. if beval_world2 tw g then wp ss1 Q tw else wp ss2 Q tw)"
   by (rule ext) (auto simp add: wp_def world_seq_exec_guarded world_seq_exec_guarded_not)
 
 lemma wp_trans:
-  "wp (Bassign_trans sig exp dly) t Q =
-  (\<lambda>w. Q(w[sig, t + dly :=\<^sub>2 beval_world2 w t exp]))"
-  by (rule ext, metis VHDL_Hoare_Complete.wp_def lift_world_trans_worldline_upd2)
+  "wp (Bassign_trans sig exp dly) Q =
+  (\<lambda>tw. Q(tw [sig, dly :=\<^sub>2 beval_world2 tw exp]))"
+  by (rule ext, metis (full_types) lift_world_trans_worldline_upd2 wp_def)
 
 lemma wp_inert:
-  "0 < dly \<Longrightarrow> wp (Bassign_inert sig exp dly) t Q =
-  (\<lambda>w. Q(w[sig, t, dly :=\<^sub>2 beval_world2 w t exp]))"
-  by (rule ext, metis VHDL_Hoare_Complete.wp_def lift_world_inert_worldline_upd2)
+  "0 < dly \<Longrightarrow> wp (Bassign_inert sig exp dly) Q =
+  (\<lambda>tw. Q(tw \<lbrakk> sig, dly :=\<^sub>2 beval_world2 tw exp \<rbrakk>))"
+  by (rule ext, metis lift_world_inert_worldline_upd2 wp_def)
 
-lemma wp_is_pre: "nonneg_delay ss \<Longrightarrow> \<turnstile>\<^sub>t [wp ss t Q] ss [Q]"
+lemma wp_is_pre: "nonneg_delay ss \<Longrightarrow> \<turnstile> [wp ss Q] ss [Q]"
 proof (induction ss arbitrary: Q)
 case (Bcomp ss1 ss2)
   then show ?case by (auto simp add: wp_bcomp)
@@ -1805,48 +1859,48 @@ next
 qed
 
 lemma hoare_complete:
-  assumes "nonneg_delay ss" assumes "\<Turnstile>\<^sub>t [P] ss [Q]" shows "\<turnstile>\<^sub>t [P] ss [Q]"
+  assumes "nonneg_delay ss" assumes "\<Turnstile> [P] ss [Q]" shows "\<turnstile> [P] ss [Q]"
 proof (rule strengthen_pre_hoare2)
-  show "\<forall>w. P w \<longrightarrow> wp ss t Q w" using assms
-    by (auto simp add:  seq_hoare_valid2_def wp_def)
-  show " \<turnstile>\<^sub>t [VHDL_Hoare_Complete.wp ss t Q] ss [Q]"
+  show "\<forall>w. P w \<longrightarrow> wp ss Q w" using assms
+    by (metis seq_hoare_valid2_def wp_def)
+  show " \<turnstile> [VHDL_Hoare_Complete.wp ss Q] ss [Q]"
     using assms by (intro wp_is_pre)
 qed
 
 corollary hoare_sound_complete:
   assumes "nonneg_delay ss"
-  shows "\<turnstile>\<^sub>t [P] ss [Q] \<longleftrightarrow> \<Turnstile>\<^sub>t [P] ss [Q]"
+  shows "\<turnstile> [P] ss [Q] \<longleftrightarrow> \<Turnstile> [P] ss [Q]"
   using hoare_complete soundness_hoare2 assms by auto
 
 subsection \<open>A sound and complete Hoare logic for VHDL's concurrent statement\<close>
 
-definition event_of :: "'signal worldline2  \<Rightarrow> nat \<Rightarrow> 'signal event" where
-  "event_of w t = (fst o snd) (destruct_worldline w t)"
+definition event_of :: "nat \<times> 'signal worldline2  \<Rightarrow> 'signal event" where
+  "event_of tw = (fst o snd o snd) (destruct_worldline tw)"
 
 inductive
-  conc_hoare :: "nat \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"
-  ("\<turnstile>\<^sub>_ (\<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>)" 50)
+  conc_hoare :: "'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"
+  ("\<turnstile> (\<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>)" 50)
   where
-Single:  "\<turnstile>\<^sub>t [\<lambda>w. P w \<and> \<not> disjnt sl (event_of w t)] ss [Q] \<Longrightarrow> \<forall>w. P w \<and> disjnt sl (event_of w t) \<longrightarrow> Q w
-    \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>P\<rbrace> process sl : ss \<lbrace>Q\<rbrace>"
-| Parallel:  "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>1 \<lbrace>R\<rbrace> \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>R\<rbrace> cs\<^sub>2 \<lbrace>Q\<rbrace> \<Longrightarrow> conc_stmt_wf (cs\<^sub>1 || cs\<^sub>2) \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>1 || cs\<^sub>2 \<lbrace>Q\<rbrace>"
-| Parallel2: "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>2 \<lbrace>R\<rbrace> \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>R\<rbrace> cs\<^sub>1 \<lbrace>Q\<rbrace> \<Longrightarrow> conc_stmt_wf (cs\<^sub>1 || cs\<^sub>2) \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>1 || cs\<^sub>2 \<lbrace>Q\<rbrace>"
-| Conseq': "\<lbrakk>\<forall>w. P' w \<longrightarrow> P w; \<turnstile>\<^sub>t \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>t \<lbrace>P'\<rbrace> c \<lbrace>Q\<rbrace>"
+Single:  "\<turnstile> [\<lambda>tw. P tw \<and> \<not> disjnt sl (event_of tw)] ss [Q] \<Longrightarrow> \<forall>tw. P tw \<and> disjnt sl (event_of tw) \<longrightarrow> Q tw
+    \<Longrightarrow> \<turnstile> \<lbrace>P\<rbrace> process sl : ss \<lbrace>Q\<rbrace>"
+| Parallel:  "\<turnstile> \<lbrace>P\<rbrace> cs\<^sub>1 \<lbrace>R\<rbrace> \<Longrightarrow> \<turnstile> \<lbrace>R\<rbrace> cs\<^sub>2 \<lbrace>Q\<rbrace> \<Longrightarrow> conc_stmt_wf (cs\<^sub>1 || cs\<^sub>2) \<Longrightarrow> \<turnstile> \<lbrace>P\<rbrace> cs\<^sub>1 || cs\<^sub>2 \<lbrace>Q\<rbrace>"
+| Parallel2: "\<turnstile> \<lbrace>P\<rbrace> cs\<^sub>2 \<lbrace>R\<rbrace> \<Longrightarrow> \<turnstile> \<lbrace>R\<rbrace> cs\<^sub>1 \<lbrace>Q\<rbrace> \<Longrightarrow> conc_stmt_wf (cs\<^sub>1 || cs\<^sub>2) \<Longrightarrow> \<turnstile> \<lbrace>P\<rbrace> cs\<^sub>1 || cs\<^sub>2 \<lbrace>Q\<rbrace>"
+| Conseq': "\<lbrakk>\<forall>w. P' w \<longrightarrow> P w; \<turnstile> \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<turnstile> \<lbrace>P'\<rbrace> c \<lbrace>Q\<rbrace>"
 
 lemma strengthen_pre_conc_hoare:
-  assumes "\<forall>w. P' w \<longrightarrow> P w" and "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> s \<lbrace>Q\<rbrace>"
-  shows "\<turnstile>\<^sub>t \<lbrace>P'\<rbrace> s \<lbrace>Q\<rbrace>"
+  assumes "\<forall>w. P' w \<longrightarrow> P w" and "\<turnstile> \<lbrace>P\<rbrace> s \<lbrace>Q\<rbrace>"
+  shows "\<turnstile> \<lbrace>P'\<rbrace> s \<lbrace>Q\<rbrace>"
   using assms by (blast intro: Conseq')
 
-definition world_conc_exec :: "'signal worldline2 \<Rightarrow> nat \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal worldline2"
+definition world_conc_exec :: "nat \<times> 'signal worldline2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> nat \<times> 'signal worldline2"
   where
-  "world_conc_exec w t c = (let (\<sigma>, \<gamma>, \<theta>, \<tau>) = destruct_worldline w t;
+  "world_conc_exec tw c = (let (t, \<sigma>, \<gamma>, \<theta>, \<tau>) = destruct_worldline tw;
                                           \<tau>' = b_conc_exec t \<sigma> \<gamma> \<theta> c \<tau>
                            in worldline2 t \<sigma> \<theta> \<tau>')"
 
-abbreviation world_conc_exec_abb :: "'signal worldline2 \<Rightarrow> nat \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal worldline2 \<Rightarrow> bool"
-  ("(_, _ , _) \<Rightarrow>\<^sub>c _")
-  where "world_conc_exec_abb w t s w' \<equiv> (world_conc_exec w t s = w')"
+abbreviation world_conc_exec_abb :: "nat \<times> 'signal worldline2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> nat \<times> 'signal worldline2 \<Rightarrow> bool"
+  ("(_ , _) \<Rightarrow>\<^sub>c _")
+  where "world_conc_exec_abb tw s w' \<equiv> (world_conc_exec tw s = w')"
 
 (* Diagram for lifting the concurrent execution to the worldline level
  *
@@ -1859,57 +1913,60 @@ abbreviation world_conc_exec_abb :: "'signal worldline2 \<Rightarrow> nat \<Righ
  *)
 
 lemma world_conc_exec_commute:
-  assumes "w, t, (cs1 || cs2) \<Rightarrow>\<^sub>c w1"
-  assumes "w, t, (cs2 || cs1) \<Rightarrow>\<^sub>c w2"
+  assumes "tw, (cs1 || cs2) \<Rightarrow>\<^sub>c tw1"
+  assumes "tw, (cs2 || cs1) \<Rightarrow>\<^sub>c tw2"
   assumes "conc_stmt_wf (cs1 || cs2)"
-  shows "w1 = w2"
+  shows "tw1 = tw2"
 proof -
-  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
-    "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1 || cs2, \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and "worldline2 t \<sigma> \<theta> \<tau>' = w1"
+  obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and
+    "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1 || cs2, \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and "worldline2 t \<sigma> \<theta> \<tau>' = tw1"
     using assms(1) unfolding world_conc_exec_def Let_def by (auto split:prod.splits)
   hence "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs2 || cs1, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
     using parallel_comp_commute'[OF assms(3)] by auto
   thus ?thesis
     using assms(2) unfolding world_conc_exec_def Let_def
-    using \<open>destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)\<close> \<open>worldline2 t \<sigma> \<theta> \<tau>' = w1\<close> by auto
+    using \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)\<close> \<open>worldline2 t \<sigma> \<theta> \<tau>' = tw1\<close>  by auto
 qed
 
 lemma world_conc_exec_disjnt:
-  assumes "disjnt sl (event_of w t)" shows "w, t, (process sl : ss) \<Rightarrow>\<^sub>c w"
+  fixes tw :: "nat \<times> 'a worldline2"
+  assumes "disjnt sl (event_of tw)" shows "tw, (process sl : ss) \<Rightarrow>\<^sub>c tw"
 proof -
-  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
+  obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and
     ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <process sl : ss, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
     using destruct_worldline_exist by blast
   moreover have "disjnt sl \<gamma>"
-    using assms unfolding event_of_def des by auto
+    using assms unfolding event_of_def by (simp add: des)
   ultimately have "\<tau>' = \<tau>"
     by auto
-  hence "worldline2 t \<sigma> \<theta> \<tau>' = w"
-    using des  worldline2_constructible by blast
+  hence "worldline2 t \<sigma> \<theta> \<tau>' = tw"
+    using des  worldline2_constructible by fastforce
   with des ex show ?thesis
-    by (simp add: world_conc_exec_def)
+    by (auto simp add: world_conc_exec_def split:prod.splits)
 qed
 
 lemma world_conc_exec_not_disjnt:
-  assumes "\<not> disjnt sl (event_of w t)" and "w, t, ss \<Rightarrow>\<^sub>s w'"
-  shows "w, t, (process sl : ss) \<Rightarrow>\<^sub>c w'"
+  fixes tw :: "nat \<times> 'a worldline2"
+  assumes "\<not> disjnt sl (event_of tw)" and "tw, ss \<Rightarrow>\<^sub>s tw'"
+  shows "tw, (process sl : ss) \<Rightarrow>\<^sub>c tw'"
 proof -
-  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
+  obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and
     ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <process sl : ss, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
     using destruct_worldline_exist by blast
   moreover have "\<not> disjnt sl \<gamma>"
-    using assms unfolding event_of_def des by auto
+    using assms unfolding event_of_def des by (simp add: des)
   ultimately have "\<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>"
     by auto
-  hence "worldline2 t \<sigma> \<theta> \<tau>' = w'"
-    using assms(2) des by (simp add: world_seq_exec_def)
+  hence "worldline2 t \<sigma> \<theta> \<tau>' = tw'"
+    using assms(2) des by (metis (no_types, lifting) old.prod.case snd_conv world_seq_exec_def)
   thus ?thesis
-    using des ex by (simp add: world_conc_exec_def)
+    using des ex
+    by (simp add: world_conc_exec_def)
 qed
 
 definition
-conc_hoare_valid :: "nat \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("\<Turnstile>\<^sub>_ \<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>" 50)
-where "\<Turnstile>\<^sub>t \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace> \<longleftrightarrow>  (\<forall>w w'.  P w \<and> (w, t, c \<Rightarrow>\<^sub>c w') \<longrightarrow> Q w')"
+conc_hoare_valid :: "'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("\<Turnstile> \<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>" 50)
+where "\<Turnstile> \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace> \<longleftrightarrow>  (\<forall>tw tw'.  P tw \<and> (tw, c \<Rightarrow>\<^sub>c tw') \<longrightarrow> Q tw')"
 
 lemma helper_b_conc:
   assumes "t, \<sigma>, \<gamma>, \<theta>1 \<turnstile> <cs, \<tau>1> \<longrightarrow>\<^sub>c \<tau>1'"
@@ -1990,18 +2047,18 @@ qed
 
 lemma world_conc_exec_parallel:
   assumes "conc_stmt_wf (cs1 || cs2)" and "nonneg_delay_conc (cs1 || cs2)"
-  shows "w, t, (cs1 || cs2) \<Rightarrow>\<^sub>c (world_conc_exec (world_conc_exec w t cs1) t cs2)"
+  shows "tw, (cs1 || cs2) \<Rightarrow>\<^sub>c (world_conc_exec (world_conc_exec tw cs1) cs2)"
 proof -
   have "nonneg_delay_conc cs1" and "nonneg_delay_conc cs2"
     using assms by auto
-  obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
+  obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and
     ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs1, \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and ci: "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
-    using destruct_worldline_exist worldline2_constructible by blast
+    using destruct_worldline_exist worldline2_constructible by (metis)
   have ci': "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
     using b_conc_exec_preserves_context_invariant[OF ci ex `nonneg_delay_conc cs1`] by auto
-  hence wcs1: "world_conc_exec w t cs1 = worldline2 t \<sigma> \<theta> \<tau>'"
+  hence wcs1: "world_conc_exec tw cs1 = (worldline2 t \<sigma> \<theta> \<tau>')"
     using des ex by (simp add: world_conc_exec_def)
-  obtain theta tau' where des2: "destruct_worldline (worldline2 t \<sigma> \<theta> \<tau>') t = (\<sigma>, \<gamma>, theta, tau')"
+  obtain theta tau' where des2: "destruct_worldline (worldline2 t \<sigma> \<theta> \<tau>') = (t, \<sigma>, \<gamma>, theta, tau')"
     and beh_same: "\<And>k s. signal_of2 False \<theta> s k = signal_of2 False theta s k" and
         trans_same: "\<And>k s. signal_of2 (\<sigma> s) \<tau>' s k = signal_of2 (\<sigma> s) tau' s k"
     using destruct_worldline_correctness[OF ci'] by (metis prod_cases4)
@@ -2016,9 +2073,9 @@ proof -
     using beh_same apply transfer' unfolding worldline_def by auto
   have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =  b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>'"
     using b_conc_exec_sequential[OF assms(1)] ex by auto
-  hence "world_conc_exec w t (cs1 || cs2) = worldline2 t \<sigma> \<theta> (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>')"
+  hence "world_conc_exec tw (cs1 || cs2) = worldline2 t \<sigma> \<theta> (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>')"
     using des ex by (auto simp add: world_conc_exec_def)
-  hence "(world_conc_exec w t cs1), t , cs2 \<Rightarrow>\<^sub>c (world_conc_exec w t (cs1 || cs2))"
+  hence "(world_conc_exec tw cs1), cs2 \<Rightarrow>\<^sub>c (world_conc_exec tw (cs1 || cs2))"
     using des2 wcs1 *  by (simp add: world_conc_exec_def)
   thus ?thesis
     by simp
@@ -2026,31 +2083,31 @@ qed
 
 lemma world_conc_exec_parallel2:
   assumes "conc_stmt_wf (cs1 || cs2)" and "nonneg_delay_conc (cs1 || cs2)"
-  shows "w, t, (cs1 || cs2) \<Rightarrow>\<^sub>c (world_conc_exec (world_conc_exec w t cs2) t cs1)"
+  shows "tw, (cs1 || cs2) \<Rightarrow>\<^sub>c (world_conc_exec (world_conc_exec tw cs2) cs1)"
 proof -
   have wf: "conc_stmt_wf (cs2 || cs1)" and nd: "nonneg_delay_conc (cs2 || cs1)"
     using assms unfolding conc_stmt_wf_def by auto
-  have "w , t, (cs1 || cs2) \<Rightarrow>\<^sub>c world_conc_exec w t (cs2 || cs1)"
+  have "tw, (cs1 || cs2) \<Rightarrow>\<^sub>c world_conc_exec tw (cs2 || cs1)"
     using world_conc_exec_commute[OF _ _ assms(1)] by blast
   with world_conc_exec_parallel[OF wf nd] show ?thesis
     by auto
 qed
 
 lemma parallel_valid:
-  assumes "\<Turnstile>\<^sub>t \<lbrace>P\<rbrace> c1 \<lbrace>R\<rbrace>" and "\<Turnstile>\<^sub>t \<lbrace>R\<rbrace> c2 \<lbrace>Q\<rbrace>" and "conc_stmt_wf (c1 || c2)"
+  assumes "\<Turnstile> \<lbrace>P\<rbrace> c1 \<lbrace>R\<rbrace>" and "\<Turnstile> \<lbrace>R\<rbrace> c2 \<lbrace>Q\<rbrace>" and "conc_stmt_wf (c1 || c2)"
   assumes "nonneg_delay_conc (c1 || c2)"
-  shows "\<Turnstile>\<^sub>t \<lbrace>P\<rbrace> c1 || c2 \<lbrace>Q\<rbrace>"
+  shows "\<Turnstile> \<lbrace>P\<rbrace> c1 || c2 \<lbrace>Q\<rbrace>"
   unfolding conc_hoare_valid_def
 proof rule+
-  fix w w'
-  assume "P w \<and> w, t , c1 || c2 \<Rightarrow>\<^sub>c w'"
-  hence "P w" and "w, t, c1 || c2 \<Rightarrow>\<^sub>c w'"
+  fix tw tw':: "nat \<times> 'a worldline2"
+  assume "P tw \<and> tw , c1 || c2 \<Rightarrow>\<^sub>c tw'"
+  hence "P tw" and "tw, c1 || c2 \<Rightarrow>\<^sub>c tw'"
     by auto
-  then obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and
-    *: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <c1 || c2, \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and w'_def: "worldline2 t \<sigma> \<theta> \<tau>' = w'" and
+  then obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and
+    *: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <c1 || c2, \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and w'_def: "worldline2 t \<sigma> \<theta> \<tau>' = tw'" and
     ci: "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
     unfolding world_conc_exec_def Let_def  using destruct_worldline_exist
-    by (metis (mono_tags, lifting) old.prod.case worldline2_constructible)
+    by (auto simp add: worldline2_constructible split:prod.splits)
   define \<tau>1 where "\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> c1 \<tau>"
   hence ci1: "context_invariant t \<sigma> \<gamma> \<theta> \<tau>1"
     using b_conc_exec_preserves_context_invariant[OF ci] assms(4) by auto
@@ -2059,18 +2116,18 @@ proof rule+
     using b_conc_exec_preserves_context_invariant[OF ci] assms(4) by auto
   have \<tau>'_def: "\<tau>' = b_conc_exec t \<sigma> \<gamma> \<theta> c2 \<tau>1"
     using b_conc_exec_sequential[OF assms(3)] * unfolding \<tau>1_def by auto
-  define w1 where "w1 = worldline2 t \<sigma> \<theta> \<tau>1"
-  have "w, t, c1 \<Rightarrow>\<^sub>c w1"
-    using des \<tau>1_def unfolding world_conc_exec_def Let_def by (simp add: w1_def)
-  hence "R w1"
-    using assms(1) `P w` unfolding conc_hoare_valid_def by auto
-  obtain theta1 tau1 where des2: "destruct_worldline w1 t = (\<sigma>, \<gamma>, theta1, tau1)" and
+  define tw1 where "tw1 = worldline2 t \<sigma> \<theta> \<tau>1"
+  have "tw, c1 \<Rightarrow>\<^sub>c tw1"
+    using des \<tau>1_def unfolding world_conc_exec_def Let_def by (simp add: tw1_def)
+  hence "R tw1"
+    using assms(1) `P tw` unfolding conc_hoare_valid_def by blast
+  obtain theta1 tau1 where des2: "destruct_worldline tw1 = (t, \<sigma>, \<gamma>, theta1, tau1)" and
     beh_same: "\<And>k s. signal_of2 False \<theta> s k = signal_of2 False theta1 s k" and
     trans_same: "\<And>k s. signal_of2 (\<sigma> s) \<tau>1 s k = signal_of2 (\<sigma> s) tau1 s k"
-    using destruct_worldline_exist[of "worldline2 t \<sigma> \<theta> \<tau>1" "t"] unfolding w1_def
+    using destruct_worldline_exist[of "worldline2 t \<sigma> \<theta> \<tau>1"] unfolding tw1_def
     using destruct_worldline_correctness[OF ci1] by metis
   have "context_invariant t \<sigma> \<gamma> theta1 tau1"
-    using des2 worldline2_constructible by blast
+    using des2 worldline2_constructible by fastforce
   moreover have "nonneg_delay_conc c2"
     using assms(4) by auto
   ultimately have "worldline2 t \<sigma> theta1 (b_conc_exec t \<sigma> \<gamma> theta1 c2 tau1) = worldline2 t \<sigma> \<theta> \<tau>'"
@@ -2089,28 +2146,30 @@ proof rule+
     hence "\<And>k s. signal_of2 (\<sigma> s) (b_conc_exec t \<sigma> \<gamma> theta1 c2 tau1) s k =
           signal_of2 (\<sigma> s) (b_conc_exec t \<sigma> \<gamma> \<theta> c2 \<tau>1) s k"
       using helper_b_conc[OF _ bs ts _ ci1' ci2'] \<tau>'_def' by metis
-    thus "worldline t \<sigma> theta1 (b_conc_exec t \<sigma> \<gamma> theta1 c2 tau1) = worldline t \<sigma> \<theta> \<tau>'"
+    thus "(t, worldline t \<sigma> theta1 (b_conc_exec t \<sigma> \<gamma> theta1 c2 tau1)) = (t, worldline t \<sigma> \<theta> \<tau>')"
       unfolding worldline_def \<tau>'_def' using bs by auto
   qed
-  hence "w1, t , c2 \<Rightarrow>\<^sub>c w'"
+  hence "tw1, c2 \<Rightarrow>\<^sub>c tw'"
     using des2 by (simp add: w'_def world_conc_exec_def)
-  with `R w1` show "Q w'"
+  with `R tw1` show "Q tw'"
     using assms(2) using conc_hoare_valid_def by metis
 qed
 
 lemma soundness_conc_hoare:
-  assumes "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>"
+  assumes "\<turnstile> \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>"
   assumes "conc_stmt_wf c" and "nonneg_delay_conc c"
-  shows "\<Turnstile>\<^sub>t \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>"
+  shows "\<Turnstile> \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>"
   using assms
 proof (induction rule:conc_hoare.induct)
-  case (Single t P sl ss Q)
-  { fix w w'
-    assume as: "P w \<and> (w, t ,  process sl : ss \<Rightarrow>\<^sub>c w')"
-    then obtain \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)" and "P w" and
-      ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <process sl : ss, \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and "worldline2 t \<sigma> \<theta> \<tau>' = w'"
+  case (Single P sl ss Q)
+  { fix tw  tw' :: "nat \<times> 'a worldline2"
+    assume as: "P tw \<and> (tw ,  process sl : ss \<Rightarrow>\<^sub>c tw')"
+    then obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and "P tw" and
+      ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <process sl : ss, \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and "(worldline2 t \<sigma> \<theta> \<tau>') = tw'"
       unfolding world_seq_exec_def Let_def
-      by (smt case_prod_conv destruct_worldline_exist world_conc_exec_def)
+      by (metis (mono_tags, lifting) case_prod_beta' prod.exhaust_sel world_conc_exec_def)
+    have "fst tw = t"
+      by (metis (no_types, lifting) des destruct_worldline_def fst_conv)
     have "nonneg_delay ss"
       using Single by auto
     have "disjnt sl \<gamma> \<or> \<not> disjnt sl \<gamma>"
@@ -2118,88 +2177,88 @@ proof (induction rule:conc_hoare.induct)
     moreover
     { assume "disjnt sl \<gamma>"
       hence "\<tau>' = \<tau>" using ex by auto
-      hence "w' = w"
-        using \<open>destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)\<close> \<open>worldline2 t \<sigma> \<theta> \<tau>' = w'\<close> worldline2_constructible
-        by blast
-      with Single have "Q w'"
-        unfolding event_of_def  using \<open>P w \<and> w, t , process sl : ss \<Rightarrow>\<^sub>c w'\<close>
-        \<open>destruct_worldline w t = (\<sigma>, \<gamma>, \<theta>, \<tau>)\<close> \<open>disjnt sl \<gamma>\<close>  disjnt_sym by fastforce }
+      hence "tw' = tw"
+        using \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)\<close> \<open>(worldline2 t \<sigma> \<theta> \<tau>') = tw'\<close> worldline2_constructible
+        by (metis)
+      with Single have "Q tw'"
+        unfolding event_of_def  using \<open>P tw \<and> tw, process sl : ss \<Rightarrow>\<^sub>c tw'\<close>
+        \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)\<close> \<open>disjnt sl \<gamma>\<close>  disjnt_sym by fastforce }
     moreover
     { assume "\<not> disjnt sl \<gamma>"
-      hence "\<not> disjnt sl (event_of w t)"
-        unfolding event_of_def using des by auto
-      moreover have "w, t, ss \<Rightarrow>\<^sub>s w'"
+      hence "\<not> disjnt sl (event_of tw)"
+        unfolding event_of_def using des `fst tw = t` by auto
+      moreover have "tw, ss \<Rightarrow>\<^sub>s tw'"
         using as `\<not> disjnt sl \<gamma>`
       proof -
         have "t , \<sigma> , \<gamma> , \<theta> \<turnstile> <ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
           using \<open>\<not> disjnt sl \<gamma>\<close> ex by force
         then show ?thesis
-          by (simp add: \<open>worldline2 t \<sigma> \<theta> \<tau>' = w'\<close> des world_seq_exec_def)
+          by (simp add: \<open>(worldline2 t \<sigma> \<theta> \<tau>') = tw'\<close> des world_seq_exec_def)
       qed
-      ultimately have "Q w'"
-        using soundness_hoare2[OF Single(1) `nonneg_delay ss`] `P w` unfolding seq_hoare_valid2_def
-        by auto }
-    ultimately have "Q w'" by auto }
+      ultimately have "Q tw'"
+        using soundness_hoare2[OF Single(1) `nonneg_delay ss`] `P tw` `fst tw = t`
+        unfolding seq_hoare_valid2_def by blast }
+    ultimately have "Q tw'" by auto }
   then show ?case
     unfolding conc_hoare_valid_def by auto
 next
-  case (Parallel t P cs\<^sub>1 R cs\<^sub>2 Q)
+  case (Parallel P cs\<^sub>1 R cs\<^sub>2 Q)
   hence "conc_stmt_wf cs\<^sub>1" and "conc_stmt_wf cs\<^sub>2"
     by (simp add: conc_stmt_wf_def)+
   moreover have "nonneg_delay_conc cs\<^sub>1" and "nonneg_delay_conc cs\<^sub>2"
     using Parallel by auto
-  ultimately have " \<Turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>1 \<lbrace>R\<rbrace>" and " \<Turnstile>\<^sub>t \<lbrace>R\<rbrace> cs\<^sub>2 \<lbrace>Q\<rbrace>"
+  ultimately have " \<Turnstile> \<lbrace>P\<rbrace> cs\<^sub>1 \<lbrace>R\<rbrace>" and " \<Turnstile> \<lbrace>R\<rbrace> cs\<^sub>2 \<lbrace>Q\<rbrace>"
     using Parallel by auto
   then show ?case
     using parallel_valid Parallel by blast
 next
-  case (Parallel2 t P cs\<^sub>2 R cs\<^sub>1 Q)
+  case (Parallel2 P cs\<^sub>2 R cs\<^sub>1 Q)
   hence "conc_stmt_wf cs\<^sub>1" and "conc_stmt_wf cs\<^sub>2"
     by (simp add: conc_stmt_wf_def)+
   moreover have "nonneg_delay_conc cs\<^sub>1" and "nonneg_delay_conc cs\<^sub>2"
     using Parallel2 by auto
-  ultimately have cs2: " \<Turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>2 \<lbrace>R\<rbrace>" and cs1: " \<Turnstile>\<^sub>t \<lbrace>R\<rbrace> cs\<^sub>1 \<lbrace>Q\<rbrace>"
+  ultimately have cs2: " \<Turnstile> \<lbrace>P\<rbrace> cs\<^sub>2 \<lbrace>R\<rbrace>" and cs1: " \<Turnstile> \<lbrace>R\<rbrace> cs\<^sub>1 \<lbrace>Q\<rbrace>"
     using Parallel2 by auto
   have "conc_stmt_wf (cs\<^sub>2 || cs\<^sub>1)"
     using Parallel2(3) unfolding conc_stmt_wf_def by auto
   moreover have " nonneg_delay_conc (cs\<^sub>2 || cs\<^sub>1) "
     using Parallel2(7) by auto
-  ultimately have "\<Turnstile>\<^sub>t \<lbrace>P\<rbrace> cs\<^sub>2 || cs\<^sub>1 \<lbrace>Q\<rbrace>"
+  ultimately have "\<Turnstile> \<lbrace>P\<rbrace> cs\<^sub>2 || cs\<^sub>1 \<lbrace>Q\<rbrace>"
     using parallel_valid[OF cs2 cs1]   by auto
   thus ?case
     using world_conc_exec_commute[OF _ _ Parallel2(3)]  by (metis conc_hoare_valid_def)
 next
-  case (Conseq' P' P t c Q Q')
-  then show ?case by (auto simp add: conc_hoare_valid_def)
+  case (Conseq' P' P c Q Q')
+  then show ?case by (metis conc_hoare_valid_def)
 qed
 
-definition wp_conc :: "'signal conc_stmt \<Rightarrow> nat \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal assn2" where
-  "wp_conc cs t Q = (\<lambda>w. \<forall>w'. (w, t, cs \<Rightarrow>\<^sub>c w') \<longrightarrow> Q w')"
+definition wp_conc :: "'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal assn2" where
+  "wp_conc cs Q = (\<lambda>tw. \<forall>tw'. (tw, cs \<Rightarrow>\<^sub>c tw') \<longrightarrow> Q tw')"
 
 lemma wp_conc_single:
-  "wp_conc (process sl : ss) t Q =
-  (\<lambda>w. if disjnt sl (event_of w t) then Q w else wp ss t Q w)"
+  "wp_conc (process sl : ss) Q =
+  (\<lambda>tw. if disjnt sl (event_of tw) then Q tw else wp ss Q tw)"
   by (rule ext) (auto simp add: wp_conc_def wp_def world_conc_exec_disjnt world_conc_exec_not_disjnt)
 
 lemma wp_conc_parallel:
   assumes "conc_stmt_wf (cs1 || cs2)" and "nonneg_delay_conc (cs1 || cs2)"
-  shows "wp_conc (cs1 || cs2) t Q =  wp_conc cs1 t (wp_conc cs2 t Q)"
+  shows "wp_conc (cs1 || cs2) Q =  wp_conc cs1 (wp_conc cs2 Q)"
   by (rule ext)(auto simp add: wp_conc_def world_conc_exec_parallel[OF assms])
 
 lemma wp_conc_parallel2:
   assumes "conc_stmt_wf (cs1 || cs2)" and "nonneg_delay_conc (cs1 || cs2)"
-  shows "wp_conc (cs1 || cs2) t Q =  wp_conc cs2 t (wp_conc cs1 t Q)"
+  shows "wp_conc (cs1 || cs2) Q =  wp_conc cs2 (wp_conc cs1 Q)"
   by (rule ext)(auto simp add: wp_conc_def world_conc_exec_parallel2[OF assms])
 
 lemma wp_conc_is_pre:
   assumes "conc_stmt_wf cs" and "nonneg_delay_conc cs"
-  shows "\<turnstile>\<^sub>t \<lbrace>wp_conc cs t Q\<rbrace> cs \<lbrace>Q\<rbrace>"
+  shows "\<turnstile> \<lbrace>wp_conc cs Q\<rbrace> cs \<lbrace>Q\<rbrace>"
   using assms
 proof (induction cs arbitrary:Q)
   case (Bpar cs1 cs2)
   hence "conc_stmt_wf cs1" and "conc_stmt_wf cs2" and "nonneg_delay_conc cs1" and "nonneg_delay_conc cs2"
     by auto
-  hence "\<And>Q.  \<turnstile>\<^sub>t \<lbrace>wp_conc cs1 t Q\<rbrace> cs1 \<lbrace>Q\<rbrace>" and "\<And>Q.  \<turnstile>\<^sub>t \<lbrace>wp_conc cs2 t Q\<rbrace> cs2 \<lbrace>Q\<rbrace>"
+  hence "\<And>Q.  \<turnstile> \<lbrace>wp_conc cs1 Q\<rbrace> cs1 \<lbrace>Q\<rbrace>" and "\<And>Q.  \<turnstile> \<lbrace>wp_conc cs2 Q\<rbrace> cs2 \<lbrace>Q\<rbrace>"
     using Bpar(1-2) by auto
   then show ?case
     unfolding wp_conc_parallel[OF Bpar(3-4)]
@@ -2209,23 +2268,295 @@ next
   hence "nonneg_delay ss"
     by auto
   then show ?case  unfolding wp_conc_single
-    by (auto intro!: Single simp add: hoare_complete seq_hoare_valid2_def wp_def)
+    by (auto intro!: Single simp add: hoare_sound_complete seq_hoare_valid2_def wp_def)
 qed
 
 lemma conc_hoare_complete:
   assumes "conc_stmt_wf cs" and "nonneg_delay_conc cs"
-  assumes "\<Turnstile>\<^sub>t \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>" shows "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>"
+  assumes "\<Turnstile> \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>" shows "\<turnstile> \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>"
 proof (rule strengthen_pre_conc_hoare)
-  show " \<forall>w. P w \<longrightarrow> wp_conc cs t Q w" using assms
-    by (auto simp add: conc_hoare_valid_def wp_conc_def)
+  show " \<forall>tw. P tw \<longrightarrow> wp_conc cs Q tw" using assms
+    by (metis conc_hoare_valid_def wp_conc_def)
 next
-  show "\<turnstile>\<^sub>t \<lbrace>wp_conc cs t Q\<rbrace> cs \<lbrace>Q\<rbrace>"
+  show "\<turnstile> \<lbrace>wp_conc cs Q\<rbrace> cs \<lbrace>Q\<rbrace>"
     using assms by (intro wp_conc_is_pre)
 qed
 
 corollary conc_hoare_sound_and_complete:
   assumes "conc_stmt_wf cs" and "nonneg_delay_conc cs"
-  shows "\<turnstile>\<^sub>t \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace> \<longleftrightarrow> \<Turnstile>\<^sub>t \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>"
+  shows "\<turnstile> \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace> \<longleftrightarrow> \<Turnstile> \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>"
   using conc_hoare_complete soundness_conc_hoare assms by auto
+
+lemma push_rem_curr_trans_purge:
+  "rem_curr_trans t (purge dly \<tau> t sig (\<sigma> sig)) = purge dly (rem_curr_trans t \<tau>) t sig (\<sigma> sig)"
+  unfolding rem_curr_trans_def
+proof (rule poly_mapping_eqI)
+  fix k
+  have "k < t \<or> k = t \<or> t < k"
+    by auto
+  moreover
+  { assume "k < t"
+    hence "lookup (Poly_Mapping.update t 0 (purge dly \<tau> t sig (\<sigma> sig))) k = lookup (purge dly \<tau> t sig (\<sigma> sig)) k"
+      by transfer' auto
+    also have "... = lookup \<tau> k"
+      using purge_before_now_unchanged `k < t` by (metis less_imp_le_nat)
+    also have "... = lookup (rem_curr_trans t \<tau>) k"
+      using `k < t` unfolding rem_curr_trans_def by transfer' auto
+    also have "... = lookup (purge dly (rem_curr_trans t \<tau>) t sig (\<sigma> sig)) k"
+      using purge_before_now_unchanged `k < t` by (metis less_imp_le_nat)
+    finally have "get_trans (Poly_Mapping.update t 0 (purge dly \<tau> t sig (\<sigma> sig))) k =
+                  get_trans (purge dly (Poly_Mapping.update t 0 \<tau>) t sig (\<sigma> sig)) k"
+      unfolding rem_curr_trans_def by auto }
+  moreover
+  { assume "k = t"
+    hence "get_trans (Poly_Mapping.update t 0 (purge dly \<tau> t sig (\<sigma> sig))) k = 0"
+      by transfer' auto
+    have "get_trans (purge dly (Poly_Mapping.update t 0 \<tau>) t sig (\<sigma> sig)) k =
+          lookup (Poly_Mapping.update t 0 \<tau>) k"
+      using purge_before_now_unchanged `k = t` by (metis order_refl)
+    also have "... = 0"
+      using `k = t` by transfer' auto
+    finally have "get_trans (purge dly (Poly_Mapping.update t 0 \<tau>) t sig (\<sigma> sig)) k = 0"
+      by auto
+    hence "get_trans (Poly_Mapping.update t 0 (purge dly \<tau> t sig (\<sigma> sig))) k =
+           get_trans (purge dly (Poly_Mapping.update t 0 \<tau>) t sig (\<sigma> sig)) k"
+      by (simp add: \<open>get_trans (Poly_Mapping.update t 0 (purge dly \<tau> t sig (\<sigma> sig))) k = 0\<close>) }
+  moreover
+  { assume "t < k"
+    hence "get_trans (Poly_Mapping.update t 0 (purge dly \<tau> t sig (\<sigma> sig))) k =
+           lookup (purge dly \<tau> t sig (\<sigma> sig)) k"
+      by transfer' auto
+    also have "... = lookup (purge dly (Poly_Mapping.update t 0 \<tau>) t sig (\<sigma> sig)) k"
+      using `t < k`
+    proof (induction dly arbitrary: \<tau>)
+      case 0
+      then show ?case by transfer' auto
+    next
+      case (Suc dly)
+      hence "\<And>tau. lookup (purge dly tau t sig (\<sigma> sig)) k = lookup (purge dly (Poly_Mapping.update t 0 tau) t sig (\<sigma> sig)) k"
+        by auto
+      then show ?case
+        using `t < k`
+      proof transfer
+        fix dly :: nat
+        fix \<tau> :: "nat \<Rightarrow> 'a \<Rightarrow> bool option"
+        fix t k sig
+        fix \<sigma> :: "'a state"
+        assume *: "\<And>tau. finite {x. tau x \<noteq> 0} \<Longrightarrow> purge_raw dly tau t sig (\<sigma> sig) k = purge_raw dly (tau(t := 0)) t sig (\<sigma> sig) k"
+        assume "t < k"
+        assume "finite {x. \<tau> x \<noteq> 0}"
+        hence **: "purge_raw dly \<tau> t sig (\<sigma> sig) k = purge_raw dly (\<tau>(t := 0)) t sig (\<sigma> sig) k"
+          using * by auto
+        have fin: "finite {x. (\<tau> (t + Suc dly := (\<tau> (t + Suc dly))(sig := None))) x \<noteq> 0}"
+          using `finite {x. \<tau> x \<noteq> 0}` unfolding sym[OF eventually_cofinite]
+          using upd_eventually_cofinite by metis
+        hence ***: "purge_raw dly (\<tau> (t + Suc dly := (\<tau> (t + Suc dly))(sig := None))) t sig (\<sigma> sig) k =
+                    purge_raw dly ((\<tau> (t + Suc dly := (\<tau> (t + Suc dly))(sig := None))) (t:= 0)) t sig (\<sigma> sig) k"
+          using * by auto
+        have "Suc (t + dly) \<noteq> t"
+          by auto
+        have "\<tau> (t + Suc dly) sig = Some (\<sigma> sig) \<or> \<tau> (t + Suc dly) sig \<noteq> Some (\<sigma> sig)"
+          by auto
+        moreover
+        { assume "\<tau> (t + Suc dly) sig = Some (\<sigma> sig)"
+          hence "purge_raw (Suc dly) \<tau> t sig (\<sigma> sig) k = purge_raw dly \<tau> t sig (\<sigma> sig) k"
+            by auto
+          also have "... = purge_raw dly (\<tau>(t := 0)) t sig (\<sigma> sig) k"
+            using ** by auto
+          also have " ... = purge_raw (Suc dly) (\<tau>(t := 0)) t sig (\<sigma> sig) k"
+            using `\<tau> (t + Suc dly) sig = Some (\<sigma> sig)` by auto
+          finally have " purge_raw (Suc dly) \<tau> t sig (\<sigma> sig) k =
+                                                    purge_raw (Suc dly) (\<tau>(t := 0)) t sig (\<sigma> sig) k"
+            by auto }
+        moreover
+        { assume "\<tau> (t + Suc dly) sig \<noteq> Some (\<sigma> sig)"
+          hence "purge_raw (Suc dly) \<tau> t sig (\<sigma> sig) k = purge_raw dly (\<tau> (t + Suc dly := (\<tau> (t + Suc dly))(sig := None))) t sig (\<sigma> sig) k"
+            by auto
+          also have "... = purge_raw dly ((\<tau> (t + Suc dly := (\<tau> (t + Suc dly))(sig := None))) (t:= 0)) t sig (\<sigma> sig) k"
+            using *** by auto
+          also have "... = purge_raw (Suc dly) (\<tau>(t := 0)) t sig (\<sigma> sig) k"
+            using `\<tau> (t + Suc dly) sig \<noteq> Some (\<sigma> sig)` fun_upd_twist[OF `Suc (t + dly) \<noteq> t`, of "\<tau>"]
+            by  auto
+          finally have "purge_raw (Suc dly) \<tau> t sig (\<sigma> sig) k =
+                                                    purge_raw (Suc dly) (\<tau>(t := 0)) t sig (\<sigma> sig) k"
+            by auto }
+        ultimately show "purge_raw (Suc dly) \<tau> t sig (\<sigma> sig) k =
+                                                    purge_raw (Suc dly) (\<tau>(t := 0)) t sig (\<sigma> sig) k"
+          by blast
+      qed
+    qed
+    finally have "get_trans (Poly_Mapping.update t 0 (purge dly \<tau> t sig (\<sigma> sig))) k =
+           get_trans (purge dly (Poly_Mapping.update t 0 \<tau>) t sig (\<sigma> sig)) k"
+      by auto }
+  ultimately show "get_trans (Poly_Mapping.update t 0 (purge dly \<tau> t sig (\<sigma> sig))) k =
+           get_trans (purge dly (Poly_Mapping.update t 0 \<tau>) t sig (\<sigma> sig)) k"
+    by auto
+qed
+
+lemma b_seq_exec_mono_wrt_rem_curr_trans:
+  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  assumes "nonneg_delay ss"
+  shows "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>s (rem_curr_trans t \<tau>')"
+  using assms
+proof (induction ss arbitrary: \<tau> \<tau>')
+  case (Bcomp ss1 ss2)
+  then show ?case by auto
+next
+  case (Bguarded x1 ss1 ss2)
+  then show ?case  by auto
+next
+  case (Bassign_trans sig e dly)
+  hence "\<tau>' = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau> (t + dly)" and "0 < dly"
+    by auto
+  hence "rem_curr_trans t \<tau>' = rem_curr_trans t (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau> (t + dly))"
+    by auto
+  also have "... = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) (rem_curr_trans t \<tau>) (t + dly)"
+    unfolding rem_curr_trans_def using `0 < dly` by (transfer', auto simp add: trans_post_raw_def)
+  finally show ?case
+    by auto
+next
+  case (Bassign_inert sig e dly)
+  hence \<tau>'_def: "\<tau>' = inr_post sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly" and "0 < dly"
+    by auto
+  have "is_stable dly \<tau> t sig (\<sigma> sig) \<or> \<not> is_stable dly \<tau> t sig (\<sigma> sig)"
+    by auto
+  moreover
+  { assume "is_stable dly \<tau> t sig (\<sigma> sig)"
+    hence *: "is_stable dly (rem_curr_trans t \<tau>) t sig (\<sigma> sig)"
+      unfolding is_stable_correct unfolding rem_curr_trans_def
+      by transfer' auto
+    have "\<tau>' = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau> (t + dly)"
+      using \<tau>'_def `is_stable dly \<tau> t sig (\<sigma> sig)` unfolding inr_post_def by auto
+    hence "rem_curr_trans t \<tau>' = rem_curr_trans t (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) \<tau> (t + dly))"
+      by auto
+    also have "... = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) (rem_curr_trans t \<tau>) (t + dly)"
+      unfolding rem_curr_trans_def using `0 < dly` by (transfer', auto simp add: trans_post_raw_def)
+    also have "... = inr_post sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (rem_curr_trans t \<tau>) t dly"
+      using * unfolding inr_post_def by auto
+    finally have ?case
+      by auto }
+  moreover
+  { assume "\<not> is_stable dly \<tau> t sig (\<sigma> sig)"
+    hence *: "\<not> is_stable dly (rem_curr_trans t \<tau>) t sig (\<sigma> sig)"
+      unfolding is_stable_correct unfolding rem_curr_trans_def
+      by transfer' auto
+    have "\<tau>' = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) (purge dly \<tau> t sig (\<sigma> sig)) (t + dly)"
+      using `\<not> is_stable dly \<tau> t sig (\<sigma> sig)` \<tau>'_def unfolding inr_post_def by auto
+    hence "rem_curr_trans t \<tau>' = rem_curr_trans t (trans_post sig (beval t \<sigma> \<gamma> \<theta> e) (purge dly \<tau> t sig (\<sigma> sig)) (t + dly))"
+      by auto
+    also have "... = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) (rem_curr_trans t (purge dly \<tau> t sig (\<sigma> sig))) (t + dly)"
+      unfolding rem_curr_trans_def using `0 < dly` by (transfer', auto simp add: trans_post_raw_def)
+    also have "... = trans_post sig (beval t \<sigma> \<gamma> \<theta> e) (purge dly (rem_curr_trans t \<tau>) t sig (\<sigma> sig)) (t + dly)"
+      unfolding push_rem_curr_trans_purge by auto
+    also have "... = inr_post sig (beval t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (rem_curr_trans t \<tau>) t dly"
+      using * unfolding inr_post_def by auto
+    finally have ?case
+      by auto }
+  ultimately show ?case
+    by auto
+next
+  case Bnull
+  then show ?case by auto
+qed
+
+text \<open>The following lemma is based on the assumption (premise) that @{term "conc_stmt_wf cs"}. This
+is because we want to employ the theorem @{thm "b_conc_exec_sequential"} where executing two parallel
+processes can be seen as executing two sequential processes. This is, of course, relies on the
+assumption that both processes do not modify the same signals.
+
+A more fundamental question arises: can we prove this theorem without this well-formedness premise
+and this theorem? We certainly would need to reason about @{term "clean_zip"} as this is the
+primitive operation for handling parallel execution.\<close>
+
+lemma b_conc_exec_mono_wrt_rem_curr_trans:
+  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+  assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs"
+  shows "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c (rem_curr_trans t \<tau>')"
+  using assms
+proof (induction cs arbitrary: \<tau> \<tau>')
+  case (Bpar cs1 cs2)
+  define \<tau>1 where "\<tau>1 = b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+  hence **: "t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs1 , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c rem_curr_trans t \<tau>1"
+    using Bpar unfolding conc_stmt_wf_def by auto
+  have *: "\<tau>' = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1"
+    using b_conc_exec_sequential[OF `conc_stmt_wf (cs1 || cs2)`] Bpar(3) \<tau>1_def by auto
+  with Bpar have "t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs2 , rem_curr_trans t \<tau>1> \<longrightarrow>\<^sub>c rem_curr_trans t \<tau>'"
+    unfolding conc_stmt_wf_def by auto
+  then show ?case
+    using * Bpar(3)  by (metis Bpar.prems(3) ** b_conc_exec_sequential)
+next
+  case (Bsingle sl ss)
+  hence "nonneg_delay ss"
+    by auto
+  have "disjnt sl \<gamma> \<or> \<not> disjnt sl \<gamma>"
+    by auto
+  moreover
+  { assume "disjnt sl \<gamma>"
+    hence ?case
+      using Bsingle.prems(1) by auto }
+  moreover
+  { assume "\<not> disjnt sl \<gamma>"
+    hence "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+      using Bsingle by auto
+    hence "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>s rem_curr_trans t \<tau>'"
+      using b_seq_exec_mono_wrt_rem_curr_trans[OF _ `nonneg_delay ss`] by auto
+    hence ?case
+      using `\<not> disjnt sl \<gamma>` by auto }
+  ultimately show ?case by auto
+qed
+
+lemma worldline_rem_curr_trans_eq:
+  assumes "\<And>s. s \<in> dom (get_trans \<tau> t) \<Longrightarrow> \<sigma> s = the (get_trans \<tau> t s)"
+  assumes "\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0"
+  shows "worldline2 t \<sigma> \<theta> \<tau> = worldline2 t \<sigma> \<theta> (rem_curr_trans t \<tau>)"
+  using assms signal_of2_rem_curr_trans_at_t[OF assms]
+  by (transfer', auto simp add: worldline_def)
+
+lemma worldline2_constructible_rem_curr_trans:
+  fixes tw :: "nat \<times> 'signal worldline2"
+  assumes "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)"
+  defines "\<tau>' \<equiv> rem_curr_trans t \<tau>"
+  shows "tw = worldline2 t \<sigma> \<theta> \<tau>' \<and> context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
+proof -
+  have "fst tw = t" and "tw = worldline2 t \<sigma> \<theta> \<tau> \<and> context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+    using worldline2_constructible[OF assms(1)] by auto
+  hence "\<And>s. s \<in> dom (get_trans \<tau> t) \<Longrightarrow> \<sigma> s = the (get_trans \<tau> t s)"
+    and "\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0"
+    and " tw = worldline2 t \<sigma> \<theta> \<tau>"
+    and " context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+    unfolding context_invariant_def by auto
+  hence "tw = worldline2 t \<sigma> \<theta> \<tau>'"
+    unfolding \<tau>'_def using worldline_rem_curr_trans_eq by  metis
+  moreover have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
+    unfolding \<tau>'_def using context_invariant_rem_curr_trans[OF `context_invariant t \<sigma> \<gamma> \<theta> \<tau>`]
+    by auto
+  ultimately show ?thesis
+    by auto
+qed
+
+definition world_conc_exec2 :: "nat \<times> 'signal worldline2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> nat \<times> 'signal worldline2"
+  where
+  "world_conc_exec2 tw c = (let (t, \<sigma>, \<gamma>, \<theta>, \<tau>) = destruct_worldline tw;
+                                             \<tau>' = b_conc_exec t \<sigma> \<gamma> \<theta> c (rem_curr_trans t \<tau>)
+                             in worldline2 t \<sigma> \<theta> \<tau>')"
+
+lemma world_conc_exec_rem_curr_trans_eq:
+  assumes "nonneg_delay_conc c" and "conc_stmt_wf c"
+  shows "world_conc_exec2 tw c = world_conc_exec tw c"
+proof -
+  let ?w = "snd tw"
+  obtain t \<sigma> \<gamma> \<theta> \<tau> \<tau>' where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)" and  ex: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <c, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    and ci: "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+    using destruct_worldline_exist worldline2_constructible by (metis)
+  hence ex2: "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <c, rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c (rem_curr_trans t \<tau>')"
+    using b_conc_exec_mono_wrt_rem_curr_trans[OF _ assms] by auto
+  moreover have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
+    using b_conc_exec_preserves_context_invariant[OF ci ex assms(1)] by auto
+  ultimately have "worldline2 t \<sigma> \<theta> \<tau>' = worldline2 t \<sigma> \<theta> (rem_curr_trans t \<tau>')"
+    using worldline_rem_curr_trans_eq unfolding context_invariant_def by auto
+  thus ?thesis
+    unfolding world_conc_exec2_def world_conc_exec_def Let_def using des ex ex2
+    by auto
+qed
 
 end
