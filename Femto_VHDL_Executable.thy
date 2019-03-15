@@ -103,16 +103,26 @@ lemma [code]:
 
 value "lookup (purge 1 (0 :: sig transaction) 1 C True) 1 C"
 
+term "post_necessary_raw"
+
+fun post_necessary_code :: "nat \<Rightarrow> (nat, 'a \<rightharpoonup> bool) fmap \<Rightarrow> nat \<Rightarrow> 'a \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> bool" where
+  "post_necessary_code 0 fm t s val def \<longleftrightarrow> (case lookup0 fm t s of None \<Rightarrow> val \<noteq> def | Some v \<Rightarrow> v \<noteq> val)"
+| "post_necessary_code (Suc n) fm t s val def \<longleftrightarrow> (case lookup0 fm (t + Suc n) s of None \<Rightarrow> post_necessary_code n fm t s val def | Some v \<Rightarrow> v \<noteq> val)"
+
+lemma post_necessary_raw_code:
+  "post_necessary_raw dly (lookup0 xs) t sig v def =  post_necessary_code dly xs t sig v def"
+  by (induction dly) (auto split: option.split)
+
 lemma [code]:
-  "trans_post sig v (Pm_fmap xs) t = (let
-                                          current = lookup0 xs t;
-                                          chopped = fmmap_keys (\<lambda>t'. if t < t' then map_drop sig else id);
-                                          updated = fmupd t (current(sig \<mapsto> v)) xs
-                                      in
-                                          Pm_fmap (chopped updated))"
-  by (transfer', unfold Let_def trans_post_raw_def)
-     (rule ext, auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def
-                        split: option.splits)
+  "trans_post sig v def (Pm_fmap xs) t dly = (let
+                                                current = lookup0 xs (t + dly);
+                                                chopped1 = fmmap_keys (\<lambda>t'. if t + dly < t' then map_drop sig else id);
+                                                chopped2 = fmmap_keys (\<lambda>t'. if t + dly \<le> t' then map_drop sig else id);
+                                                updated = fmupd (t + dly) (current(sig \<mapsto> v)) xs
+                                              in
+                                                if post_necessary_code (dly-1) xs t sig v def then Pm_fmap (chopped1 updated) else Pm_fmap (chopped2 xs))"
+  by (transfer', unfold Let_def post_necessary_raw_code trans_post_raw_def preempt_nonstrict_def)
+     (rule ext, auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def split: option.splits)
 
 value [code] "beval 2 def_state {} test_beh (Bsig_delayed A 1)"
 value [code] "beval 2 def_state {} test_beh (Bsig_delayed B 1)"
