@@ -195,7 +195,10 @@ signals which have different values from those at the previous time correspondin
 reconstructing the event at every time point.\<close>
 
 definition difference_raw :: "'signal worldline \<Rightarrow> nat \<Rightarrow> 'signal \<rightharpoonup> val" where
-  "difference_raw w t = (\<lambda>s. if w s t \<noteq> w s (t - 1) then Some (w s t) else None)"
+  "difference_raw w t = (if t = 0 then 
+                            (\<lambda>s. if w s t then Some True else None) 
+                          else
+                            (\<lambda>s. if w s t \<noteq> w s (t - 1) then Some (w s t) else None))"
 
 (*
   - variable t represents current time;
@@ -215,6 +218,10 @@ proof -
     by blast
 qed
 
+lift_definition derivative_hist_raw :: "'signal worldline \<Rightarrow> nat \<Rightarrow> 'signal transaction"
+  is "\<lambda>w t n. if t \<le> n then Map.empty else difference_raw w n"
+  unfolding sym[OF eventually_cofinite] MOST_nat by (metis ext le_eq_less_or_eq zero_map)
+
 text \<open> The function @{term "derivative_raw"} is a function to obtain the transaction
 @{term "\<tau> :: 'signal transaction"} in the operational semantics @{term "b_seq_exec"}. Note that to
 use @{typ "'signal worldline"} as a context to define the axiomatic semantics of VHDL, it is always
@@ -233,11 +240,11 @@ this definition further as will be explained in @{theory_text "VHDL_Hoare_Comple
 \<close>
 
 lemma derivative_raw_zero:
-  "d < t \<Longrightarrow> derivative_raw w d t = 0"
+  "d \<le> t \<Longrightarrow> derivative_raw w d t = 0"
 proof (transfer, rule)
   fix d t n :: nat
   fix w :: "'a worldline"
-  assume "d < t"
+  assume "d \<le> t"
   have "d < n \<or> n \<le> d" by auto
   moreover
   { assume "d < n"
@@ -245,7 +252,7 @@ proof (transfer, rule)
       unfolding zero_fun_def by (simp add: zero_option_def) }
   moreover
   { assume "n \<le> d"
-    hence "n < t" using `d < t` by auto
+    hence "n \<le> t" using `d \<le> t` by auto
     hence "(if n \<le> t \<or> d < n then Map.empty else difference_raw w n) = 0"
       unfolding zero_fun_def by (simp add: zero_option_def) }
   ultimately show "(if n \<le> t \<or> d < n then Map.empty else difference_raw w n) = 0"
@@ -256,7 +263,7 @@ lemma
   "n < t \<Longrightarrow> lookup (derivative_raw w d t) n = 0"
   by (transfer', auto simp add:zero_fun_def zero_option_def)  
 
-lemma
+lemma lookup_derivative_in_between:
   "t < n \<Longrightarrow> n \<le> d \<Longrightarrow> lookup (derivative_raw w d t) n = difference_raw w n"
   by transfer' auto
 
@@ -273,6 +280,64 @@ proof -
   from lookup_some_signal_of2[OF this] show ?thesis by auto
 qed
 
+lemma signal_of2_derivative_hist_raw:
+  assumes "t' < t"
+  shows "signal_of2 False (derivative_hist_raw w t) s' t' = w s' t'"
+  using assms
+proof (induction t')
+  case 0
+  have "lookup (derivative_hist_raw w t) 0 = difference_raw w 0"
+    using 0 apply transfer' by auto
+  have " w s' 0 \<or> \<not> w s' 0"
+    by auto
+  moreover
+  { assume " w s' 0"
+    hence "difference_raw w 0 s' = Some True"
+      unfolding difference_raw_def by auto
+    hence "lookup (derivative_hist_raw w t) 0 s' = Some True"
+      using `lookup (derivative_hist_raw w t) 0 = difference_raw w 0` by auto
+    hence ?case
+      using lookup_some_signal_of2' \<open>w s' 0\<close> by fastforce }
+  moreover
+  { assume "\<not> w s' 0"
+    hence "difference_raw w 0 s' = None"
+      unfolding difference_raw_def by auto
+    hence "lookup (derivative_hist_raw w t) 0 s' = None"
+      using `lookup (derivative_hist_raw w t) 0 = difference_raw w 0` by auto
+    hence ?case
+      using signal_of2_zero  by (metis \<open>\<not> w s' 0\<close> zero_option_def) }
+  ultimately show ?case by auto
+next
+  case (Suc t')
+  have "w s' (Suc t') = w s' t' \<or> w s' (Suc t') \<noteq> w s' t'"
+    by auto
+  moreover
+  { assume "w s' (Suc t') \<noteq> w s' t'"
+    have "lookup (derivative_hist_raw w t) (Suc t') = difference_raw w (Suc t')"
+      using Suc apply transfer' by auto
+    moreover have "difference_raw w (Suc t') s' = Some (w s' (Suc t'))"
+      using Suc `w s' (Suc t') \<noteq> w s' t'` unfolding difference_raw_def by auto
+    ultimately have "lookup (derivative_hist_raw w t) (Suc t') s' = Some (w s' (Suc t'))"
+      by auto
+    hence ?case
+      using lookup_some_signal_of2' by force }
+  moreover 
+  { assume " w s' (Suc t') = w s' t'"
+    have "lookup (derivative_hist_raw w t) (Suc t') = difference_raw w (Suc t')"
+      using Suc apply transfer' by auto
+    moreover have "difference_raw w (Suc t') s' = None"
+      using Suc `w s' (Suc t') = w s' t'` unfolding difference_raw_def by auto
+    ultimately have "lookup (derivative_hist_raw w t) (Suc t') s' = None"
+      by auto
+    hence "signal_of2 False (derivative_hist_raw w t) s' (Suc t') =  signal_of2 False (derivative_hist_raw w t) s' t'"
+      using signal_of2_less_sig  by (metis diff_Suc_1 zero_option_def)  
+    also have "... = w s' t'"
+      using Suc by auto
+    finally have ?case
+      using `w s' (Suc t') = w s' t'` by auto }
+  ultimately show ?case by auto
+qed
+
 lemma signal_of2_derivative_raw_t:
   assumes "t \<le> d"
   assumes "\<sigma> s' = w s' t"
@@ -286,7 +351,7 @@ proof -
     using * apply (cases "t = 0") by (meson neq0_conv signal_of2_less_ind)+
   also have "... = \<sigma> s'"
     by(intro signal_of2_zero) (transfer', auto simp add: zero_option_def)
-  finally show ?thesis 
+  finally show ?thesis     
     using assms(2) by auto
 qed
 
@@ -338,7 +403,7 @@ next
       finally have *: "lookup (derivative_raw w d t) (Suc t') = difference_raw w d"
         by auto
       have "w s' d = w s' (d - 1) \<and> difference_raw w d s' = None \<or> w s' d \<noteq> w s' (d - 1) \<and> difference_raw w d s' = Some (w s' d)"
-        unfolding difference_raw_def by auto
+        unfolding difference_raw_def  using \<open>Suc t' = d\<close> by auto
       moreover
       { assume "w s' d = w s' (d - 1) \<and> difference_raw w d s' = None"
         hence "lookup (derivative_raw w d t) (Suc t') s' = None" and "w s' d = w s' (d - 1)"
@@ -395,7 +460,7 @@ next
 qed
 
 lemma signal_of2_derivative_raw2:
-  assumes "t \<le> d" and "d < t'"
+  assumes "t \<le> d" and "d \<le> t'"
   assumes "w s' t = \<sigma> s'"
   shows "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = w s' d"
 proof -
@@ -403,7 +468,7 @@ proof -
     by transfer' (auto simp add: zero_option_def)
   from signal_of2_less_ind'[OF this]
   have "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = signal_of2 (\<sigma> s') (derivative_raw w d t) s' d"
-    using assms(2) by blast
+    using assms(2) using le_eq_less_or_eq by auto
   also have "... = w s' d"
     using signal_of2_derivative_raw[OF assms(1), of "d"] assms(3) by (metis (no_types) le_refl)
   finally show ?thesis by auto
@@ -414,14 +479,15 @@ lemma signal_of2_derivative_raw':
   assumes "\<And>n s. d < n \<Longrightarrow> w s n = w s d"
   assumes "w s' t = \<sigma> s'"
   shows "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = w s' t'"
-  by (metis (full_types) assms not_less signal_of2_derivative_raw signal_of2_derivative_raw2)
+  using assms
+  by (metis leI le_eq_less_or_eq signal_of2_derivative_raw signal_of2_derivative_raw2)
 
 lemma signal_of2_derivative_raw_degree_lt_now:
   assumes "d < t"
   shows "signal_of2 (\<sigma> s') (derivative_raw w d t) s' t' = \<sigma> s'"
 proof -
   have "derivative_raw w d t = 0"
-    using derivative_raw_zero[OF assms] by auto
+    using derivative_raw_zero assms by (simp add: derivative_raw_zero)
   moreover have "signal_of2 (\<sigma> s') 0 s' t' = \<sigma> s'"
     using signal_of2_empty by metis
   ultimately show ?thesis by auto
@@ -434,7 +500,7 @@ proof -
   have *: "\<And>k. k < t \<Longrightarrow> lookup (derivative_raw w d t) k = Map.empty"
     by transfer' auto
   hence "\<And>n. 0 < n \<Longrightarrow> n \<le> t' \<Longrightarrow> get_trans (derivative_raw w d t) n = 0"
-    using `t' < t` by (metis (mono_tags) derivative_raw.rep_eq derivative_raw_zero lookup_zero not_le)
+    using `t' < t`  by (metis aux derivative_raw.rep_eq derivative_raw_zero le_less le_less_trans order_refl)
   have "signal_of2 def (derivative_raw w d t) s' t' = signal_of2 def (derivative_raw w d t) s' 0"
     by (metis \<open>\<And>n. \<lbrakk>0 < n; n \<le> t'\<rbrakk> \<Longrightarrow> get_trans (derivative_raw w d t) n = 0\<close> not_gr_zero signal_of2_less_ind)
   also have "... = def"
@@ -444,7 +510,7 @@ proof -
 qed
 
 lemma exists_quiesce_worldline:
-  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  assumes "context_invariant_weaker t \<sigma> \<theta> \<tau>"
   shows "\<exists>n. \<forall>k > n. \<forall>s. worldline t \<sigma> \<theta> \<tau> s k = worldline t \<sigma> \<theta> \<tau> s n"
 proof (cases "\<tau> = 0")
   case True
@@ -476,6 +542,37 @@ next
       by auto }
   then show ?thesis
     by (meson worldline_def)
+qed
+
+lemma empty_transaction_deg_lt_t:
+  fixes \<theta> \<sigma> t
+  assumes "\<tau> = 0"
+  assumes "context_invariant_weaker t \<sigma> \<theta> \<tau>"
+  defines "w \<equiv> worldline t \<sigma> \<theta> \<tau>"
+  defines "d \<equiv> (LEAST n. \<forall>k>n. \<forall>s. w s k = w s n)"
+  shows "d \<le> t"
+proof -
+  have "w = (\<lambda>s' t'. if t' < t then signal_of2 False \<theta> s' t' else signal_of2 (\<sigma> s') \<tau> s' t')"
+    unfolding w_def worldline_def by auto
+  also have "... = (\<lambda>s' t'. if t' < t then signal_of2 False \<theta> s' t' else \<sigma> s')"
+    unfolding `\<tau> = 0` signal_of2_empty by auto
+  finally have w_def': "w = (\<lambda>s' t'. if t' < t then signal_of2 False \<theta> s' t' else \<sigma> s')"
+    by auto
+  show ?thesis
+  proof (rule ccontr)
+    assume "\<not> d \<le> t" hence "t < d" by auto
+    have *: "\<forall>k>d. \<forall>s. w s k = w s d"
+      using LeastI_ex exists_quiesce_worldline[OF assms(2)] unfolding d_def w_def by smt
+    have "\<not> (\<forall>k > t. \<forall>s. w s k = w s t)"
+      using not_less_Least `t < d` unfolding d_def  by blast
+    hence "\<exists>k > t. \<exists>s. w s k \<noteq> w s t"
+      by blast
+    then obtain k s where "k > t" and "w s k \<noteq> w s t"
+      by auto
+    moreover have "w s k = w s t"
+      unfolding w_def' using `k > t` by auto
+    ultimately show False by auto
+  qed
 qed
 
 definition
@@ -925,8 +1022,8 @@ proof (rule ext, rule ext)
       also have "... = worldline t \<sigma> \<theta> \<tau>' s' t'"
       proof -
         have "\<And>n. lookup (to_transaction2 \<tau> s') n = lookup (to_transaction2 \<tau>' s') n"
-          using `s' \<noteq> sig` unfolding \<tau>'_def inr_post_def apply transfer' unfolding to_trans_raw2_def 
-          trans_post_raw_def  preempt_nonstrict_def by (simp add: purge_raw_does_not_affect_other_sig)
+          using `s' \<noteq> sig` unfolding \<tau>'_def inr_post_def 
+          by (transfer', simp add: override_on_def to_trans_raw2_def  trans_post_raw_def  preempt_nonstrict_def)
         hence "signal_of2 (\<sigma> s') \<tau> s' t' = signal_of2 (\<sigma> s') \<tau>'  s' t'"
           using signal_of2_lookup_sig_same  by metis
         thus ?thesis

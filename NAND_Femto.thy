@@ -1,5 +1,5 @@
 (*
- * Copyright 2018, NTU
+ * Copyright 2018-2019, NTU
  *
  * This software may be distributed and modified according to the terms of
  * the BSD 2-Clause license. Note that NO WARRANTY is provided.
@@ -57,8 +57,7 @@ theorem
   using assms
 proof (cases)
   case (1 \<tau>')
-  have base: "0 , def_state , {A} , 0 \<turnstile> <nand , rem_curr_trans 0 empty_trans> \<longrightarrow>\<^sub>c
-                                                                         (Poly_Mapping.update 1 [C \<mapsto> True] 0)"
+  have base: "0 , def_state , {A} , 0 \<turnstile> <nand , empty_trans> \<longrightarrow>\<^sub>c (Poly_Mapping.update 1 [C \<mapsto> True] 0)"
     unfolding nand_def by (auto simp add: is_stable_empty_trans inr_post_def  trans_post_empty_trans_upd)
   hence \<tau>'_def: "\<tau>' = (Poly_Mapping.update 1 [C \<mapsto> True] 0)"
     using 1 by auto
@@ -90,15 +89,35 @@ proof (cases)
     by (metis \<tau>'_def dom_eq_singleton_conv fun_upd_same get_trans_trans_upd_cancel next_state_def nt
               o_apply option.sel override_on_emptyset override_on_insert')
   have ne: "next_event 0 \<tau>' def_state = {C}"
-    unfolding nt next_event_def
-    by (smt "1"(3) Collect_cong base dom_empty dom_fun_upd fun_upd_comp fun_upd_idem fun_upd_same
-            get_trans_trans_upd_cancel insert_absorb insert_iff insert_not_empty map_upd_nonempty
-            option.sel singleton_conv)
+  proof -
+    {
+      fix sig
+      assume "sig \<in> dom (lookup \<tau>' 1)"
+      hence "sig = C"
+        unfolding \<tau>'_def by transfer' auto 
+      hence "(the \<circ> lookup \<tau>' 1) sig \<noteq> False"
+        unfolding \<tau>'_def by transfer' auto 
+      with `sig = C` have "sig = C" and "(the \<circ> lookup \<tau>' 1) sig \<noteq> False" 
+        by auto }
+  hence "\<And>sig. sig \<in> dom (lookup \<tau>' 1) \<Longrightarrow> (the o lookup \<tau>' 1) sig \<noteq> False \<Longrightarrow> sig = C"
+    by auto
+  hence "next_event 0 \<tau>' def_state \<subseteq> {C}"
+    unfolding next_event_def Let_def nt by auto
+  have "C \<in> dom (get_trans \<tau>' 1)"
+    unfolding \<tau>'_def by (simp add: get_trans_trans_upd_cancel)
+  moreover have "(the \<circ> get_trans \<tau>' 1) C \<noteq> False"
+    unfolding \<tau>'_def  using \<open>\<And>sig. sig \<in> dom (get_trans \<tau>' 1) \<Longrightarrow> (the \<circ> get_trans \<tau>' 1) sig \<noteq> False\<close> 
+    \<tau>'_def calculation by blast
+  ultimately have "{C} \<subseteq> next_event 0 \<tau>' def_state"
+    unfolding next_event_def Let_def nt by auto
+  with `next_event 0 \<tau>' def_state \<subseteq> {C}` show ?thesis
+    by auto
+qed
   have nb: "add_to_beh def_state 0 0 1 =
        Poly_Mapping.update 0 (Some o def_state) 0" (is "_ = ?beh'")
     unfolding add_to_beh_def by auto
   define beh2 :: "(nat \<Rightarrow>\<^sub>0 sig \<Rightarrow> bool option)" where "beh2 = ?beh'"
-  hence snd_cyc: "10, 1, def_state (C := True), {C} , beh2 \<turnstile> <nand , \<tau>'> \<leadsto> beh"
+  hence snd_cyc: "10, 1, def_state (C := True), {C} , beh2 \<turnstile> <nand , (rem_curr_trans 1 \<tau>')> \<leadsto> beh"
     using 1 nt ns ne nb by metis
   thus "get_trans beh 1 C = Some True"
   proof (cases)
@@ -107,18 +126,18 @@ proof (cases)
       unfolding nand_def
       using 1(3) unfolding nand_def  apply (auto simp add: \<tau>'_def rem_curr_trans_def)
       by (transfer', auto)
-    have nt2: "next_time 1 0 = 1"
+    have nt2: "next_time 1 0 = 2"
       by auto
     moreover have "next_state 1 \<tau>'' (def_state(C := True)) = def_state (C := True)"
       unfolding next_state_def Let_def t''_def nt2 by auto
     moreover have "next_event 1 \<tau>'' (def_state(C := True)) = {}"
       unfolding next_event_def Let_def t''_def nt2 by (auto simp add: zero_map)
-    moreover have "add_to_beh (def_state(C := True)) beh2 1 (next_time 1 \<tau>'') = beh2"
+    moreover have "add_to_beh (def_state(C := True)) beh2 1 (next_time 1 \<tau>'') = Poly_Mapping.update 1 (Some o def_state(C := True)) beh2"
       unfolding add_to_beh_def t''_def nt2 by (auto simp add: override_coeffs_open_right_same_idx)
     moreover have "rem_curr_trans 1 (Poly_Mapping.update 1 [C \<mapsto> True] empty_trans) = 0"
       unfolding rem_curr_trans_def by (transfer, auto)
-    ultimately have "(10, 1, def_state (C := True), {}, beh2 \<turnstile> <nand, \<tau>''> \<leadsto> beh)"
-      using 1(4) using t''_def by auto
+    ultimately have "(10, 2, def_state (C := True), {}, Poly_Mapping.update 1 (Some o def_state(C := True)) beh2 \<turnstile> <nand, (rem_curr_trans 2 \<tau>'')> \<leadsto> beh)"
+      using 1(4) using t''_def by metis
     then show ?thesis
     proof (cases)
       case (1 \<tau>')
@@ -154,9 +173,9 @@ theorem
   "get_trans (functional_simulate_fin 10 0 def_state {A} 0 nand empty_trans) 1 C = Some True"
   by eval
 
-value "get_trans (functional_simulate 10 nand) 1 C"
+value "get_trans (functional_simulate 10 nand empty_trans) 1 C"
 
-value "signal_of (functional_simulate 10 nand) C 100"
+value "signal_of (functional_simulate 10 nand empty_trans) C 100"
 
 value [code] "to_signal (to_transaction2 (empty_trans :: nat \<Rightarrow>\<^sub>0 sig \<rightharpoonup> bool)) A 123456"
 
@@ -235,7 +254,7 @@ lemma nand3_does_not_modify_signals_AB:
 
 lemma maxtime_maxtime_bigstep:
   assumes "maxtime, maxtime, \<sigma>, \<gamma>, \<theta> \<turnstile> <nand3, \<tau>> \<leadsto> beh"
-  assumes "\<And>n. n < maxtime \<Longrightarrow> lookup \<tau> n = 0"
+  assumes "\<And>n. n \<le> maxtime \<Longrightarrow> lookup \<tau> n = 0"
   assumes "\<And>n. maxtime \<le> n \<Longrightarrow> lookup \<theta> n = 0"
   shows "beh = Poly_Mapping.update maxtime (Some o \<sigma>) \<theta>"
 proof (cases "quiet \<tau> \<gamma>")
@@ -244,47 +263,48 @@ proof (cases "quiet \<tau> \<gamma>")
     using case_quiesce[OF _ True assms(1)] by auto
 next
   case False
-  then obtain \<tau>' where cyc: "maxtime, \<sigma>, \<gamma>, \<theta> \<turnstile> <nand3, rem_curr_trans maxtime \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and
+  then obtain \<tau>' where cyc: "maxtime, \<sigma>, \<gamma>, \<theta> \<turnstile> <nand3, \<tau>> \<longrightarrow>\<^sub>c \<tau>'" and
     big: "maxtime, next_time maxtime \<tau>', next_state maxtime \<tau>' \<sigma>, next_event maxtime \<tau>' \<sigma>,
-                        add_to_beh \<sigma> \<theta> maxtime (next_time maxtime \<tau>') \<turnstile> <nand3, \<tau>'> \<leadsto> beh"
+                        add_to_beh \<sigma> \<theta> maxtime (next_time maxtime \<tau>') \<turnstile> <nand3, (rem_curr_trans (next_time maxtime \<tau>') \<tau>')> \<leadsto> beh"
     using case_bau2[OF _ False assms(1)] by auto
   have 0: "\<And>n. n < maxtime \<Longrightarrow> lookup \<tau>' n = 0"
-    using b_conc_exec_rem_curr_trans_preserve_trans_removal[OF assms(2)] cyc by auto
+    using b_conc_exec_preserve_trans_removal[OF assms(2)] cyc by auto
   have "maxtime \<le> next_time maxtime \<tau>'"
     using next_time_at_least[OF 0, of "maxtime"] by auto
 
   define \<sigma>2 where "\<sigma>2 = next_state maxtime \<tau>' \<sigma>"
   define \<gamma>2 where "\<gamma>2 = next_event maxtime \<tau>' \<sigma>"
   hence big2: "maxtime, next_time maxtime \<tau>', \<sigma>2, \<gamma>2, add_to_beh \<sigma> \<theta> maxtime (next_time maxtime \<tau>')
-                                                                              \<turnstile> <nand3, \<tau>'> \<leadsto> beh"
+                                                                              \<turnstile> <nand3, (rem_curr_trans (next_time maxtime \<tau>') \<tau>')> \<leadsto> beh"
     using big unfolding  \<sigma>2_def \<gamma>2_def by auto
   have "\<tau>' = 0 \<or> \<tau>' \<noteq> 0"
     by auto
   moreover
   { assume "\<tau>' = 0"
-    hence ntime: "next_time maxtime \<tau>' = maxtime"
+    hence ntime: "next_time maxtime \<tau>' = maxtime + 1"
       by auto
-    hence ntheta: "add_to_beh \<sigma> \<theta> maxtime (next_time maxtime \<tau>') = \<theta>"
-      by auto
+    hence ntheta: "add_to_beh \<sigma> \<theta> maxtime (next_time maxtime \<tau>') = Poly_Mapping.update maxtime (Some o \<sigma>) \<theta>"
+      unfolding add_to_beh_def by auto
     have "\<sigma>2 = \<sigma>"
       unfolding `\<tau>' = 0` \<sigma>2_def next_state_def by auto
     hence "\<gamma>2 = {}"
       unfolding `\<tau>' = 0` \<gamma>2_def next_event_def by (simp add: domIff zero_map)
     hence "quiet \<tau>' \<gamma>2"
       using `\<tau>' = 0` `\<gamma>2 = {}` unfolding quiet_def by auto
+    hence "quiet (rem_curr_trans (next_time maxtime \<tau>') \<tau>') \<gamma>2"
+      unfolding ntime using `\<tau>' = 0` by auto
     have "beh = Poly_Mapping.update maxtime (Some \<circ> \<sigma>) \<theta>"
-      using case_quiesce[OF _ `quiet \<tau>' \<gamma>2` big2] `\<sigma>2 = \<sigma>`
-      unfolding ntime ntheta by auto }
+      using case_timesup[OF _ big2] ntheta unfolding ntime by auto }
   moreover
   { assume "\<tau>' \<noteq> 0"
     have "disjnt \<gamma> {A, B} \<or> \<not> disjnt \<gamma> {A, B}"
       by auto
     moreover
     { assume "disjnt \<gamma> {A, B}"
-      hence "\<tau>' = rem_curr_trans maxtime \<tau>"
+      hence "\<tau>' = \<tau>"
         using cyc unfolding nand3_def by auto
       hence "lookup \<tau>' maxtime = 0"
-        unfolding rem_curr_trans_def by (simp add: lookup_update)
+        using assms(2) by auto
       have max_less: "maxtime < next_time maxtime \<tau>'"
       proof (rule ccontr)
         assume "\<not> maxtime < next_time maxtime \<tau>'" hence "maxtime = next_time maxtime \<tau>'"
@@ -306,13 +326,12 @@ next
         with `lookup \<tau>' maxtime = 0` show "False"
           by (metis dom_eq_empty_conv zero_map)
       qed }
-
     moreover
     { assume "\<not> disjnt \<gamma> {A, B}"
-      hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) (rem_curr_trans maxtime \<tau>) maxtime 1"
+      hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) \<tau> maxtime 1"
         using cyc unfolding nand3_def by auto
       hence "lookup \<tau>' maxtime = 0"
-        unfolding rem_curr_trans_def by (transfer', auto simp add: trans_post_raw_def preempt_nonstrict_def)
+        using assms(2) by (transfer', auto simp add: trans_post_raw_def preempt_nonstrict_def)
       have "maxtime < next_time maxtime \<tau>'"
       proof (rule ccontr)
         assume "\<not> maxtime < next_time maxtime \<tau>'" hence "maxtime = next_time maxtime \<tau>'"
@@ -339,31 +358,26 @@ next
 
     hence new_beh: "add_to_beh \<sigma> \<theta> maxtime (next_time maxtime \<tau>') =  Poly_Mapping.update maxtime (Some o \<sigma>) \<theta>"
       unfolding add_to_beh_def by auto
-    have "beh =
-      override_lookups_on_open_left (Poly_Mapping.update maxtime (Some \<circ> \<sigma>) \<theta>) 0 maxtime
-                                                                           (next_time maxtime \<tau>')"
-      using max_less case_timesup[OF _ big2] unfolding new_beh by auto
-    also have "... = Poly_Mapping.update maxtime (Some \<circ> \<sigma>) \<theta>"
-      using assms(3) apply transfer' unfolding override_on_def by auto
-    finally have "beh = Poly_Mapping.update maxtime (Some \<circ> \<sigma>) \<theta>"
-      by auto }
+    have "beh = Poly_Mapping.update maxtime (Some \<circ> \<sigma>) \<theta>"
+      using max_less case_timesup[OF _ big2] unfolding new_beh by auto }
   ultimately show "beh = Poly_Mapping.update maxtime (Some \<circ> \<sigma>) \<theta>"
     by auto
 qed
 
 lemma t_strictly_increasing:
-  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <nand3, rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
-  assumes "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
+  assumes "t, \<sigma>, \<gamma>, \<theta> \<turnstile> <nand3, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+  assumes "\<And>n. n \<le> t \<Longrightarrow> lookup \<tau> n = 0"
   assumes "\<tau>' \<noteq> 0"
   shows "t < next_time t \<tau>'"
 proof (cases "A \<in> \<gamma> \<or> B \<in> \<gamma>")
   case True
-  hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) (rem_curr_trans t \<tau>) t 1"
+  hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) \<tau> t 1"
     using assms unfolding nand3_def by auto
   hence "lookup \<tau>' t = 0"
-    unfolding rem_curr_trans_def by (transfer', auto simp add: trans_post_raw_def preempt_nonstrict_def)
+    using assms(2) by (transfer', auto simp add: trans_post_raw_def preempt_nonstrict_def)
   have "t \<le> next_time t \<tau>'"
-    using next_time_at_least assms b_conc_exec_rem_curr_trans_preserve_trans_removal by blast
+    using next_time_at_least assms b_conc_exec_preserve_trans_removal 
+    by (metis dual_order.strict_implies_order)
   show "t < next_time t \<tau>'"
   proof (rule ccontr)
     assume "\<not> t < next_time t \<tau>'" hence "t = next_time t \<tau>'"
@@ -387,10 +401,10 @@ proof (cases "A \<in> \<gamma> \<or> B \<in> \<gamma>")
   qed 
 next
   case False
-  hence \<tau>'_def: "\<tau>' = rem_curr_trans t \<tau>"
+  hence \<tau>'_def: "\<tau>' = \<tau>"
     using assms unfolding nand3_def by auto
   have "lookup \<tau>' t = 0"
-    unfolding \<tau>'_def rem_curr_trans_def by transfer' auto
+    unfolding \<tau>'_def using assms(2) by transfer' auto
   have "next_time t \<tau>' = (LEAST n. dom (lookup \<tau>' n) \<noteq> {})"
     using assms(3) unfolding next_time_def by auto
   also have " (LEAST n. dom (lookup \<tau>' n) \<noteq> {}) \<noteq> t"
@@ -408,7 +422,7 @@ next
   finally have "next_time t \<tau>' \<noteq> t"
     by auto
   have *: "\<And>n. n < t \<Longrightarrow> get_trans \<tau>' n = 0"
-    using b_conc_exec_rem_curr_trans_preserve_trans_removal[OF assms(2)] assms(1) by auto
+    using b_conc_exec_preserve_trans_removal[OF assms(2)] assms(1) by auto
   have "t \<le> next_time t \<tau>'"
     using next_time_at_least[OF *, of "t"] by auto
   with `next_time t \<tau>' \<noteq> t` show ?thesis by auto
@@ -416,60 +430,66 @@ qed
 
 lemma beh_res2:
   assumes "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> beh"
-  assumes "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
+  assumes "\<And>n. n \<le> t \<Longrightarrow> lookup \<tau> n = 0"
   assumes "t \<le> maxtime" and "cs = nand3"
-  assumes "\<And>s. s \<in> dom (lookup \<tau> t) \<Longrightarrow> \<sigma> s = the (lookup \<tau> t s)"
   assumes "\<And>n. t \<le> n \<Longrightarrow> lookup \<theta> n = 0"
   shows "\<And>n. n \<le> t \<Longrightarrow> lookup (Poly_Mapping.update t (Some o \<sigma>) \<theta>) n = lookup beh n"
   using assms
 proof (induction rule:b_simulate_fin.induct)
   case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs \<tau>' res)
   have *: "\<And>n. n < t \<Longrightarrow> get_trans \<tau>' n = 0"
-    using b_conc_exec_rem_curr_trans_preserve_trans_removal[OF 1(7)] 1(3) by auto
+    using b_conc_exec_preserve_trans_removal[OF 1(7)] 1(3) by auto
   have "t \<le> next_time t \<tau>'"
     using next_time_at_least[OF *, of "t"] by auto
   have "\<tau>' = 0 \<or> \<tau>' \<noteq> 0" by auto
   moreover
   { assume "\<tau>' = 0"
-    hence "next_time t \<tau>' = t"
+    hence "next_time t \<tau>' = t + 1"
       unfolding next_time_def by auto
     moreover have " next_state t \<tau>' \<sigma> = \<sigma>"
-      unfolding next_state_def Let_def `next_time t \<tau>' = t` `\<tau>' = 0` override_on_def
+      unfolding next_state_def Let_def `next_time t \<tau>' = t + 1` `\<tau>' = 0` override_on_def
       apply transfer' unfolding zero_map by auto
     moreover hence "next_event t \<tau>' \<sigma> = {}"
-      unfolding next_event_def next_state_def Let_def `next_time t \<tau>' = t` `\<tau>' = 0`
+      unfolding next_event_def next_state_def Let_def `next_time t \<tau>' = t + 1` `\<tau>' = 0`
       by (auto simp add: zero_map)
-    moreover hence "add_to_beh \<sigma> \<theta> t (next_time t \<tau>') = \<theta>"
-      unfolding `next_time t \<tau>' = t` by auto
-    ultimately have " maxtime, t, \<sigma>, {}, \<theta> \<turnstile> <cs, \<tau>'> \<leadsto> res"
-      using ` maxtime, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , add_to_beh \<sigma> \<theta> t (next_time t \<tau>') \<turnstile> <cs , \<tau>'> \<leadsto> res`
+    moreover hence "add_to_beh \<sigma> \<theta> t (next_time t \<tau>') = Poly_Mapping.update t (Some o \<sigma>) \<theta>"
+      unfolding `next_time t \<tau>' = t + 1` add_to_beh_def by auto
+    ultimately have ul: " maxtime, t + 1, \<sigma>, {}, Poly_Mapping.update t (Some o \<sigma>) \<theta> \<turnstile> <cs, (rem_curr_trans (t + 1) \<tau>')> \<leadsto> res"
+      using ` maxtime, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , add_to_beh \<sigma> \<theta> t (next_time t \<tau>') \<turnstile> <cs , rem_curr_trans (next_time t \<tau>') \<tau>'> \<leadsto> res`
       by auto
-    hence "res = Poly_Mapping.update t (Some \<circ> \<sigma>) \<theta>"
-      using case_quiesce[OF `t \<le> maxtime`] unfolding `\<tau>' = 0` quiet_def
-      by (simp add: \<open>\<And>res cs \<theta> \<tau> \<sigma> \<gamma>. \<lbrakk>quiet \<tau> \<gamma>; maxtime, t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<leadsto> res\<rbrakk>
-                                            \<Longrightarrow> res = Poly_Mapping.update t (Some \<circ> \<sigma>) \<theta>\<close> quiet_def)
-    hence ?case
-      by transfer' auto }
+    have "t + 1 \<le> maxtime \<or> maxtime < t + 1" 
+      by auto
+    moreover
+    { assume "t + 1 \<le> maxtime"
+      have "res = Poly_Mapping.update (t + 1) (Some \<circ> \<sigma>) (Poly_Mapping.update t (Some o \<sigma>) \<theta>)"
+        using case_quiesce[OF `t + 1 \<le> maxtime` _ ul] unfolding `\<tau>' = 0` quiet_def by auto
+      hence ?case
+        using `n \<le> t`  by (metis Suc_eq_plus1 leD lessI lookup_update) }
+    moreover
+    { assume "maxtime < t + 1"
+      hence "res = Poly_Mapping.update t (Some o \<sigma>) \<theta>"
+        using case_timesup[OF _ ul] by auto
+      hence ?case 
+        by metis }
+    ultimately have ?case
+      by auto }
   moreover
   { assume "\<tau>' \<noteq> 0"
     hence "t < next_time t \<tau>'"
       using t_strictly_increasing[OF _ 1(7) `\<tau>' \<noteq> 0`] 1(3) unfolding `cs = nand3` by auto
     hence ind1: "n \<le> next_time t \<tau>'"
       using `n \<le> t` by auto
-    have ind2: "(\<And>n. n < next_time t \<tau>' \<Longrightarrow> get_trans \<tau>' n = 0) "
-      by (simp add: next_time_at_least2)
-    have h1: "\<And>s. s \<in> dom (get_trans \<tau>' (next_time t \<tau>')) \<Longrightarrow>
-                                          next_state t \<tau>' \<sigma> s = the (get_trans \<tau>' (next_time t \<tau>') s)"
-      unfolding next_state_def Let_def by auto
+    have ind2: "(\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow> get_trans (rem_curr_trans (next_time t \<tau>') \<tau>') n = 0) "
+      by (metis antisym_conv2 lookup_update next_time_at_least2 rem_curr_trans_def)
     have "next_time t \<tau>' \<le> maxtime \<or> maxtime < next_time t \<tau>'"
       by auto
     moreover
     { assume ind3: "next_time t \<tau>' \<le> maxtime"
       have h2: "\<And>n. next_time t \<tau>' \<le> n \<Longrightarrow> get_trans (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n = 0"
         unfolding add_to_beh_def
-        by (metis (mono_tags) "1.prems"(6) \<open>t < next_time t \<tau>'\<close> \<open>t \<le> next_time t \<tau>'\<close> leD lookup_update order_trans)
+        by (metis (mono_tags) "1.prems"(5) \<open>t < next_time t \<tau>'\<close> \<open>t \<le> next_time t \<tau>'\<close> leD lookup_update order_trans)
       have "get_trans (Poly_Mapping.update (next_time t \<tau>') (Some \<circ> next_state t \<tau>' \<sigma>) (add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))) n = get_trans res n"
-        using 1(5)[OF ind1 ind2 ind3 `cs = nand3` h1 h2]  by blast
+        using 1(5)[OF ind1 ind2 ind3 `cs = nand3` h2]  by blast
       hence ?case
         using `n \<le> t` `t < next_time t \<tau>'` unfolding add_to_beh_def
       proof -
@@ -486,7 +506,7 @@ proof (induction rule:b_simulate_fin.induct)
       have "t < next_time t \<tau>'"
         using `t \<le> maxtime` `maxtime < next_time t \<tau>'` by auto
       have ?case
-        using borderline_big_step[OF 1(4) 1(3) `t \<le> maxtime` `maxtime < next_time t \<tau>'` 1(11) _ ind1]
+        using borderline_big_step[OF 1(4) 1(3) `t \<le> maxtime` `maxtime < next_time t \<tau>'` 1(10) _ ind1]
         `t < next_time t \<tau>'` unfolding add_to_beh_def  using nat_less_le by presburger }
     ultimately have ?case by auto }
   ultimately show ?case by auto
@@ -499,33 +519,10 @@ next
   then show ?case by auto
 qed
 
-(* lemma beh_and_res_same_until_now2:
-  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res"
-  assumes "\<And>n. n < t \<Longrightarrow> lookup \<tau> n = 0"
-  assumes "cs = nand3"
-  shows "\<And>i. i \<le> t \<Longrightarrow> i \<le> maxtime \<Longrightarrow> lookup (Poly_Mapping.update t (Some o \<sigma>) \<theta>) i = lookup res i"
-proof -
-  fix i
-  assume "i \<le> maxtime"
-  assume "i \<le> t"
-  hence "i < t \<or> i = t" by auto
-  moreover
-  { assume "i < t"
-    have "get_trans \<theta> i = get_trans res i"
-      using beh_and_res_same_until_now[OF assms(1-2) `i < t` `i \<le> maxtime`] by auto
-    moreover have "lookup (Poly_Mapping.update t (Some o \<sigma>) \<theta>) i = lookup \<theta> i"
-      using `i < t` by transfer' auto
-    ultimately have " get_trans (Poly_Mapping.update t (Some \<circ> \<sigma>) \<theta>) i = get_trans res i"
-      by auto }
-  moreover
-  { assume "i = t" *)
-                       
-
-
 theorem nand3_correctness_ind:
   assumes "maxtime, t, \<sigma>, \<gamma>, beh \<turnstile> <cs, ctrans> \<leadsto> res"
   assumes "cs = nand3" and "maxtime = Suc i"
-  assumes "\<And>n. n < t \<Longrightarrow> lookup ctrans n = 0"
+  assumes "\<And>n. n \<le> t \<Longrightarrow> lookup ctrans n = 0"
   assumes "\<And>s. s \<in> dom (lookup ctrans t) \<Longrightarrow> \<sigma> s = the (lookup ctrans t s)"
   assumes "\<And>n. t \<le> n \<Longrightarrow> lookup beh n = 0"
   assumes "t \<le> i" and "A \<notin> \<gamma> \<and> B \<notin> \<gamma> \<Longrightarrow> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
@@ -537,16 +534,38 @@ proof (induction rule:b_simulate_fin.induct)
   have "t \<le> Suc i"
     using `t \<le> i` by auto
   have *: "\<And>n. n < t \<Longrightarrow> get_trans \<tau>' n = 0"
-    using "1.hyps"(3) "1.prems"(3) b_conc_exec_rem_curr_trans_preserve_trans_removal by blast
+    using "1.hyps"(3) "1.prems"(3) b_conc_exec_preserve_trans_removal  by (metis nat_less_le)
   hence **: "\<And>n. dom (get_trans \<tau>' n) \<noteq> {} \<Longrightarrow> t \<le> n"
     using zero_map by force
   hence "t \<le> next_time t \<tau>'"
     using next_time_at_least[OF *] by auto
-  have h0: "\<And>n. n < next_time t \<tau>' \<Longrightarrow> get_trans \<tau>' n = 0"
-    using b_conc_exec_rem_curr_trans_preserve_trans_removal[OF `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`]
-    `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'`  by (simp add: next_time_at_least2)
-
-  have h1: "\<And>s. s \<in> dom (get_trans \<tau>' (next_time t \<tau>')) \<Longrightarrow>
+  have h0: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow> get_trans (rem_curr_trans (next_time t \<tau>') \<tau>') n = 0"
+    using b_conc_exec_preserve_trans_removal[OF `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`]
+    `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'`  unfolding rem_curr_trans_def 
+    by (metis lookup_update next_time_at_least2 order.not_eq_order_implies_strict)
+  have h0': "\<And>n. n < next_time t \<tau>' \<Longrightarrow> get_trans \<tau>' n = 0"
+  proof -
+    fix n
+    assume "n < next_time t \<tau>'"
+    hence "n < t \<or> t \<le> n \<and> n < next_time t \<tau>'"
+      using `t \<le> next_time t \<tau>'` by auto
+    moreover
+    { assume "n < t"
+      hence "lookup \<tau>' n = 0"
+        using b_conc_exec_preserve_trans_removal[OF `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`]
+        `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` by auto }
+    moreover
+    { assume "t \<le> n \<and> n < next_time t \<tau>'"
+      hence "lookup \<tau>' n = 0"
+        using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'`  using next_time_at_least2 by blast }
+    ultimately show "lookup \<tau>' n = 0"
+      by auto
+  qed
+  have h1: "\<And>s. s \<in> dom (get_trans (rem_curr_trans (next_time t \<tau>') \<tau>') (next_time t \<tau>')) \<Longrightarrow>
+                                        next_state t \<tau>' \<sigma> s = the (get_trans (rem_curr_trans (next_time t \<tau>') \<tau>') (next_time t \<tau>') s)"
+    unfolding rem_curr_trans_def next_state_def Let_def 
+    by (metis domIff fun_upd_idem_iff lookup_update zero_upd)
+  have h1': "\<And>s. s \<in> dom (get_trans \<tau>' (next_time t \<tau>')) \<Longrightarrow>
                                         next_state t \<tau>' \<sigma> s = the (get_trans \<tau>' (next_time t \<tau>') s)"
     unfolding next_state_def Let_def by auto
   have h2: "\<And>n. next_time t \<tau>' \<le> n \<Longrightarrow> get_trans (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n = 0"
@@ -587,28 +606,27 @@ proof (induction rule:b_simulate_fin.induct)
           using sigA sigB sigC by auto }
       moreover
       { assume "\<not> ( A \<notin> \<gamma> \<and> B \<notin> \<gamma> )"
-        hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) (rem_curr_trans t \<tau>) t 1"
-          using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
+        hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) \<tau> t 1"
+          using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
           nand3_def by auto
         have "(\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)) \<or>  (\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B))"
           by auto
         moreover 
         { assume "\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
-          have "to_transaction2 (rem_curr_trans t \<tau>) C = 0"
-            using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
-            unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def 
-            by (metis fun_upd_apply nat_neq_iff zero_fun_def)
-          hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)"
+          have "to_transaction2 \<tau> C = 0"
+            using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
+            apply transfer' unfolding to_trans_raw2_def by (metis leI zero_fun_def)
+          hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)"
             unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by (metis zero_option_def)
-          hence "post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
+          hence "post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
           proof -
-            have "\<not> (\<exists>i\<ge>t. i \<le> t + 1 \<and> lookup (rem_curr_trans t \<tau>) i C = Some (\<not> (\<sigma> A \<and> \<sigma> B)) \<and> 
-                    (\<forall>j>i. j \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) j C = None))"
-              using `to_transaction2 (rem_curr_trans t \<tau>) C = 0` unfolding rem_curr_trans_def
+            have "\<not> (\<exists>i\<ge>t. i \<le> t + 1 \<and> lookup \<tau> i C = Some (\<not> (\<sigma> A \<and> \<sigma> B)) \<and> 
+                    (\<forall>j>i. j \<le> t + 1 \<longrightarrow> lookup \<tau> j C = None))"
+              using `to_transaction2 \<tau> C = 0` unfolding rem_curr_trans_def
               apply transfer' unfolding to_trans_raw2_def  by (metis option.simps(3) zero_option_def)
             thus ?thesis
               using post_necessary_raw_correctness `\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
-              `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)` by simp
+              `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)` by simp
           qed
           hence "\<tau>' \<noteq> 0"
             using trans_post_imply_neq_map_empty 
@@ -618,13 +636,12 @@ proof (induction rule:b_simulate_fin.induct)
           also have "... = t + 1"
           proof (rule Least_equality)
             show "dom (get_trans \<tau>' (t + 1)) \<noteq> {}"
-              using `post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
+              using `post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
               unfolding \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def preempt_nonstrict_def 
               by (auto simp add: zero_fun_def zero_option_def)
           next
             have "lookup \<tau>' t = 0"
-              unfolding \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def preempt_nonstrict_def
-              by auto
+              using "1.hyps"(3) "1.prems"(1) "1.prems"(3) \<open>\<tau>' \<noteq> empty_trans\<close> next_time_at_least2 t_strictly_increasing by blast
             thus "\<And>y. dom (get_trans \<tau>' y) \<noteq> {} \<Longrightarrow> t + 1 \<le> y"
               using **
               by (metis Suc_eq_plus1 Suc_le_eq dom_eq_empty_conv nat_less_le zero_map)
@@ -632,7 +649,7 @@ proof (induction rule:b_simulate_fin.induct)
           finally have "next_time t \<tau>' = t + 1"
             by auto
           moreover have "lookup \<tau>' (t + 1) C = Some (\<not> (\<sigma> A \<and> \<sigma> B))"
-            using `post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
+            using `post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
             unfolding \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def preempt_def
             by (auto split:option.split simp add: zero_fun_def zero_option_def)
           ultimately have "next_state t \<tau>' \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
@@ -654,47 +671,41 @@ proof (induction rule:b_simulate_fin.induct)
       have " A \<notin> \<gamma> \<and> B \<notin> \<gamma>  \<or> \<not> ( A \<notin> \<gamma> \<and> B \<notin> \<gamma> )" by auto
       moreover
       { assume "A \<notin> \<gamma> \<and> B \<notin> \<gamma>"
-        hence "\<tau>' = rem_curr_trans t \<tau>"
-          using ` t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
+        hence "\<tau>' = \<tau>"
+          using ` t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
           nand3_def by auto
-        with `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` and `t \<le> next_time t \<tau>'`
+        have "\<And>n. t \<le> n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0"
+          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` 1(8)
+          apply transfer' unfolding to_trans_raw2_def  by (metis le_neq_implies_less zero_fun_def)
+        with `t \<le> next_time t \<tau>'`
         have "C \<notin> dom (lookup \<tau>' (next_time t \<tau>'))"
-          unfolding rem_curr_trans_def next_time_def apply transfer' unfolding to_trans_raw2_def
-          by (metis (no_types, lifting) antisym_conv2 domIff fun_upd_apply zero_fun_def zero_map)
+          using 1(8) unfolding `\<tau>' = \<tau>` next_time_def apply transfer' unfolding to_trans_raw2_def
+          by (metis (no_types, lifting) domIff order_refl zero_map)
         with `C \<in> dom (lookup \<tau>' (next_time t \<tau>'))` have "False" by auto
         hence "next_state t \<tau>' \<sigma> C = (\<not> (next_state t \<tau>' \<sigma> A \<and> next_state t \<tau>' \<sigma> B))"
           by auto }
       moreover
       { assume "\<not> ( A \<notin> \<gamma> \<and> B \<notin> \<gamma> )"
-        hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) (rem_curr_trans t \<tau>) t 1"
-          using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
+        hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) \<tau> t 1"
+          using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
           nand3_def by auto
+        have "\<And>n. t \<le> n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0"
+          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` 1(8) 
+          by (metis dual_order.order_iff_strict to_trans_raw2_def to_transaction2.rep_eq zero_fun_def)
         have "\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
         proof (rule ccontr)
           assume "\<not> (\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B))" hence "\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)" by auto
-          moreover have "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)"
-            using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
-            unfolding rem_curr_trans_def by (transfer', auto simp add: to_trans_raw2_def zero_fun_def zero_option_def )
-          ultimately have "\<not> post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
+          moreover have "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)"
+            using `\<And>n. t \<le> n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
+            by (transfer', auto simp add: to_trans_raw2_def zero_fun_def zero_option_def )
+          ultimately have "\<not> post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
             using post_necessary_raw_correctness by auto
           hence "to_transaction2 \<tau>' C = 0"
-            using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)`
-            using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
+            using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)`
+            using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
             unfolding \<tau>'_def rem_curr_trans_def 
             apply transfer' unfolding preempt_nonstrict_def to_trans_raw2_def zero_fun_def zero_option_def zero_map
-          proof (rule ext)
-            fix tb :: nat and \<tau>'' :: "nat \<Rightarrow> sig \<Rightarrow> bool option" and \<sigma>'' :: "sig \<Rightarrow> bool" and n :: nat
-            assume a1: "\<not> post_necessary_raw 0 (\<tau>''(tb := Map.empty)) tb C (\<not> (\<sigma>'' A \<and> \<sigma>'' B)) (\<sigma>'' C)"
-            assume a2: "\<And>n. n < tb \<Longrightarrow> \<tau>'' n = Map.empty"
-            assume a3: "\<forall>i\<ge>tb. i \<le> tb + 1 \<longrightarrow> (\<tau>''(tb := Map.empty)) i C = None"
-            { assume "(if tb + 1 < n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n) C \<noteq> None"
-              have "\<not> tb + 1 < n \<and> \<not> n < tb \<or> (if tb + 1 < n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n) C = None"
-                using a2 by simp
-              then have "(if tb + 1 < n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n) C = None"
-                using a3 by fastforce }
-            then show "(if post_necessary_raw (1-1) (\<tau>''(tb := Map.empty)) tb C (\<not> (\<sigma>'' A \<and> \<sigma>'' B)) (\<sigma>'' C) then trans_post_raw C (\<not> (\<sigma>'' A \<and> \<sigma>'' B)) (\<tau>''(tb := Map.empty)) (tb + 1) else (\<lambda>n. if tb + 1 \<le> n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n)) n C = None"
-              using a1 by force
-          qed
+            by auto
           with `C \<in> dom (lookup \<tau>' (next_time t \<tau>'))` have "lookup \<tau>' (next_time t \<tau>') C \<noteq> 0"
             by (metis domIff fun_upd_same zero_fun_def zero_upd)
           hence "lookup (to_transaction2 \<tau>' C) (next_time t \<tau>') \<noteq> 0"
@@ -702,21 +713,20 @@ proof (induction rule:b_simulate_fin.induct)
           with `to_transaction2 \<tau>' C = 0` show False
             unfolding next_time_def apply transfer' unfolding to_trans_raw2_def  by meson
         qed
-        have "to_transaction2 (rem_curr_trans t \<tau>) C = 0"
-          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
-          unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def 
-          by (metis fun_upd_apply nat_neq_iff zero_fun_def)
-        hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)"
-          unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by (metis zero_option_def)
-        hence "post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
+        have "to_transaction2 \<tau> C = 0"
+          using `\<And>n. t \<le> n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
+          apply transfer' unfolding to_trans_raw2_def by (metis le_cases)
+        hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)"
+          apply transfer' unfolding to_trans_raw2_def by (metis zero_option_def)
+        hence "post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
         proof -
-          have "\<not> (\<exists>i\<ge>t. i \<le> t + 1 \<and> lookup (rem_curr_trans t \<tau>) i C = Some (\<not> (\<sigma> A \<and> \<sigma> B)) \<and> 
-                  (\<forall>j>i. j \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) j C = None))"
-            using `to_transaction2 (rem_curr_trans t \<tau>) C = 0` unfolding rem_curr_trans_def
+          have "\<not> (\<exists>i\<ge>t. i \<le> t + 1 \<and> lookup \<tau> i C = Some (\<not> (\<sigma> A \<and> \<sigma> B)) \<and> 
+                  (\<forall>j>i. j \<le> t + 1 \<longrightarrow> lookup \<tau> j C = None))"
+            using `to_transaction2 \<tau> C = 0` unfolding rem_curr_trans_def
             apply transfer' unfolding to_trans_raw2_def  by (metis option.simps(3) zero_option_def)
           thus ?thesis
             using post_necessary_raw_correctness `\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
-            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)` by simp
+            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)` by simp
         qed
         hence "\<tau>' \<noteq> 0"
           by (simp add: trans_post_imply_neq_map_empty \<open>(\<not> \<sigma> C) = (\<not> (\<sigma> A \<and> \<sigma> B))\<close> \<tau>'_def)
@@ -725,13 +735,12 @@ proof (induction rule:b_simulate_fin.induct)
         also have "... = t + 1"
         proof (rule Least_equality)
           show "dom (get_trans \<tau>' (t + 1)) \<noteq> {}"
-            using `post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
+            using `post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
             unfolding \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def 
             by (auto simp add: zero_fun_def zero_option_def)
         next
           have "lookup \<tau>' t = 0"
-            unfolding \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def preempt_nonstrict_def
-            by auto
+            using "1.hyps"(3) "1.prems"(1) "1.prems"(3) \<open>\<tau>' \<noteq> empty_trans\<close> next_time_at_least2 t_strictly_increasing by blast
           thus "\<And>y. dom (get_trans \<tau>' y) \<noteq> {} \<Longrightarrow> t + 1 \<le> y"
             using **
             by (metis Suc_eq_plus1 Suc_le_eq dom_eq_empty_conv nat_less_le zero_map)
@@ -739,7 +748,7 @@ proof (induction rule:b_simulate_fin.induct)
         finally have "next_time t \<tau>' = t + 1"
           by auto
         moreover have "lookup \<tau>' (t + 1) C = Some (\<not> (\<sigma> A \<and> \<sigma> B))"
-          using `post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
+          using `post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
           unfolding \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def
           by (auto split:option.split simp add: zero_fun_def zero_option_def)
         ultimately have "next_state t \<tau>' \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
@@ -752,63 +761,53 @@ proof (induction rule:b_simulate_fin.induct)
       by auto }
   note h3 = this
 
-  have h4: "\<And>n. next_time t \<tau>' < n \<Longrightarrow> lookup (to_transaction2 \<tau>' C) n = 0"
+  have h4': "\<And>n. next_time t \<tau>' < n \<Longrightarrow> lookup (to_transaction2 \<tau>' C) n = 0"
   proof -
     fix n
     assume "next_time t \<tau>' < n"
+    have "\<And>n. t \<le> n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0"
+      using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` 1(8) 
+      apply transfer' unfolding to_trans_raw2_def by (metis leI zero_fun_def)
     have "A \<in> \<gamma> \<or> B \<in> \<gamma> \<or> (A \<notin> \<gamma> \<and> B \<notin> \<gamma>)"
       by auto
     moreover
     { assume "A \<in> \<gamma> \<or> B \<in> \<gamma>"
-      hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) (rem_curr_trans t \<tau>) t 1"
-        using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
+      hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) \<tau> t 1"
+        using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
         nand3_def by auto
       have "(\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)) \<or> (\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B))"
         by auto
       moreover
       { assume "\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
-        moreover have "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)"
-          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
-          unfolding rem_curr_trans_def by (transfer', auto simp add: to_trans_raw2_def zero_fun_def zero_option_def )
-        ultimately have "\<not> post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
+        moreover have "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)"
+          using `\<And>n. t \<le> n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
+          by (transfer', auto simp add: to_trans_raw2_def zero_fun_def zero_option_def )
+        ultimately have "\<not> post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
           using post_necessary_raw_correctness by auto        
         hence "to_transaction2 \<tau>' C = 0"
-          using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)`
-          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
+          using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)`
+          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
           unfolding \<tau>'_def rem_curr_trans_def 
           apply transfer' unfolding preempt_nonstrict_def to_trans_raw2_def zero_fun_def zero_option_def zero_map
-        proof (rule ext)
-          fix tb :: nat and \<tau>'' :: "nat \<Rightarrow> sig \<Rightarrow> bool option" and \<sigma>'' :: "sig \<Rightarrow> bool" and n :: nat
-          assume a1: "\<not> post_necessary_raw 0 (\<tau>''(tb := Map.empty)) tb C (\<not> (\<sigma>'' A \<and> \<sigma>'' B)) (\<sigma>'' C)"
-          assume a2: "\<And>n. n < tb \<Longrightarrow> \<tau>'' n = Map.empty"
-          assume a3: "\<forall>i\<ge>tb. i \<le> tb + 1 \<longrightarrow> (\<tau>''(tb := Map.empty)) i C = None"
-          { assume "(if tb + 1 < n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n) C \<noteq> None"
-            have "\<not> tb + 1 < n \<and> \<not> n < tb \<or> (if tb + 1 < n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n) C = None"
-              using a2 by simp
-            then have "(if tb + 1 < n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n) C = None"
-              using a3 by fastforce }
-          then show "(if post_necessary_raw (1-1) (\<tau>''(tb := Map.empty)) tb C (\<not> (\<sigma>'' A \<and> \<sigma>'' B)) (\<sigma>'' C) then trans_post_raw C (\<not> (\<sigma>'' A \<and> \<sigma>'' B)) (\<tau>''(tb := Map.empty)) (tb + 1) else (\<lambda>n. if tb + 1 \<le> n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n)) n C = None"
-            using a1 by force
-        qed
+          by auto
         hence "lookup (to_transaction2 \<tau>' C) n = 0"
           by auto }
       moreover
       { assume "(\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B))"
-        have "to_transaction2 (rem_curr_trans t \<tau>) C = 0"
-          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
-          unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def 
-          by (metis fun_upd_apply nat_neq_iff zero_fun_def)
-        hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)"
-          unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by (metis zero_option_def)
-        hence "post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
+        have "to_transaction2 \<tau> C = 0"
+          using `\<And>n. t \<le> n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
+          apply transfer' unfolding to_trans_raw2_def  by (metis le_cases)
+        hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)"
+          apply transfer' unfolding to_trans_raw2_def by (metis zero_option_def)
+        hence "post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
         proof -
-          have "\<not> (\<exists>i\<ge>t. i \<le> t + 1 \<and> lookup (rem_curr_trans t \<tau>) i C = Some (\<not> (\<sigma> A \<and> \<sigma> B)) \<and> 
-                  (\<forall>j>i. j \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) j C = None))"
-            using `to_transaction2 (rem_curr_trans t \<tau>) C = 0` unfolding rem_curr_trans_def
+          have "\<not> (\<exists>i\<ge>t. i \<le> t + 1 \<and> lookup \<tau> i C = Some (\<not> (\<sigma> A \<and> \<sigma> B)) \<and> 
+                  (\<forall>j>i. j \<le> t + 1 \<longrightarrow> lookup \<tau> j C = None))"
+            using `to_transaction2 \<tau> C = 0` unfolding rem_curr_trans_def
             apply transfer' unfolding to_trans_raw2_def  by (metis option.simps(3) zero_option_def)
           thus ?thesis
             using post_necessary_raw_correctness `\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
-            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)` by simp
+            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)` by simp
         qed        
         hence "\<tau>' \<noteq> 0"
           using trans_post_imply_neq_map_empty by (simp add: trans_post_imply_neq_map_empty 
@@ -818,13 +817,13 @@ proof (induction rule:b_simulate_fin.induct)
         also have "... = t + 1"
         proof (rule Least_equality)
           show "dom (get_trans \<tau>' (t + 1)) \<noteq> {}"
-            using `post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
+            using `post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
             unfolding \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def 
             by (auto simp add: zero_fun_def zero_option_def)
         next
           have "lookup \<tau>' t = 0"
-            unfolding \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def preempt_nonstrict_def
-            by auto
+            using "1.hyps"(3) "1.prems"(1) "1.prems"(3) \<open>\<tau>' \<noteq> empty_trans\<close> next_time_at_least2
+            t_strictly_increasing by blast
           thus "\<And>y. dom (get_trans \<tau>' y) \<noteq> {} \<Longrightarrow> t + 1 \<le> y"
             using **
             by (metis Suc_eq_plus1 Suc_le_eq dom_eq_empty_conv nat_less_le zero_map)
@@ -839,21 +838,22 @@ proof (induction rule:b_simulate_fin.induct)
         by auto } 
     moreover
     { assume "A \<notin> \<gamma> \<and> B \<notin> \<gamma>"
-      hence \<tau>'_def: "\<tau>' = rem_curr_trans t \<tau>"
-        using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3` nand3_def
+      hence \<tau>'_def: "\<tau>' = \<tau>"
+        using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3` nand3_def
         by auto
       hence "lookup (to_transaction2 \<tau>' C) n = 0"
         using `t \<le> next_time t \<tau>'` `next_time t \<tau>' < n` `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0`
-        by (metis leD le_less_trans trans_value_same_except_at_removed) }
+        by (metis le_less_trans) }
     ultimately show "lookup (to_transaction2 \<tau>' C) n = 0"
       by auto
   qed
-
-  have h5: "\<And>n. n < t \<Longrightarrow> get_trans (rem_curr_trans t \<tau>) n = 0"
-    using `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0` unfolding rem_curr_trans_def by transfer' auto
+  hence h4: "\<And>n. next_time t \<tau>' < n \<Longrightarrow> lookup (to_transaction2 (rem_curr_trans (next_time t \<tau>') \<tau>') C) n = 0"
+    unfolding rem_curr_trans_def  by (simp add: lookup_update to_transaction2_delete)  
+  have h5: "\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0"
+    using `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0` unfolding rem_curr_trans_def by transfer' auto
   have IH: " next_time t \<tau>' \<le> i \<Longrightarrow>
              signal_of2 def res C (Suc i) =
-            (\<not> (signal_of2 (next_state t \<tau>' \<sigma> A) \<tau>' A i \<and> signal_of2 (next_state t \<tau>' \<sigma> B) \<tau>' B i))"
+            (\<not> (signal_of2 (next_state t \<tau>' \<sigma> A) (rem_curr_trans (next_time t \<tau>') \<tau>') A i \<and> signal_of2 (next_state t \<tau>' \<sigma> B) (rem_curr_trans (next_time t \<tau>') \<tau>') B i))"
     using 1(5)[OF `cs = nand3` `maxtime = Suc i` h0 h1 h2 _ h3 h4] by auto
   have "i < next_time t \<tau>' \<or> next_time t \<tau>' \<le> i"
     by auto
@@ -869,16 +869,18 @@ proof (induction rule:b_simulate_fin.induct)
     have "A \<notin> \<gamma> \<and> B \<notin> \<gamma> \<or> A \<in> \<gamma> \<or> B \<in> \<gamma>" by auto
     moreover
     { assume "A \<notin> \<gamma> \<and> B \<notin> \<gamma>"
-      hence \<tau>'_def: "\<tau>' = rem_curr_trans t \<tau>"
-        using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3` nand3_def
+      hence \<tau>'_def: "\<tau>' = \<tau>"
+        using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3` nand3_def
         by auto
       have "signal_of2 (\<sigma> A) \<tau> A i = \<sigma> A" and "signal_of2 (\<sigma> B) \<tau> B i = \<sigma> B"
-        using signal_of2_init'[OF `t \<le> i`, of "\<tau>" _ "\<sigma>"] `i < next_time t \<tau>'` 1(9) 1(8)
+        using signal_of2_init[OF `t \<le> i`, of "\<tau>" _ "\<sigma>"] `i < next_time t \<tau>'` 1(9) 1(8)
         unfolding \<tau>'_def by auto
       note no_trans_c = 1(13)
-      hence "\<And>n. t \<le> n \<Longrightarrow> lookup (to_transaction2 \<tau>' C) n = 0"
-        unfolding \<tau>'_def unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def
-        by (simp add: zero_fun_def)
+      moreover have "lookup \<tau> t = 0"
+        by (simp add: "1.prems"(3))
+      ultimately have 13: "\<And>n. t \<le> n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0"
+        apply transfer' unfolding to_trans_raw2_def 
+        by (metis dual_order.order_iff_strict zero_fun_def)
       note next_big_step = 1(4)
       have "next_time t \<tau>' \<le> maxtime \<or> maxtime < next_time t \<tau>'" by auto
       moreover
@@ -889,7 +891,7 @@ proof (induction rule:b_simulate_fin.induct)
           using`t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` unfolding add_to_beh_def by auto
         hence *: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>
             get_trans (Poly_Mapping.update (next_time t \<tau>') (Some \<circ> next_state t \<tau>' \<sigma>) (add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))) n = get_trans res n"
-          using beh_res2[OF next_big_step h0 `next_time t \<tau>' \<le> maxtime` `cs = nand3` h1 h2 ]
+          using beh_res2[OF next_big_step h0 `next_time t \<tau>' \<le> maxtime` `cs = nand3` h2]
           by auto
         have "Suc i \<le> next_time t \<tau>'"
           using `i < next_time t \<tau>'` `next_time t \<tau>' \<le> maxtime` by auto
@@ -923,11 +925,10 @@ proof (induction rule:b_simulate_fin.induct)
           by auto
         also have "... = \<sigma> C"
         proof -
-          have "C \<notin> dom (lookup (rem_curr_trans t \<tau>) (i + 1))"
-            using 1(13) `t \<le> Suc i`
-            unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def
+          have "C \<notin> dom (lookup \<tau> (i + 1))"
+            using 13 `t \<le> Suc i` apply transfer' unfolding to_trans_raw2_def
             by (auto simp add: zero_map zero_option_def)
-          moreover have *: "(next_time t (rem_curr_trans t \<tau>)) = i + 1"
+          moreover have *: "(next_time t \<tau>) = i + 1"
             using `Suc i = next_time t \<tau>'` unfolding \<tau>'_def by auto
           ultimately show ?thesis
             unfolding \<sigma>'_def next_state_def \<tau>'_def * Let_def by auto
@@ -941,11 +942,11 @@ proof (induction rule:b_simulate_fin.induct)
       moreover
       { assume "maxtime < next_time t \<tau>'"
         hence pre: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow> get_trans (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n = get_trans res n"
-          using borderline_big_step[OF next_big_step `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` `t \<le> maxtime` `maxtime < next_time t \<tau>'` 1(10)]
+          using borderline_big_step[OF next_big_step `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` `t \<le> maxtime` `maxtime < next_time t \<tau>'` 1(10)]
           by auto
         have "Suc i < next_time t \<tau>'"
           using `maxtime = Suc i` `maxtime < next_time t \<tau>'` by auto
-        hence "Suc i < next_time t (rem_curr_trans t \<tau>)"
+        hence "Suc i < next_time t \<tau>"
           unfolding \<tau>'_def by auto
         hence "signal_of2 def res C (Suc i) =
                signal_of2 def (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) C (Suc i)"
@@ -969,79 +970,66 @@ proof (induction rule:b_simulate_fin.induct)
       ultimately have ?case by auto }
     moreover
     { assume "A \<in> \<gamma> \<or> B \<in> \<gamma>"
-      hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) (rem_curr_trans t \<tau>) t 1"
-        using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3` nand3_def
+      hence \<tau>'_def: "\<tau>' = trans_post C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C) \<tau> t 1"
+        using `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3` nand3_def
         by auto
       have "(\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)) \<or> (\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B))"
         by auto
       moreover
       { assume "\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
         moreover have "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)"
-          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
+          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
           unfolding rem_curr_trans_def by (transfer', auto simp add: to_trans_raw2_def zero_fun_def zero_option_def )
         ultimately have "\<not> post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
           using post_necessary_raw_correctness `\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` by auto        
         hence "to_transaction2 \<tau>' C = 0"
           using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)`
-          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
+          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
           unfolding \<tau>'_def rem_curr_trans_def 
           apply transfer' unfolding preempt_nonstrict_def to_trans_raw2_def zero_fun_def zero_option_def zero_map
-        proof (rule ext)
-          fix tb :: nat and \<tau>'' :: "nat \<Rightarrow> sig \<Rightarrow> bool option" and \<sigma>'' :: "sig \<Rightarrow> bool" and n :: nat
-          assume a1: "\<not> post_necessary_raw 0 (\<tau>''(tb := Map.empty)) tb C (\<not> (\<sigma>'' A \<and> \<sigma>'' B)) (\<sigma>'' C)"
-          assume a2: "\<And>n. n < tb \<Longrightarrow> \<tau>'' n = Map.empty"
-          assume a3: "\<forall>i\<ge>tb. i \<le> tb + 1 \<longrightarrow> (\<tau>''(tb := Map.empty)) i C = None"
-          { assume "(if tb + 1 < n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n) C \<noteq> None"
-            have "\<not> tb + 1 < n \<and> \<not> n < tb \<or> (if tb + 1 < n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n) C = None"
-              using a2 by simp
-            then have "(if tb + 1 < n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n) C = None"
-              using a3 by fastforce }
-          then show "(if post_necessary_raw (1-1) (\<tau>''(tb := Map.empty)) tb C (\<not> (\<sigma>'' A \<and> \<sigma>'' B)) (\<sigma>'' C) then trans_post_raw C (\<not> (\<sigma>'' A \<and> \<sigma>'' B)) (\<tau>''(tb := Map.empty)) (tb + 1) else (\<lambda>n. if tb + 1 \<le> n then ((\<tau>''(tb := Map.empty)) n)(C := None) else (\<tau>''(tb := Map.empty)) n)) n C = None"
-            using a1 by force
-        qed
-        have "next_time t (rem_curr_trans t \<tau>) = next_time t \<tau>'"
-        proof (cases "rem_curr_trans t \<tau> = 0")
+          by auto
+        have "next_time t \<tau> = next_time t \<tau>'"
+        proof (cases "\<tau> = 0")
           case True
-          hence "next_time t (rem_curr_trans t \<tau>) = t"
+          hence "next_time t \<tau> = t + 1"
             unfolding next_time_def by auto
           have "\<tau>' = 0"
             using True `to_transaction2 \<tau>' C = 0` `\<not> post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
             unfolding \<tau>'_def rem_curr_trans_def 
             by (transfer', auto simp add: zero_map zero_fun_def zero_option_def to_trans_raw2_def preempt_nonstrict_def)
-          hence "next_time t \<tau>' = t"
+          hence "next_time t \<tau>' = t + 1"
             by auto
           then show ?thesis 
-            using `next_time t (rem_curr_trans t \<tau>) = t` by auto
+            using `next_time t \<tau> = t + 1` by auto
         next
           case False
-          hence "next_time t (rem_curr_trans t \<tau>) = (LEAST n. dom (get_trans (rem_curr_trans t \<tau>) n) \<noteq> {})"
+          hence "next_time t \<tau> = (LEAST n. dom (get_trans \<tau> n) \<noteq> {})"
             unfolding next_time_def by auto
-          from `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
-          have lookC: "lookup (to_transaction2 (rem_curr_trans t \<tau>) C) = 0"
-            unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def 
-            by (rule ext, auto simp add: zero_map zero_fun_def zero_option_def nat_neq_iff)
-          hence "lookup (to_transaction2 (rem_curr_trans t \<tau>) A) \<noteq> 0 \<or> 
-                 lookup (to_transaction2 (rem_curr_trans t \<tau>) B) \<noteq> 0"
-            using False unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def
+          from `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
+          have lookC: "lookup (to_transaction2 \<tau> C) = 0"
+            apply transfer' unfolding to_trans_raw2_def  by (rule ext, metis leI zero_fun_def) 
+          hence "lookup (to_transaction2 \<tau> A) \<noteq> 0 \<or>  lookup (to_transaction2 \<tau> B) \<noteq> 0"
+            using False apply transfer' unfolding to_trans_raw2_def
             unfolding zero_map zero_fun_def by (metis sig.exhaust)
-          moreover have lookA: "lookup (to_transaction2 \<tau>' A) = lookup (to_transaction2 (rem_curr_trans t \<tau>) A)"
-            unfolding \<tau>'_def  by (metis lookup_trans_post poly_mapping_eqI sig.simps(4))
-          moreover have lookB: "lookup (to_transaction2 \<tau>' B) = lookup (to_transaction2 (rem_curr_trans t \<tau>) B)"
-            unfolding \<tau>'_def  using lookup_trans_post by fastforce
+          moreover have lookA: "lookup (to_transaction2 \<tau>' A) = lookup (to_transaction2 \<tau> A)"
+            unfolding \<tau>'_def  
+            by (metis lookup_trans_post poly_mapping_eqI sig.simps(4))
+          moreover have lookB: "lookup (to_transaction2 \<tau>' B) = lookup (to_transaction2 \<tau> B)"
+            unfolding \<tau>'_def  using lookup_trans_post  by fastforce
           ultimately have "\<tau>' \<noteq> 0" unfolding rem_curr_trans_def  
             by (transfer', auto simp add: to_trans_raw2_def zero_map zero_fun_def zero_option_def)
           hence "next_time t \<tau>' = (LEAST n. dom (get_trans \<tau>' n) \<noteq> {})"
             unfolding next_time_def by auto
-          also have "... = (LEAST n. dom (lookup (rem_curr_trans t \<tau>) n) \<noteq> {})"
+          also have "... = (LEAST n. dom (lookup \<tau> n) \<noteq> {})"
             apply (rule LEAST_ext)
             using lookA lookB lookC `to_transaction2 \<tau>' C = 0` unfolding rem_curr_trans_def
             apply transfer' unfolding to_trans_raw2_def zero_map zero_fun_def zero_option_def 
             by (smt Collect_empty_eq dom_def sig.exhaust)
           finally show ?thesis
-            by (simp add: \<open>next_time t (rem_curr_trans t \<tau>) = (LEAST n. dom (get_trans (rem_curr_trans t \<tau>) n) \<noteq> {})\<close>)
+            by (simp add: \<open>next_time t \<tau> = (LEAST n. dom (get_trans \<tau> n) \<noteq> {})\<close>)
         qed
         hence "signal_of2 (\<sigma> A) \<tau> A i = \<sigma> A" and "signal_of2 (\<sigma> B) \<tau> B i = \<sigma> B"
-          using signal_of2_init'[OF `t \<le> i` _ _ `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`] 1(9)
+          using signal_of2_init[OF `t \<le> i` _ _ `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`] 1(9)
           `i < next_time t \<tau>'` by auto
         note next_big_step = 1(4)
         have "next_time t \<tau>' \<le> maxtime \<or> maxtime < next_time t \<tau>'" by auto
@@ -1053,7 +1041,7 @@ proof (induction rule:b_simulate_fin.induct)
             using`t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` unfolding add_to_beh_def by auto
           hence *: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>
               get_trans (Poly_Mapping.update (next_time t \<tau>') (Some \<circ> next_state t \<tau>' \<sigma>) (add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))) n = get_trans res n"
-            using beh_res2[OF next_big_step h0 `next_time t \<tau>' \<le> maxtime` `cs = nand3` h1 h2 ]
+            using beh_res2[OF next_big_step h0 `next_time t \<tau>' \<le> maxtime` `cs = nand3` h2]
             by auto
           have "Suc i \<le> next_time t \<tau>'"
             using `i < next_time t \<tau>'` `next_time t \<tau>' \<le> maxtime` by auto
@@ -1101,7 +1089,7 @@ proof (induction rule:b_simulate_fin.induct)
         moreover
         { assume "maxtime < next_time t \<tau>'"
           hence pre: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow> get_trans (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n = get_trans res n"
-            using borderline_big_step[OF next_big_step `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` `t \<le> maxtime` `maxtime < next_time t \<tau>'` 1(10)]
+            using borderline_big_step[OF next_big_step `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` `t \<le> maxtime` `maxtime < next_time t \<tau>'` 1(10)]
             by auto
           have "Suc i < next_time t \<tau>'"
             using `maxtime = Suc i` `maxtime < next_time t \<tau>'` by auto
@@ -1126,21 +1114,20 @@ proof (induction rule:b_simulate_fin.induct)
         ultimately have ?case by auto }
       moreover
       { assume "(\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B))"
-        have "to_transaction2 (rem_curr_trans t \<tau>) C = 0"
-          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n < t \<Longrightarrow> get_trans \<tau> n = 0`
-          unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def 
-          by (metis fun_upd_apply nat_neq_iff zero_fun_def)
-        hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)"
+        have "to_transaction2 \<tau> C = 0"
+          using `\<And>n. t < n \<Longrightarrow> lookup (to_transaction2 \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow> get_trans \<tau> n = 0`
+          unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by (metis leI zero_fun_def)
+        hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)"
           unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by (metis zero_option_def)
-        hence "post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
+        hence post_nec: "post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
         proof -
-          have "\<not> (\<exists>i\<ge>t. i \<le> t + 1 \<and> lookup (rem_curr_trans t \<tau>) i C = Some (\<not> (\<sigma> A \<and> \<sigma> B)) \<and> 
-                  (\<forall>j>i. j \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) j C = None))"
-            using `to_transaction2 (rem_curr_trans t \<tau>) C = 0` unfolding rem_curr_trans_def
+          have "\<not> (\<exists>i\<ge>t. i \<le> t + 1 \<and> lookup \<tau> i C = Some (\<not> (\<sigma> A \<and> \<sigma> B)) \<and> 
+                  (\<forall>j>i. j \<le> t + 1 \<longrightarrow> lookup \<tau> j C = None))"
+            using `to_transaction2 \<tau> C = 0` unfolding rem_curr_trans_def
             apply transfer' unfolding to_trans_raw2_def  by (metis option.simps(3) zero_option_def)
           thus ?thesis
             using post_necessary_raw_correctness `\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
-            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup (rem_curr_trans t \<tau>) i C = None)` by simp
+            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow> lookup \<tau> i C = None)` by simp
         qed        
         hence "\<tau>' \<noteq> 0"
           using trans_post_imply_neq_map_empty 
@@ -1150,7 +1137,7 @@ proof (induction rule:b_simulate_fin.induct)
         also have "... = t + 1"
         proof (rule Least_equality)
           show "dom (get_trans \<tau>' (t + 1)) \<noteq> {}"
-            using `post_necessary_raw 0 (lookup (rem_curr_trans t \<tau>)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
+            using `post_necessary_raw 0 (lookup \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)`
             unfolding \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def preempt_def 
             by (auto simp add: zero_fun_def zero_option_def)
         next
@@ -1257,7 +1244,7 @@ proof (induction rule:b_simulate_fin.induct)
           using `next_time t \<tau>' = t + 1` `maxtime = Suc i` `i = t` by auto
         have "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>
               get_trans (Poly_Mapping.update (next_time t \<tau>') (Some \<circ> next_state t \<tau>' \<sigma>) (add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))) n = get_trans res n"
-          using beh_res2[OF next_big_step h0 `next_time t \<tau>' \<le> maxtime` `cs = nand3` h1 h2] by auto
+          using beh_res2[OF next_big_step h0 `next_time t \<tau>' \<le> maxtime` `cs = nand3` h2] by auto
         hence "lookup res (next_time t \<tau>') = (Some o next_state t \<tau>' \<sigma>)"
           by (metis lookup_update order_refl)
         hence "lookup res (Suc i) = (Some o next_state t \<tau>' \<sigma>)"
@@ -1267,7 +1254,8 @@ proof (induction rule:b_simulate_fin.induct)
         also have "... = (let m = get_trans \<tau>' (t + 1) in override_on \<sigma> (the o m) (dom m)) C"
           using `next_time t \<tau>' = t + 1` unfolding next_state_def by auto
         also have "... \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
-          unfolding Let_def \<tau>'_def rem_curr_trans_def apply transfer' unfolding trans_post_raw_def preempt_nonstrict_def
+          using post_nec
+          unfolding Let_def \<tau>'_def apply transfer' unfolding trans_post_raw_def preempt_nonstrict_def
           by (auto split:option.split simp add: zero_fun_def zero_option_def override_on_def)
         finally have "signal_of2 def res C (Suc i) \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
           by auto
@@ -1278,143 +1266,29 @@ proof (induction rule:b_simulate_fin.induct)
   moreover
   { assume "next_time t \<tau>' \<le> i"
     with IH have IH': "signal_of2 def res C (Suc i) =
-            (\<not> (signal_of2 (next_state t \<tau>' \<sigma> A) \<tau>' A i \<and> signal_of2 (next_state t \<tau>' \<sigma> B) \<tau>' B i))"
+                (\<not> (signal_of2 (next_state t \<tau>' \<sigma> A) (rem_curr_trans (next_time t \<tau>') \<tau>') A i \<and> signal_of2 (next_state t \<tau>' \<sigma> B) (rem_curr_trans (next_time t \<tau>') \<tau>') B i))"
       by auto
     have Anot: "A \<notin> set (signals_from cs)"
       unfolding `cs = nand3` nand3_def by auto
-    have "signal_of2 (next_state t \<tau>' \<sigma> A) \<tau>' A i  = signal_of2 (\<sigma> A) (rem_curr_trans t \<tau>) A i"
-      using b_conc_exec_does_not_modify_signals2[OF h5 `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` Anot `next_time t \<tau>' \<le> i`]
+    have "signal_of2 (\<sigma> A) \<tau> A i = signal_of2 (next_state t \<tau>' \<sigma> A) \<tau>' A i"
+      using b_conc_exec_does_not_modify_signals2[OF h5 `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` Anot `next_time t \<tau>' \<le> i`]
       unfolding `cs = nand3` nand3_def by auto
-    also have "... = signal_of2 (\<sigma> A) \<tau> A i"
-    proof -
-      obtain ta where  "inf_time (to_transaction2 \<tau>) A i = None \<or>  inf_time (to_transaction2 \<tau>) A i = Some ta"
-        (is "?none \<or> ?some")
-        using option.exhaust_sel by blast
-      moreover
-      { assume "?none"
-        hence "\<forall>t \<in> dom (lookup (to_transaction2 \<tau> A)). i < t"
-          by (auto dest!:inf_time_noneE)
-        moreover have "dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) A)) \<subseteq> dom (lookup (to_transaction2 \<tau> A))"
-          unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def
-          by (simp add: Collect_mono dom_def zero_map)
-        ultimately have "\<forall>t \<in> dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) A)). i < t"
-          by (simp add: subset_iff)
-        hence "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) A i = None"
-          by (auto intro!: inf_time_noneI)
-        hence ?thesis using `?none` unfolding to_signal2_def comp_def
-          by auto }
-      moreover
-      { assume "?some"
-        hence "ta \<in> dom (lookup (to_transaction2 \<tau> A))" and *: "\<forall>t \<in> dom (lookup (to_transaction2 \<tau> A)). t \<le> i \<longrightarrow> t \<le> ta"
-          using inf_time_someE2[OF `?some`] inf_time_someE[OF `?some`] by auto
-        have "ta = t \<or> ta \<noteq> t" by auto
-        moreover
-        { assume "ta \<noteq> t"
-          hence "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) A i = Some ta"
-            using `?some` by (simp add: inf_time_rem_curr_trans)
-          moreover have "lookup (to_transaction2 (rem_curr_trans t \<tau>) A) ta = lookup (to_transaction2 \<tau> A) ta"
-            using `ta \<noteq> t` unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by auto
-          ultimately have ?thesis using `?some` unfolding to_signal2_def comp_def
-            using `ta \<noteq> t` by auto }
-        moreover
-        { assume "ta = t"
-          hence "A \<in> dom (get_trans \<tau> t)"
-            using `ta \<in> dom (lookup (to_transaction2 \<tau> A))` apply transfer' unfolding to_trans_raw2_def
-            by auto
-          have "\<forall>k \<in> dom (lookup (to_transaction2 \<tau> A)). k \<le> i \<longrightarrow> k \<le> t"
-            using * `ta = t` by auto
-          moreover have "dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) A)) \<subseteq> dom (lookup (to_transaction2 \<tau> A))"
-            unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def
-            by (simp add: Collect_mono dom_def zero_map)
-          moreover have "\<forall>k \<in> dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) A)). k > t"
-            using 1(8) unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def
-            by (metis domIff fun_upd_apply nat_neq_iff zero_map)
-          ultimately have "\<forall>k \<in> dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) A)). i < k"
-            by (meson leD le_less_linear subset_iff)
-          hence "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) A i = None"
-            by (auto intro!: inf_time_noneI)
-          hence "signal_of2 (\<sigma> A) (rem_curr_trans t \<tau>) A i = \<sigma> A"
-            unfolding to_signal2_def comp_def by auto
-          also have "... = the (lookup \<tau> t A)"
-            using `\<And>s. s \<in> dom (get_trans \<tau> t) \<Longrightarrow> \<sigma> s = the (get_trans \<tau> t s)` `A \<in> dom (get_trans \<tau> t)`
-            by auto
-          finally have ?thesis
-            using `?some` `ta = t` unfolding to_signal2_def comp_def
-            by (simp add: to_trans_raw2_def to_transaction2.rep_eq) }
-        ultimately have ?thesis by auto }
-      ultimately show ?thesis by auto
-    qed
-    finally have "signal_of2 (next_state t \<tau>' \<sigma> A) \<tau>' A i  = signal_of2 (\<sigma> A) \<tau> A i"
+    also have "... = signal_of2 (next_state t \<tau>' \<sigma> A) (rem_curr_trans (next_time t \<tau>') \<tau>') A i"
+      using h0' h1' by(intro sym[OF signal_of2_rem_curr_trans_at_t]) 
+    finally have "signal_of2 (next_state t \<tau>' \<sigma> A) (rem_curr_trans (next_time t \<tau>') \<tau>') A i  = signal_of2 (\<sigma> A) \<tau> A i"
       by auto
 
     have Bnot: "B \<notin> set (signals_from cs)"
       unfolding `cs = nand3` nand3_def by auto
-    have "signal_of2 (next_state t \<tau>' \<sigma> B) \<tau>' B i  = signal_of2 (\<sigma> B) (rem_curr_trans t \<tau>) B i"
-      using b_conc_exec_does_not_modify_signals2[OF h5 `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , rem_curr_trans t \<tau>> \<longrightarrow>\<^sub>c \<tau>'` Bnot `next_time t \<tau>' \<le> i`]
+    have " signal_of2 (\<sigma> B) \<tau> B i = signal_of2 (next_state t \<tau>' \<sigma> B) \<tau>' B i"
+      using b_conc_exec_does_not_modify_signals2[OF h5 `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` Bnot `next_time t \<tau>' \<le> i`]
       unfolding `cs = nand3` nand3_def by auto
-    also have "... = signal_of2 (\<sigma> B) \<tau> B i"
-    proof -
-      obtain ta where  "inf_time (to_transaction2 \<tau>) B i = None \<or>  inf_time (to_transaction2 \<tau>) B i = Some ta"
-        (is "?none \<or> ?some")
-        using option.exhaust_sel by blast
-      moreover
-      { assume "?none"
-        hence "\<forall>t \<in> dom (lookup (to_transaction2 \<tau> B)). i < t"
-          by (auto dest!:inf_time_noneE)
-        moreover have "dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) B)) \<subseteq> dom (lookup (to_transaction2 \<tau> B))"
-          unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def
-          by (simp add: Collect_mono dom_def zero_map)
-        ultimately have "\<forall>t \<in> dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) B)). i < t"
-          by (simp add: subset_iff)
-        hence "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) B i = None"
-          by (auto intro!: inf_time_noneI)
-        hence ?thesis using `?none` unfolding to_signal2_def comp_def
-          by auto }
-      moreover
-      { assume "?some"
-        hence "ta \<in> dom (lookup (to_transaction2 \<tau> B))" and *: "\<forall>t \<in> dom (lookup (to_transaction2 \<tau> B)). t \<le> i \<longrightarrow> t \<le> ta"
-          using inf_time_someE2[OF `?some`] inf_time_someE[OF `?some`] by auto
-        have "ta = t \<or> ta \<noteq> t" by auto
-        moreover
-        { assume "ta \<noteq> t"
-          hence "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) B i = Some ta"
-            using `?some` by (simp add: inf_time_rem_curr_trans)
-          moreover have "lookup (to_transaction2 (rem_curr_trans t \<tau>) B) ta = lookup (to_transaction2 \<tau> B) ta"
-            using `ta \<noteq> t` unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def by auto
-          ultimately have ?thesis using `?some` unfolding to_signal2_def comp_def
-            using `ta \<noteq> t` by auto }
-        moreover
-        { assume "ta = t"
-          hence "B \<in> dom (get_trans \<tau> t)"
-            using `ta \<in> dom (lookup (to_transaction2 \<tau> B))` apply transfer' unfolding to_trans_raw2_def
-            by auto
-          have "\<forall>k \<in> dom (lookup (to_transaction2 \<tau> B)). k \<le> i \<longrightarrow> k \<le> t"
-            using * `ta = t` by auto
-          moreover have "dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) B)) \<subseteq> dom (lookup (to_transaction2 \<tau> B))"
-            unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def
-            by (simp add: Collect_mono dom_def zero_map)
-          moreover have "\<forall>k \<in> dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) B)). k > t"
-            using 1(8) unfolding rem_curr_trans_def apply transfer' unfolding to_trans_raw2_def
-            by (metis domIff fun_upd_apply nat_neq_iff zero_map)
-          ultimately have "\<forall>k \<in> dom (lookup (to_transaction2 (rem_curr_trans t \<tau>) B)). i < k"
-            by (meson leD le_less_linear subset_iff)
-          hence "inf_time (to_transaction2 (rem_curr_trans t \<tau>)) B i = None"
-            by (auto intro!: inf_time_noneI)
-          hence "signal_of2 (\<sigma> B) (rem_curr_trans t \<tau>) B i = \<sigma> B"
-            unfolding to_signal2_def comp_def by auto
-          also have "... = the (lookup \<tau> t B)"
-            using `\<And>s. s \<in> dom (get_trans \<tau> t) \<Longrightarrow> \<sigma> s = the (get_trans \<tau> t s)` `B \<in> dom (get_trans \<tau> t)`
-            by auto
-          finally have ?thesis
-            using `?some` `ta = t` unfolding to_signal2_def comp_def
-            by (simp add: to_trans_raw2_def to_transaction2.rep_eq) }
-        ultimately have ?thesis by auto }
-      ultimately show ?thesis by auto
-    qed
-    finally have "signal_of2 (next_state t \<tau>' \<sigma> B) \<tau>' B i  = signal_of2 (\<sigma> B) \<tau> B i"
+    also have "... = signal_of2 (next_state t \<tau>' \<sigma> B) (rem_curr_trans (next_time t \<tau>') \<tau>') B i"
+      using h0' h1' by(intro sym[OF signal_of2_rem_curr_trans_at_t]) 
+    finally have "signal_of2 (next_state t \<tau>' \<sigma> B) (rem_curr_trans (next_time t \<tau>') \<tau>') B i  = signal_of2 (\<sigma> B) \<tau> B i"
       by auto
     hence ?case
-      using `signal_of2 (next_state t \<tau>' \<sigma> A) \<tau>' A i  = signal_of2 (\<sigma> A) \<tau> A i` IH'
+      using `signal_of2 (next_state t \<tau>' \<sigma> A) (rem_curr_trans (next_time t \<tau>') \<tau>') A i  = signal_of2 (\<sigma> A) \<tau> A i` IH'
       by auto }
   ultimately show ?case by auto
 next
@@ -1434,7 +1308,7 @@ next
   ultimately show ?case
     using * ** 2(10)[OF `A \<notin> \<gamma> \<and> B \<notin> \<gamma>`]  by auto
 next
-  case (3 t maxtime \<theta> res \<sigma> \<gamma> cs \<tau>)
+  case (3 t maxtime \<sigma> \<gamma> cs \<tau>)
   then show ?case by auto
 qed
 
@@ -1459,7 +1333,7 @@ proof -
 qed
 
 theorem nand3_correctness:
-  assumes "b_simulate2 (Suc i) nand3 \<tau> res"
+  assumes "b_simulate (Suc i) nand3 \<tau> res"
   assumes "lookup (to_transaction2 \<tau> C) = 0"
   shows "signal_of2 def res C (Suc i) \<longleftrightarrow> \<not> (signal_of2 False \<tau> A i \<and> signal_of2 False \<tau> B i)"
 proof (cases "lookup \<tau> 0 = 0")
@@ -1490,9 +1364,15 @@ proof (cases "lookup \<tau> 0 = 0")
   qed
   have ind1: "\<And>n. n < next_time 0 ?\<tau>' \<Longrightarrow> lookup ?\<tau>' n = 0"
     using True unfolding `next_time 0 ?\<tau>' = 1` by (transfer', auto simp add: trans_post_raw_def preempt_nonstrict_def)
+  hence ind1': "\<And>n. n \<le> next_time 0 ?\<tau>' \<Longrightarrow> lookup (rem_curr_trans (next_time 0 ?\<tau>') ?\<tau>') n = 0"
+    unfolding rem_curr_trans_def  by (simp add: lookup_update)
   have ind2: "\<And>s. s \<in> dom (lookup ?\<tau>' (next_time 0 ?\<tau>')) \<Longrightarrow>
                         next_state 0 ?\<tau>' def_state s = the (lookup ?\<tau>' (next_time 0 ?\<tau>') s)"
     unfolding next_state_def `next_time 0 ?\<tau>' = 1` Let_def by auto
+  have ind2': "\<And>s. s \<in> dom (lookup (rem_curr_trans (next_time 0 ?\<tau>') ?\<tau>') (next_time 0 ?\<tau>')) \<Longrightarrow>
+                        next_state 0 ?\<tau>' def_state s = the (lookup (rem_curr_trans (next_time 0 ?\<tau>') ?\<tau>') (next_time 0 ?\<tau>') s)"
+    unfolding rem_curr_trans_def by (metis (no_types, hide_lams) dom_eq_empty_conv empty_iff
+    fun_upd_same lookup_update zero_fun_def zero_upd)
   have ind3: "\<And>n. next_time 0 ?\<tau>' \<le> n \<Longrightarrow> lookup (add_to_beh def_state 0 0 (next_time 0 ?\<tau>')) n = 0"
     unfolding ntime add_to_beh_def by (transfer', auto)
   have Cin: "C \<in> dom (lookup ?\<tau>' (next_time 0 ?\<tau>'))"
@@ -1512,17 +1392,19 @@ proof (cases "lookup \<tau> 0 = 0")
   note ind4 = this
   have ind5: "\<And>n. next_time 0 ?\<tau>' < n \<Longrightarrow> lookup (to_transaction2 ?\<tau>' C) n = 0"
     unfolding ntime by (transfer', auto simp add: trans_post_raw_def to_trans_raw2_def zero_option_def preempt_nonstrict_def)
+  have ind5': "\<And>n. next_time 0 ?\<tau>' < n \<Longrightarrow> lookup (to_transaction2 (rem_curr_trans (next_time 0 ?\<tau>') ?\<tau>') C) n = 0"
+    unfolding rem_curr_trans_def by (metis ind5 lookup_update to_transaction2_delete)
   hence bigstep: "(Suc i),
          next_time 0 (trans_post C True False \<tau> 0 1) ,
          next_state 0 (trans_post C True False \<tau> 0 1) def_state ,
          next_event 0 (trans_post C True False \<tau> 0 1) def_state ,
          add_to_beh def_state empty_trans 0 (next_time 0 (trans_post C True False \<tau> 0 1))
-      \<turnstile> <nand3 , trans_post C True False \<tau> 0 1> \<leadsto> res"
-    using bsimulate2_obt_big_step[OF assms(1) `init' 0 def_state {} 0 nand3 \<tau> = ?\<tau>'`] by auto
+      \<turnstile> <nand3 , rem_curr_trans (next_time 0 (trans_post C True False \<tau> 0 1)) (trans_post C True False \<tau> 0 1)> \<leadsto> res"
+    using bsimulate_obt_big_step[OF assms(1) `init' 0 def_state {} 0 nand3 \<tau> = ?\<tau>'`] by auto
   have *: "1 \<le> i \<Longrightarrow>
      signal_of2 def res C (Suc i) \<longleftrightarrow>
-  \<not> (signal_of2 (next_state 0 ?\<tau>' def_state A) ?\<tau>' A i \<and> signal_of2 (next_state 0 ?\<tau>' def_state B) ?\<tau>' B i)"
-    using nand3_correctness_ind[OF bigstep _ _ ind1 ind2 ind3 _ ind4 ind5] unfolding ntime by auto
+  \<not> (signal_of2 (next_state 0 ?\<tau>' def_state A) (rem_curr_trans 1 ?\<tau>') A i \<and> signal_of2 (next_state 0 ?\<tau>' def_state B) (rem_curr_trans 1 ?\<tau>') B i)"
+    using nand3_correctness_ind[OF bigstep _ _ ind1' ind2' ind3 _ ind4 ind5']  unfolding ntime by auto
   moreover have "1 \<le> i \<Longrightarrow> signal_of2 (next_state 0 ?\<tau>' def_state A) ?\<tau>' A i = signal_of2 False ?\<tau>' A i"
   proof (cases "inf_time (to_transaction2 ?\<tau>') A i = None")
     case True
@@ -1551,6 +1433,9 @@ proof (cases "lookup \<tau> 0 = 0")
     then show ?thesis
       unfolding to_signal2_def comp_def by auto
   qed
+  moreover have "signal_of2 (next_state 0 ?\<tau>' def_state A) ?\<tau>' A i =   signal_of2 (next_state 0 ?\<tau>' def_state A) (rem_curr_trans 1 ?\<tau>') A i"
+    apply(intro sym[OF signal_of2_rem_curr_trans_at_t])
+    using ind1 ntime ind2 by auto
   moreover have "1 \<le> i \<Longrightarrow> signal_of2 (next_state 0 ?\<tau>' def_state B) ?\<tau>' B i = signal_of2 False ?\<tau>' B i"
   proof (cases "inf_time (to_transaction2 ?\<tau>') B i = None")
     case True
@@ -1579,6 +1464,9 @@ proof (cases "lookup \<tau> 0 = 0")
     then show ?thesis
       unfolding to_signal2_def comp_def by auto
   qed
+  moreover have "signal_of2 (next_state 0 ?\<tau>' def_state B) ?\<tau>' B i = signal_of2 (next_state 0 ?\<tau>' def_state B) (rem_curr_trans 1 ?\<tau>') B i"
+    apply(intro sym[OF signal_of2_rem_curr_trans_at_t])
+    using ind1 ntime ind2 by auto
   ultimately have IR: "1 \<le> i \<Longrightarrow> signal_of2 def res C (Suc i) \<longleftrightarrow>
                                             \<not> (signal_of2 False ?\<tau>' A i \<and> signal_of2 False ?\<tau>' B i)"
     by auto
@@ -1595,7 +1483,7 @@ proof (cases "lookup \<tau> 0 = 0")
   have "lookup res 1 = get_trans
    (Poly_Mapping.update (next_time 0 (trans_post C True False \<tau> 0 1)) (Some \<circ> next_state 0 (trans_post C True False \<tau> 0 1) def_state)
      (add_to_beh def_state empty_trans 0 (next_time 0 (trans_post C True False \<tau> 0 1)))) 1"
-    using beh_res2[OF bigstep ind1 `next_time 0 (trans_post C True False \<tau> 0 1) \<le> Suc i` _ ind2 ind3 `1 \<le> next_time 0 (trans_post C True False \<tau> 0 1)`]
+    using beh_res2[OF bigstep ind1' `next_time 0 (trans_post C True False \<tau> 0 1) \<le> Suc i` _ ind3 `1 \<le> next_time 0 (trans_post C True False \<tau> 0 1)`]
     by auto
   also have "... = lookup (Poly_Mapping.update 1 (Some o next_state 0 ?\<tau>' def_state) (add_to_beh def_state 0 0 1)) 1"
     unfolding ntime by auto
@@ -1669,24 +1557,34 @@ next
   hence "\<theta>' = 0"
     unfolding t'_def' add_to_beh_def by auto
 
-  hence bigstep: "(Suc i), t' , \<sigma>' , \<gamma>', \<theta>' \<turnstile> <nand3 , ?\<tau>'> \<leadsto> res"
-    using bsimulate2_obt_big_step[OF assms(1) `init' 0 def_state {} 0 nand3 \<tau> = ?\<tau>'`]
+  hence bigstep: "(Suc i), t' , \<sigma>' , \<gamma>', \<theta>' \<turnstile> <nand3 , (rem_curr_trans t' ?\<tau>')> \<leadsto> res"
+    using bsimulate_obt_big_step[OF assms(1) `init' 0 def_state {} 0 nand3 \<tau> = ?\<tau>'`]
     unfolding \<sigma>'_def \<gamma>'_def \<theta>'_def t'_def by auto
-  hence bigstep': "(Suc i), 0 , \<sigma>' , \<gamma>', 0 \<turnstile> <nand3 , ?\<tau>'> \<leadsto> res"
+  hence bigstep': "(Suc i), 0 , \<sigma>' , \<gamma>', 0 \<turnstile> <nand3 , (rem_curr_trans t' ?\<tau>')> \<leadsto> res"
     unfolding t'_def' `\<theta>' = 0` by auto
-  have "\<not> quiet ?\<tau>' \<gamma>'"
-    using False unfolding quiet_def apply transfer' unfolding trans_post_raw_def preempt_nonstrict_def
-    by (smt One_nat_def add.left_neutral le_zero_eq n_not_Suc_n not_less_zero)
-    
+  have "rem_curr_trans t' ?\<tau>' \<noteq> 0"
+  proof (rule ccontr)
+    assume "\<not> rem_curr_trans t' ?\<tau>' \<noteq> 0"
+    hence "lookup (rem_curr_trans t' ?\<tau>') 1 C = None"
+      unfolding rem_curr_trans_def  by (simp add: zero_map)
+    moreover have "lookup (rem_curr_trans t' ?\<tau>') 1 C = Some True"
+      using \<open>post_necessary_raw 0 (get_trans \<tau>) 0 C True False\<close>  unfolding t'_def'
+      unfolding rem_curr_trans_def apply transfer'  unfolding trans_post_raw_def 
+      by auto
+    ultimately show False by auto
+  qed
+  hence "\<not> quiet (rem_curr_trans t' ?\<tau>') \<gamma>'"
+    unfolding quiet_def by auto
   moreover have "0 \<le> Suc i"
     by auto
-  obtain \<tau>'' where cyc: "0 , \<sigma>' , \<gamma>' , empty_trans \<turnstile> <nand3 , rem_curr_trans 0 ?\<tau>'> \<longrightarrow>\<^sub>c \<tau>''" and
-    bigstep'': "(Suc i), next_time 0 \<tau>'' , next_state 0 \<tau>'' \<sigma>' , next_event 0 \<tau>'' \<sigma>' , add_to_beh \<sigma>' empty_trans 0 (next_time 0 \<tau>'') \<turnstile> <nand3 , \<tau>''> \<leadsto> res"
-    using case_bau2[OF `0 \<le> Suc i` `\<not> quiet ?\<tau>' \<gamma>'` bigstep'] by auto
+  obtain \<tau>'' where cyc: "0 , \<sigma>' , \<gamma>' , empty_trans \<turnstile> <nand3 , rem_curr_trans t' ?\<tau>'> \<longrightarrow>\<^sub>c \<tau>''" and
+    bigstep'': "(Suc i), next_time 0 \<tau>'' , next_state 0 \<tau>'' \<sigma>' , next_event 0 \<tau>'' \<sigma>' , add_to_beh \<sigma>' empty_trans 0 (next_time 0 \<tau>'') \<turnstile> 
+                  <nand3 , rem_curr_trans (next_time 0 \<tau>'') \<tau>''> \<leadsto> res"
+    using case_bau2[OF `0 \<le> Suc i` `\<not> quiet (rem_curr_trans t' ?\<tau>') \<gamma>'` bigstep'] by auto
   define \<sigma>'' where "\<sigma>'' = next_state 0 \<tau>'' \<sigma>'"
   define \<gamma>'' where "\<gamma>'' = next_event 0 \<tau>'' \<sigma>'"
   define \<theta>'' where "\<theta>'' = add_to_beh \<sigma>' 0 0 (next_time 0 \<tau>'')"
-  have bigstep3 : "(Suc i), next_time 0 \<tau>'' , \<sigma>'' , \<gamma>'' , \<theta>'' \<turnstile> <nand3 , \<tau>''> \<leadsto> res"
+  have bigstep3 : "(Suc i), next_time 0 \<tau>'' , \<sigma>'' , \<gamma>'' , \<theta>'' \<turnstile> <nand3 ,rem_curr_trans (next_time 0 \<tau>'') \<tau>''> \<leadsto> res"
     using bigstep'' unfolding \<sigma>''_def \<gamma>''_def \<theta>''_def by auto
 
   have ind1: "\<And>n. n < next_time 0 ?\<tau>' \<Longrightarrow> lookup ?\<tau>' n = 0"
@@ -1694,14 +1592,10 @@ next
   have ind1': "\<And>n. n < next_time 0 \<tau>'' \<Longrightarrow> lookup \<tau>'' n = 0"
   proof (cases "\<tau>'' = 0")
     case True
-    hence "next_time 0 \<tau>'' = 0"
+    hence "next_time 0 \<tau>'' = 1"
       by auto
-    { fix n
-      assume "n < next_time 0 \<tau>''"
-      hence "n < 0" unfolding `next_time 0 \<tau>'' = 0` by auto
-      hence "False" by auto
-      hence "lookup \<tau>'' n = 0" by auto }
-    then show "\<And>n. n < next_time 0 \<tau>'' \<Longrightarrow> lookup \<tau>'' n = 0" by auto
+    then show "\<And>n. n < next_time 0 \<tau>'' \<Longrightarrow> lookup \<tau>'' n = 0"
+      using Least_le  next_time_at_least2 by blast
   next
     case False
     hence "next_time 0 \<tau>'' = (LEAST n. dom (lookup \<tau>'' n) \<noteq> {})"
@@ -1709,12 +1603,16 @@ next
     then show "\<And>n. n < next_time 0 \<tau>'' \<Longrightarrow> lookup \<tau>'' n = 0"
       using Least_le  next_time_at_least2 by blast
   qed
+  hence ind1'': "\<And>n. n \<le> next_time 0 \<tau>'' \<Longrightarrow> get_trans (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') n = 0"
+    unfolding rem_curr_trans_def  by (simp add: lookup_update)
   have ind2: "\<And>s. s \<in> dom (lookup ?\<tau>' (next_time 0 ?\<tau>')) \<Longrightarrow>
                         next_state 0 ?\<tau>' def_state s = the (lookup ?\<tau>' (next_time 0 ?\<tau>') s)"
     unfolding next_state_def `next_time 0 ?\<tau>' = 0` Let_def by auto
   have ind2': "\<And>s. s \<in> dom (lookup \<tau>'' (next_time 0 \<tau>'')) \<Longrightarrow>
                         \<sigma>'' s = the (lookup \<tau>'' (next_time 0 \<tau>'') s)"
     unfolding next_state_def Let_def \<sigma>''_def by auto
+  have ind2'': "\<And>s. s \<in> dom (get_trans (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') (next_time 0 \<tau>'')) \<Longrightarrow> \<sigma>'' s = the (get_trans (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') (next_time 0 \<tau>'') s)"
+    unfolding rem_curr_trans_def by (metis dom_eq_empty_conv empty_iff fun_upd_same lookup_update zero_upd)
   have ind3: "\<And>n. next_time 0 ?\<tau>' \<le> n \<Longrightarrow> lookup (add_to_beh def_state 0 0 (next_time 0 ?\<tau>')) n = 0"
     unfolding ntime add_to_beh_def by (transfer', auto)
   have ind3': "\<And>n. next_time 0 \<tau>'' \<le> n \<Longrightarrow> lookup \<theta>'' n = 0"
@@ -1725,7 +1623,7 @@ next
   proof (cases)
     case either
     hence \<tau>''_def: "\<tau>'' = trans_post C (\<not> (\<sigma>' A \<and> \<sigma>' B)) (\<sigma>' C) (rem_curr_trans 0 ?\<tau>') 0 1"
-      using cyc unfolding nand3_def by auto
+      using cyc unfolding nand3_def t'_def' by auto
     have "(\<sigma>' C \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B)) \<or> (\<not> \<sigma>' C \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B))"
       by auto
     moreover
@@ -1785,9 +1683,11 @@ next
         by (simp add: zero_option_def )
       hence ind5': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow> lookup (to_transaction2 \<tau>'' C) n = 0"
         unfolding `next_time 0 \<tau>'' = 1` by auto
+      hence ind5'': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow> lookup (to_transaction2 (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') C) n = 0"
+        unfolding rem_curr_trans_def  by (simp add: lookup_update to_transaction2_delete)
       have *: "1 \<le> i \<Longrightarrow>
-         signal_of2 def res C (Suc i) = (\<not> (signal_of2 (\<sigma>'' A) \<tau>'' A i \<and> signal_of2 (\<sigma>'' B) \<tau>'' B i))"
-        using nand3_correctness_ind[OF bigstep3 _ _ ind1' ind2' ind3' _ ind4' ind5']
+         signal_of2 def res C (Suc i) = (\<not> (signal_of2 (\<sigma>'' A) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') A i \<and> signal_of2 (\<sigma>'' B) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') B i))"
+        using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5''] 
         unfolding `next_time 0 \<tau>'' = 1` by auto
       moreover have "1 \<le> i \<Longrightarrow> signal_of2 (\<sigma>'' A) \<tau>'' A i = signal_of2 (\<sigma>' A) \<tau>'' A i"
       proof (cases "inf_time (to_transaction2 \<tau>'') A i = None")
@@ -1818,6 +1718,9 @@ next
         then show ?thesis
           unfolding to_signal2_def comp_def by auto
       qed
+      moreover have "signal_of2 (\<sigma>'' A) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') A i = 
+                     signal_of2 (\<sigma>'' A) \<tau>'' A i"
+        apply (intro signal_of2_rem_curr_trans_at_t) using ind1' ind2' by auto
       moreover have "1 \<le> i \<Longrightarrow> signal_of2 (\<sigma>'' B) \<tau>'' B i = signal_of2 (\<sigma>' B) \<tau>'' B i"
       proof (cases "inf_time (to_transaction2 \<tau>'') B i = None")
         case True
@@ -1847,6 +1750,9 @@ next
         then show ?thesis
           unfolding to_signal2_def comp_def by auto
       qed
+      moreover have "signal_of2 (\<sigma>'' B) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') B i = 
+                     signal_of2 (\<sigma>'' B) \<tau>'' B i"
+        apply (intro signal_of2_rem_curr_trans_at_t) using ind1' ind2' by auto
       ultimately have IR: "1 \<le> i \<Longrightarrow> signal_of2 def res C (Suc i) \<longleftrightarrow>
                                             \<not> (signal_of2 (\<sigma>' A) \<tau>'' A i \<and> signal_of2 (\<sigma>' B) \<tau>'' B i)"
         by auto
@@ -1859,7 +1765,7 @@ next
       have "next_time 0 \<tau>'' \<le> Suc i" and "1 \<le> next_time 0 \<tau>''"
         unfolding `next_time 0 \<tau>'' = 1` by auto
       have "get_trans res 1 = get_trans (Poly_Mapping.update 1 (Some \<circ> \<sigma>'') \<theta>'') 1"
-        using beh_res2[OF bigstep3 ind1' `next_time 0 \<tau>'' \<le> Suc i` _ ind2' ind3' `1 \<le> next_time 0 \<tau>''`]
+        using beh_res2[OF bigstep3 ind1'' `next_time 0 \<tau>'' \<le> Suc i` _ ind3' `1 \<le> next_time 0 \<tau>''`] 
         unfolding `next_time 0 \<tau>'' = 1` by auto
       also have "... = Some o \<sigma>''"
         by (simp add: lookup_update)
@@ -1972,9 +1878,12 @@ next
         unfolding \<gamma>''_def \<sigma>''_def by auto
       have ind5': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow> lookup (to_transaction2 \<tau>'' C) n = 0"
         using `to_transaction2 \<tau>'' C = 0` by auto
+      hence ind5'': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow> lookup (to_transaction2 (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') C) n = 0"
+        unfolding rem_curr_trans_def  by (simp add: lookup_update to_transaction2_delete)
       have *: "next_time 0 \<tau>'' \<le> i \<Longrightarrow>
-         signal_of2 def res C (Suc i) = (\<not> (signal_of2 (\<sigma>'' A) \<tau>'' A i \<and> signal_of2 (\<sigma>'' B) \<tau>'' B i))"
-        using nand3_correctness_ind[OF bigstep3 _ _ ind1' ind2' ind3' _ ind4' ind5'] by auto
+         signal_of2 def res C (Suc i) = (\<not> (signal_of2 (\<sigma>'' A) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') A i \<and> signal_of2 (\<sigma>'' B) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') B i))"
+        using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5'']  
+        by auto
       moreover have "next_time 0 \<tau>'' \<le> i \<Longrightarrow> signal_of2 (\<sigma>'' A) \<tau>'' A i = signal_of2 (\<sigma>' A) \<tau>'' A i"
       proof (cases "inf_time (to_transaction2 \<tau>'') A i = None")
         case True
@@ -2004,6 +1913,9 @@ next
         then show ?thesis
           unfolding to_signal2_def comp_def by auto
       qed
+      moreover have "signal_of2 (\<sigma>'' A) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') A i = signal_of2 (\<sigma>'' A) \<tau>'' A i"
+        apply (intro signal_of2_rem_curr_trans_at_t)
+        using ind1' ind2' by auto
       moreover have "(next_time 0 \<tau>'') \<le> i \<Longrightarrow> signal_of2 (\<sigma>'' B) \<tau>'' B i = signal_of2 (\<sigma>' B) \<tau>'' B i"
       proof (cases "inf_time (to_transaction2 \<tau>'') B i = None")
         case True
@@ -2033,6 +1945,9 @@ next
         then show ?thesis
           unfolding to_signal2_def comp_def by auto
       qed
+      moreover have "signal_of2 (\<sigma>'' B) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') B i = signal_of2 (\<sigma>'' B) \<tau>'' B i"
+        apply (intro signal_of2_rem_curr_trans_at_t)
+        using ind1' ind2' by auto
       ultimately have **: "next_time 0 \<tau>'' \<le> i \<Longrightarrow>
          signal_of2 def res C (Suc i) = (\<not> (signal_of2 (\<sigma>' A) \<tau>'' A i \<and> signal_of2 (\<sigma>' B) \<tau>'' B i))"
         by auto
@@ -2084,9 +1999,8 @@ next
             hence ?thesis by auto }
           ultimately show ?thesis by auto
         qed
-        finally have hel2: "signal_of2 (\<sigma>' B) \<tau>'' B i = signal_of2 False \<tau> B i"
-          by auto
-
+      finally have hel2: "signal_of2 (\<sigma>' B) \<tau>'' B i = signal_of2 False \<tau> B i"
+        by auto
       { assume "i < next_time 0 \<tau>''"
         hence sA: "signal_of2 (\<sigma>' A) \<tau>'' A i = \<sigma>' A"
         proof (intro signal_of2_init[where t="0"])
@@ -2105,7 +2019,7 @@ next
         moreover
         { assume "Suc i = next_time 0 \<tau>''"
           hence "get_trans res (Suc i) = get_trans (Poly_Mapping.update (Suc i) (Some \<circ> \<sigma>'') \<theta>'') (Suc i)"
-            using beh_res2[OF bigstep3 ind1' _ _ ind2' ind3'] by auto
+            using beh_res2[OF bigstep3 ind1'' _ _ ind3'] by auto
           hence "signal_of2 def res C (Suc i) = \<sigma>'' C"
             using lookup_some_signal_of2  by (metis lookup_update)
           also have "... = \<sigma>' C"
@@ -2124,7 +2038,7 @@ next
         moreover
         { assume "Suc i < next_time 0 \<tau>''"
           hence "\<And>t. t \<le> Suc i \<Longrightarrow> get_trans \<theta>'' t = get_trans res t"
-            using   beh_and_res_same_until_now[OF bigstep3 ind1'] by auto
+            using   beh_and_res_same_until_now[OF bigstep3 ind1''] by auto
           have "0 < next_time 0 \<tau>''"
             using `Suc i < next_time 0 \<tau>''` by auto
           hence "\<theta>'' = Poly_Mapping.update 0 (Some o \<sigma>') 0"
@@ -2153,7 +2067,7 @@ next
   next
     case none
     hence \<tau>''_def: "\<tau>'' = rem_curr_trans 0 ?\<tau>'"
-      using cyc unfolding nand3_def by auto
+      using cyc unfolding nand3_def t'_def' by auto
     have "post_necessary_raw 0 (lookup \<tau>) 0 C True False"
     proof -
       have "lookup \<tau> 0 C = None"
@@ -2214,9 +2128,11 @@ next
       by (simp add: zero_option_def)
     hence ind5': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow> lookup (to_transaction2 \<tau>'' C) n = 0"
       unfolding `next_time 0 \<tau>'' = 1` by auto
+    hence ind5'': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow> lookup (to_transaction2 (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') C) n = 0"
+      unfolding rem_curr_trans_def  by (simp add: lookup_update to_transaction2_delete)
     have *: "1 \<le> i \<Longrightarrow>
-       signal_of2 def res C (Suc i) = (\<not> (signal_of2 (\<sigma>'' A) \<tau>'' A i \<and> signal_of2 (\<sigma>'' B) \<tau>'' B i))"
-      using nand3_correctness_ind[OF bigstep3 _ _ ind1' ind2' ind3' _ ind4' ind5']
+       signal_of2 def res C (Suc i) = (\<not> (signal_of2 (\<sigma>'' A) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') A i \<and> signal_of2 (\<sigma>'' B) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') B i))"
+      using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5'']
       unfolding `next_time 0 \<tau>'' = 1` by auto
     moreover have "1 \<le> i \<Longrightarrow> signal_of2 (\<sigma>'' A) \<tau>'' A i = signal_of2 (\<sigma>' A) \<tau>'' A i"
     proof (cases "inf_time (to_transaction2 \<tau>'') A i = None")
@@ -2247,6 +2163,9 @@ next
       then show ?thesis
         unfolding to_signal2_def comp_def by auto
     qed
+    moreover have "signal_of2 (\<sigma>'' A) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') A i =  signal_of2 (\<sigma>'' A) \<tau>'' A i"
+      apply (intro signal_of2_rem_curr_trans_at_t)
+      using ind1' ind2' by auto
     moreover have "1 \<le> i \<Longrightarrow> signal_of2 (\<sigma>'' B) \<tau>'' B i = signal_of2 (\<sigma>' B) \<tau>'' B i"
     proof (cases "inf_time (to_transaction2 \<tau>'') B i = None")
       case True
@@ -2276,6 +2195,9 @@ next
       then show ?thesis
         unfolding to_signal2_def comp_def by auto
     qed
+    moreover have "signal_of2 (\<sigma>'' B) (rem_curr_trans (next_time 0 \<tau>'') \<tau>'') B i =  signal_of2 (\<sigma>'' B) \<tau>'' B i"
+      apply (intro signal_of2_rem_curr_trans_at_t)
+      using ind1' ind2' by auto
     ultimately have IR: "1 \<le> i \<Longrightarrow> signal_of2 def res C (Suc i) \<longleftrightarrow>
                                           \<not> (signal_of2 (\<sigma>' A) \<tau>'' A i \<and> signal_of2 (\<sigma>' B) \<tau>'' B i)"
       by auto
@@ -2288,7 +2210,7 @@ next
     have "next_time 0 \<tau>'' \<le> Suc i" and "1 \<le> next_time 0 \<tau>''"
       unfolding `next_time 0 \<tau>'' = 1` by auto
     have "get_trans res 1 = get_trans (Poly_Mapping.update 1 (Some \<circ> \<sigma>'') \<theta>'') 1"
-      using beh_res2[OF bigstep3 ind1' `next_time 0 \<tau>'' \<le> Suc i` _ ind2' ind3' `1 \<le> next_time 0 \<tau>''`]
+      using beh_res2[OF bigstep3 ind1'' `next_time 0 \<tau>'' \<le> Suc i` _ ind3' `1 \<le> next_time 0 \<tau>''`] 
       unfolding `next_time 0 \<tau>'' = 1` by auto
     also have "... = Some o \<sigma>''"
       by (simp add: lookup_update)
