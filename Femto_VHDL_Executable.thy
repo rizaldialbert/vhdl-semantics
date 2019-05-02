@@ -42,13 +42,14 @@ lemma zero_upd:
   "0 (sig := None) = 0"
   by (auto simp add:zero_map zero_option_def)
 
-definition to_transaction2' :: "'signal transaction \<Rightarrow> 'signal transaction2" where
+definition to_transaction2' :: "'signal transaction \<Rightarrow> 'signal transaction_sig" where
   "to_transaction2' \<tau> = (\<lambda>s. Poly_Mapping.map (\<lambda>m. m s) \<tau>)"
 
 lemma [code]:
-  "to_transaction2 \<tau> = to_transaction2' \<tau>"
+  "to_transaction_sig \<tau> = to_transaction2' \<tau>"
   unfolding to_transaction2'_def
-  by (transfer', unfold to_trans_raw2_def)(metis (mono_tags, hide_lams) "when"(1) when_def zero_fun_def)
+  by (transfer', unfold to_trans_raw_sig_def)
+     (metis (mono_tags, hide_lams) "when"(1) when_def zero_fun_def)
 
 value [code] "signals_in (Bassign_trans C Btrue 0)"
 value [code] "beval 0 def_state {} 0 (Bsig A)"
@@ -92,7 +93,9 @@ lemma[code]:
                                       chopped = fmmap_keys (\<lambda>t'. if t < t' \<and> t' \<le> t + dly then map_drop sig else id)
                                    in 
                                       Pm_fmap (chopped xs))"
-  by transfer' (rule ext, auto simp add: override_on_def fmlookup_default_def zero_map map_drop_def map_filter_def split:option.splits)
+  by transfer' (rule ext, auto simp add: override_on_def purge_raw_def fmlookup_default_def zero_map 
+                                         map_drop_def map_filter_def 
+                                  split:option.splits)
   
 value "lookup (purge (0 :: sig transaction) 1 1 C) 1 C"
 
@@ -102,11 +105,34 @@ fun post_necessary_code :: "nat \<Rightarrow> (nat, 'a \<rightharpoonup> bool) f
   "post_necessary_code 0 fm t s val def \<longleftrightarrow> (case lookup0 fm t s of None \<Rightarrow> val \<noteq> def | Some v \<Rightarrow> v \<noteq> val)"
 | "post_necessary_code (Suc n) fm t s val def \<longleftrightarrow> (case lookup0 fm (t + Suc n) s of None \<Rightarrow> post_necessary_code n fm t s val def | Some v \<Rightarrow> v \<noteq> val)"
 
-lemma post_necessary_raw_code:
+lemma post_necessary_raw_code[code]:
   "post_necessary_raw dly (lookup0 xs) t sig v def =  post_necessary_code dly xs t sig v def"
   by (induction dly) (auto split: option.split)
 
+lemma [code]: 
+  "post sig v (Pm_fmap xs) t = 
+                          (let 
+                             current  = lookup0 xs t;
+                             chopped = fmmap_keys (\<lambda>t'. if t < t' then map_drop sig else id);
+                             updated  = fmupd t (current(sig \<mapsto> v)) xs
+                           in 
+                             Pm_fmap (chopped updated))"
+  by (transfer', unfold Let_def post_raw_def)
+     (rule ext, auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def
+                        split: option.splits)
+
 lemma [code]:
+  "preempt sig (Pm_fmap xs) t = 
+                          (let 
+                             current  = lookup0 xs t;
+                             chopped = fmmap_keys (\<lambda>t'. if t \<le> t' then map_drop sig else id)
+                           in 
+                             Pm_fmap (chopped xs))"
+  by (transfer', unfold Let_def preempt_raw_def)
+     (rule ext, auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def
+                        split: option.splits)
+
+(* lemma [code]:
   "trans_post sig v def (Pm_fmap xs) t dly = (let
                                                 current  = lookup0 xs (t + dly);
                                                 chopped1 = fmmap_keys (\<lambda>t'. if t + dly < t' then map_drop sig else id);
@@ -114,13 +140,15 @@ lemma [code]:
                                                 updated  = fmupd (t + dly) (current(sig \<mapsto> v)) xs
                                               in
                                                 if post_necessary_code (dly-1) xs t sig v def then Pm_fmap (chopped1 updated) else Pm_fmap (chopped2 xs))"
-  by (transfer', unfold Let_def post_necessary_raw_code trans_post_raw_def preempt_nonstrict_def)
-     (rule ext, auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def split: option.splits)
+  by (transfer', unfold Let_def post_necessary_raw_code trans_post_raw_def preempt_raw_def 
+                        post_raw_def)
+     (rule ext, auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def 
+                        split: option.splits) *)
 
 value [code] "beval 2 def_state {} test_beh (Bsig_delayed A 1)"
 value [code] "beval 2 def_state {} test_beh (Bsig_delayed B 1)"
 value [code] "beval 2 def_state {} test_beh (Bsig_delayed C 1)"
-value [code] "b_seq_exec 0 def_state {} 0 (Bnull :: sig seq_stmt) empty_trans"
+value [code] "seq_exec 0 def_state {} 0 (Bnull :: sig seq_stmt) empty_trans"
 
 definition
   "exp1 = Bsig C"
@@ -140,10 +168,10 @@ definition
 definition
   "seq3 = Bguarded exp1 seq1 seq2"
 
-value [code] "lookup (b_seq_exec 0 def_state {} 0 (Bcomp seq1 seq2) empty_trans) 1 C"
-value [code] "lookup (b_seq_exec 0 def_state {} 0 (Bguarded exp1 seq1 seq2) empty_trans) 2 C"
-value [code] "lookup (b_seq_exec 0 def_state {} 0 seq1 empty_trans) 1 C"
-value [code] "lookup (b_seq_exec 0 def_state {} 0 seq2 empty_trans) 2 C"
+value [code] "lookup (seq_exec 0 def_state {} 0 (Bcomp seq1 seq2) empty_trans) 1 C"
+value [code] "lookup (seq_exec 0 def_state {} 0 (Bguarded exp1 seq1 seq2) empty_trans) 2 C"
+value [code] "lookup (seq_exec 0 def_state {} 0 seq1 empty_trans) 1 C"
+value [code] "lookup (seq_exec 0 def_state {} 0 seq2 empty_trans) 2 C"
 
 term "fmmap_keys (\<lambda>x. fmadd)"
 
@@ -167,8 +195,8 @@ lemma [code]:
   unfolding clean_zip_raw_def Let_def
   by (auto split:prod.splits option.splits simp add: fmlookup_default_def zero_map)
 
-value [code] "lookup (b_conc_exec 1 def_state {A, B} test_beh (process {A} : seq1) empty_trans) 2 C"
-value [code] "lookup (b_conc_exec 1 def_state {A, C} test_beh ((process {A} : seq1) || (process {C} : seq2)) empty_trans) 3 B"
+value [code] "lookup (conc_exec 1 def_state {A, B} test_beh (process {A} : seq1) empty_trans) 2 C"
+value [code] "lookup (conc_exec 1 def_state {A, C} test_beh ((process {A} : seq1) || (process {C} : seq2)) empty_trans) 3 B"
 
 value [code] "quiet (empty_trans :: sig transaction) {}"
 
@@ -560,9 +588,20 @@ next
 qed
 
 lemma [code]:
-  "next_time t (Pm_fmap xs) = (if clearjunk0 xs = fmempty then t + 1 else (fst o hd) (sorted_list_of_fmap (clearjunk0 xs)))"
-  unfolding next_time_def
-  by (transfer', auto simp add: least_fst_hd_sorted lookup0_zero_fun)
+  "next_time t (Pm_fmap xs) = 
+      (if clearjunk0 xs = fmempty then t + 1 else (fst o hd) (sorted_list_of_fmap (clearjunk0 xs)))"
+proof transfer'
+  fix t :: nat
+  fix xs :: "(nat, 'a \<Rightarrow> bool option) fmap"
+  have "Femto_VHDL_raw.next_time t (lookup0 xs) = 
+                                (if lookup0 xs = (\<lambda>k. 0) then t + 1 else LEAST n. dom (lookup0 xs n) \<noteq> {})"
+    unfolding Femto_VHDL_raw.next_time_def zero_fun_def by auto
+  also have "... = (if clearjunk0 xs = fmempty then t + 1 else (fst o hd) (sorted_list_of_fmap (clearjunk0 xs)))"
+    unfolding lookup0_zero_fun by (auto simp add: least_fst_hd_sorted)
+  finally show "Femto_VHDL_raw.next_time t (lookup0 xs) = 
+      (if clearjunk0 xs = fmempty then t + 1 else (fst \<circ> hd) (sorted_list_of_fmap (clearjunk0 xs)))"
+    by auto
+qed
 
 value [code] "next_time 0 (empty_trans :: sig transaction)"
 value [code] "next_state 0 (empty_trans :: sig transaction) def_state B"
@@ -578,176 +617,222 @@ lemma fmlookup_const_interval_if:
   by (metis distinct_upt in_set_impl_in_set_zip1 in_set_replicate length_replicate length_upt
             map_fst_zip map_of_eq_Some_iff set_upt set_zip_rightD) (auto)
 
-lemma [code]:
-  "override_lookups_on_open_right (Pm_fmap xs) v lo hi =
-                                              Pm_fmap (xs  ++\<^sub>f fm_const_interval_open_right v lo hi)"
-proof (transfer', rule ext)
-  fix x lo hi :: nat
-  fix xs :: "(nat, 'a ::zero) fmap"
-  fix v :: 'a
-  let ?le = "override_on (lookup0 xs) (\<lambda>n. v) {lo..<hi} x"
-  let ?ri = "lookup0 (xs ++\<^sub>f fm_const_interval_open_right v lo hi) x"
-  have "x \<in> {lo ..<hi} \<or> x \<notin> {lo..<hi}"
-    by auto
-  moreover
-  { assume "x \<in> {lo ..< hi}"
-    hence "override_on (lookup0 xs) (\<lambda>n. v) {lo..<hi} x = v"
-      unfolding override_on_def by auto
-    moreover have "lookup0 (xs ++\<^sub>f fm_const_interval_open_right v lo hi) x = v"
-      by (metis \<open>x \<in> {lo..<hi}\<close> fmlookup_add fmlookup_const_interval_if(1) fmlookup_default_if(1)
-                fmlookup_dom_iff)
-    ultimately have "?le = ?ri"
-      by auto }
-  moreover
-  { assume "x \<notin> {lo ..< hi}"
-    hence "override_on (lookup0 xs) (\<lambda>n. v) {lo..<hi} x = lookup0 xs x"
-      unfolding override_on_def by auto
-    moreover have "lookup0 (xs ++\<^sub>f fm_const_interval_open_right v lo hi) x = lookup0 xs x"
-      by (metis \<open>x \<notin> {lo..<hi}\<close> fmlookup_const_interval_if(2) fmlookup_default_add fmlookup_dom_iff
-                option.simps(3))
-    ultimately have "?le = ?ri"
-      by auto }
-  ultimately show "?le = ?ri"
-    by blast
-qed
-
 value [code] "add_to_beh (def_state :: sig state)"
 
 code_thms add_to_beh
 
 code_thms next_event
 
-code_thms override_lookups_on_open_left
-
-definition next_event_code :: "time \<Rightarrow> 'signal transaction \<Rightarrow> 'signal state \<Rightarrow> 'signal event" where
-  "next_event_code t \<tau>' \<sigma> = (let m = get_trans \<tau>' (next_time t \<tau>') in
-                                       {sig. if sig \<in> dom m then (the o m) sig \<noteq> \<sigma> sig else False})"
-
-lemma [code]:
-  "next_event t \<tau>' \<sigma> = next_event_code t \<tau>' \<sigma>"
-  unfolding next_event_def next_event_code_def Let_def  by auto
-
 value [code] "next_event 0 (empty_trans :: sig transaction) def_state"
+                                                                   
+code_pred (modes : i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> o \<Rightarrow> bool) simulate_fin_ind .
 
-code_pred (modes : i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> o \<Rightarrow> bool) b_simulate_fin .
-
-thm b_simulate_fin.equation
+thm simulate_fin_ind.equation
 
 definition "functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> =
-            Predicate.the (b_simulate_fin_i_i_i_i_i_i_i_o maxtime t \<sigma> \<gamma> \<theta> cs \<tau>)"
+            Predicate.the (simulate_fin_ind_i_i_i_i_i_i_i_o maxtime t \<sigma> \<gamma> \<theta> cs \<tau>)"
 
 theorem functional_simulate_fin_complete:
-  assumes "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh"
+  assumes "simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh"
   shows "functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> = beh"
-  using assms unfolding functional_simulate_fin_def b_simulate_fin_i_i_i_i_i_i_i_o_def
+  using assms unfolding functional_simulate_fin_def simulate_fin_ind_i_i_i_i_i_i_i_o_def
   Predicate.the_def pred.sel
 proof -
-  have *: "(\<And>x. maxtime, t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<leadsto> x \<Longrightarrow> x = beh)"
-    using b_simulate_fin_deterministic[OF assms] by auto
-  thus  "(THE x. maxtime, t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<leadsto> x) = beh"
-    by (auto intro: the_equality[where P="\<lambda>x. b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> x", OF assms])
+  have sim: "simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh"
+    using simulate_fin_eq_simulate_fin_ind assms by metis
+  hence "\<And>x. simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> cs \<tau> x \<Longrightarrow> x = beh"
+    unfolding sym[OF simulate_fin_eq_simulate_fin_ind]
+    by (transfer', metis b_simulate_fin_deterministic)
+  thus "The (simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> cs \<tau>) = beh"
+    using assms by blast
 qed
-
-code_pred (modes : i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> o \<Rightarrow> bool) b_simulate .
 
 lemma functional_simulate_fin_sound:
-  assumes "simulate_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
-  assumes "\<forall>n. (min (maxtime+1) t) \<le> n \<longrightarrow> Poly_Mapping.lookup \<theta> n = 0"
-  assumes "\<forall>n. n < t \<longrightarrow> get_trans \<tau> n = 0"
+  assumes "simulate_ss maxtime cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (lookup \<tau>', maxtime + 1, \<sigma>', \<gamma>', lookup \<theta>')"
+  assumes "\<forall>n. (min (maxtime+1) t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
+  assumes "\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0"
   assumes "functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> = beh"
-  shows "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh"
-  using assms unfolding functional_simulate_fin_def b_simulate_fin_i_i_i_i_i_i_i_o_def
-  Predicate.the_def pred.sel
+  shows "simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh"
 proof -
-  have *: "The (b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau>) = beh"
-    using assms unfolding functional_simulate_fin_def b_simulate_fin_i_i_i_i_i_i_i_o_def
-    Predicate.the_def pred.sel by auto
-  obtain \<tau>' \<sigma>' \<gamma>' \<theta>' where ss: "simulate_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
+  have *: "The (simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau>) = beh"
+    using assms unfolding functional_simulate_fin_def simulate_fin_ind_i_i_i_i_i_i_i_o_def
+    Predicate.the_def pred.sel  simulate_fin_eq_simulate_fin_ind
+    by auto
+  obtain \<tau>' \<sigma>' \<gamma>' \<theta>' where ss: "simulate_ss maxtime cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
     using assms(1) by auto
-  have **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> (Poly_Mapping.update (maxtime + 1) 0 \<theta>')"
+  have **: "b_simulate_fin maxtime t \<sigma> \<gamma> (lookup \<theta>) cs (lookup \<tau>) (\<theta>'(maxtime + 1 := 0))"
     using small_step_implies_big_step[OF ss assms(2) assms(3)] by auto
-  hence "\<And>beh. b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh \<Longrightarrow>
-                                               beh = (Poly_Mapping.update (maxtime + 1) 0 \<theta>')"
-    by (simp add: b_simulate_fin_deterministic)
-  from * show "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh"
-    by (metis ** b_simulate_fin_deterministic theI)
+  have fin: "finite {x. (\<theta>'(maxtime + 1 := 0)) x \<noteq> 0}"
+    using b_simulate_fin_almost_all_zero[OF **] by auto
+  have ***: "simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> (Abs_poly_mapping (\<theta>'(maxtime + 1 := 0)))"
+    using ** unfolding simulate_fin.rep_eq lookup_Abs_poly_mapping[OF fin] by auto
+  hence "\<And>beh. simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh \<Longrightarrow> beh = (Abs_poly_mapping (\<theta>'(maxtime + 1 := 0)))"
+    using simulate_fin_deterministic by auto
+  with * show "simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh"
+    using theI[where P="simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> cs \<tau>"] ***
+    unfolding sym[OF simulate_fin_eq_simulate_fin_ind] by metis
 qed
 
-lemma functional_simulate_eq_b_simulate_fin:
-  assumes "simulate_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
-  assumes "\<forall>n. (min (maxtime+1) t) \<le> n \<longrightarrow> Poly_Mapping.lookup \<theta> n = 0"
-  assumes "\<forall>n. n < t \<longrightarrow> get_trans \<tau> n = 0"
-  shows "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh \<longleftrightarrow> (functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> = beh)"
+lemma functional_simulate_eq_simulate_fin_ind:
+  assumes "simulate_ss maxtime cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (lookup \<tau>', maxtime + 1, \<sigma>', \<gamma>', lookup \<theta>')"
+  assumes "\<forall>n. (min (maxtime+1) t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
+  assumes "\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0"
+  shows "simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh \<longleftrightarrow> (functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> = beh)"
   by (meson assms functional_simulate_fin_complete functional_simulate_fin_sound)
 
+lemma functional_simulate_eq_b_simulate_fin:
+  assumes "simulate_ss maxtime cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (lookup \<tau>', maxtime + 1, \<sigma>', \<gamma>', lookup \<theta>')"
+  assumes "\<forall>n. (min (maxtime+1) t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
+  assumes "\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0"
+  shows "simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> beh \<longleftrightarrow> (functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> = beh)"
+  using functional_simulate_eq_simulate_fin_ind[OF assms] simulate_fin_eq_simulate_fin_ind
+  by metis
+
+code_pred (modes : i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> o \<Rightarrow> bool) simulate_ind .
+
 definition "functional_simulate maxtime cs \<tau> =
-            Predicate.the (b_simulate_i_i_i_o maxtime cs \<tau>)"
+            Predicate.the (simulate_ind_i_i_i_o maxtime cs \<tau>)"
 
 theorem functional_simulate_complete:
-  assumes "b_simulate maxtime cs \<tau> beh"
+  assumes "simulate_ind maxtime cs \<tau> beh"
   shows "functional_simulate maxtime cs \<tau> = beh"
-  using assms unfolding functional_simulate_def b_simulate_i_i_i_o_def
+  using assms unfolding functional_simulate_def simulate_ind_i_i_i_o_def
   Predicate.the_def pred.sel
 proof -
-  have *: "(\<And>x. b_simulate maxtime cs \<tau> x \<Longrightarrow> x = beh)"
-    using b_sim_init_deterministic[OF assms] by auto
-  thus  "(THE x. b_simulate maxtime cs \<tau> x) = beh"
-    by (auto intro: the_equality[where P="\<lambda>x. b_simulate maxtime cs \<tau> x", OF assms])
+  have "simulate maxtime cs \<tau> beh"
+    using simulate_eq_simulate_ind assms by auto
+  hence "(\<And>x. simulate_ind maxtime cs \<tau> x \<Longrightarrow> x = beh)"
+    unfolding sym[OF simulate_eq_simulate_ind]
+    by (transfer')(metis b_sim_init_deterministic)
+  thus  "(THE x. simulate_ind maxtime cs \<tau> x) = beh"
+    using assms by blast
 qed
 
 theorem functional_simulate_sound:
-  assumes "init' 0 def_state {} 0 cs ctrans = \<tau>"
-  assumes "update_config (0, def_state, {}, 0) \<tau> = (t, \<sigma>, \<gamma>, \<theta>)"
-  assumes "simulate_ss maxtime cs (rem_curr_trans t \<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
+  assumes "Femto_VHDL_raw.init' 0 def_state {} 0 cs (lookup ctrans) = \<tau>"
+  assumes "update_config_raw (0, def_state, {}, 0) \<tau> = (t, \<sigma>, \<gamma>, \<theta>)"
+  assumes "simulate_ss maxtime cs (\<tau>(t:=0), t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
   assumes "functional_simulate maxtime cs ctrans = beh"
-  shows "b_simulate maxtime cs ctrans beh"
+  shows "simulate_ind maxtime cs ctrans beh"
 proof -
-  have the_beh: "The (b_simulate maxtime cs ctrans) = beh"
-    using assms unfolding functional_simulate_def b_simulate_i_i_i_o_def Predicate.the_def pred.sel
+  have the_beh: "The (simulate_ind maxtime cs ctrans) = beh"
+    using assms unfolding functional_simulate_def simulate_ind_i_i_i_o_def Predicate.the_def pred.sel
     by auto
-  have "t = next_time 0 \<tau>"
+  have "t = Femto_VHDL_raw.next_time 0 \<tau>"
     using assms(2) by (auto simp add: Let_def)
-  hence "\<forall>n. n < t \<longrightarrow> get_trans \<tau> n = 0"
+  hence "\<forall>n. n < t \<longrightarrow>  \<tau> n = 0"
     using next_time_at_least2 by auto
-  hence look: "\<forall>n<t. lookup \<tau> n = 0 "
+  hence look: "\<forall>n<t. \<tau> n = 0 "
     by auto
-  hence look': "\<forall>n<t. get_trans (rem_curr_trans t \<tau>) n = 0"
-    unfolding rem_curr_trans_def  by (simp add: lookup_update)
+  hence look': "\<forall>n<t. (\<tau>(t:=0)) n = 0"
+    by (simp add: lookup_update)
   have "0 < t \<or> t = 0" by auto
   moreover
   { assume "0 < t"
-    have "\<theta> = add_to_beh def_state 0 0 t"
+    have "\<theta> = Femto_VHDL_raw.add_to_beh def_state 0 0 t"
       using assms(2) by (auto simp add: Let_def)
-    also have "... = Poly_Mapping.update 0 (Some o def_state) empty_trans"
-      unfolding add_to_beh_def using `0 < t` by auto
-    finally have *: "\<forall>n\<ge>(min (maxtime + 1) t). lookup \<theta> n = 0"
-      using `0 < t` by transfer' auto
-    hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>) (Poly_Mapping.update (maxtime + 1) 0 \<theta>')"
+    also have "... = 0(0:=Some o def_state)"
+      unfolding Femto_VHDL_raw.add_to_beh_def using `0 < t` by auto
+    finally have *: "\<forall>n\<ge>(min (maxtime + 1) t). \<theta> n = 0"
+      using `0 < t` by (auto simp add: zero_fun_def zero_option_def)
+    hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs (\<tau>(t:=0)) (\<theta>'(maxtime + 1 :=0))"
       using small_step_implies_big_step[OF assms(3)] look' by auto }
   moreover
   { assume "t = 0"
-    have "\<theta> = add_to_beh def_state 0 0 t"
+    have "\<theta> = Femto_VHDL_raw.add_to_beh def_state 0 0 t"
       using assms(2) by (auto simp add: Let_def)
-    also have "... = empty_trans"
-      unfolding add_to_beh_def using `t = 0` by auto
-    finally have *: "\<forall>n\<ge>(min (maxtime+1) t). lookup \<theta> n = 0"
-      by transfer auto
-    hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>) (Poly_Mapping.update (maxtime + 1) 0 \<theta>')"
+    also have "... = 0"
+      unfolding Femto_VHDL_raw.add_to_beh_def using `t = 0` by auto
+    finally have *: "\<forall>n\<ge>(min (maxtime+1) t). \<theta> n = 0"
+      by (auto simp add: zero_fun_def zero_option_def)
+    hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs (\<tau>(t:=0)) (\<theta>'(maxtime + 1:= 0))"
       using small_step_implies_big_step[OF assms(3)] look' by auto }
-  ultimately have "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs (rem_curr_trans t \<tau>) (Poly_Mapping.update (maxtime + 1) 0 \<theta>')"
+  ultimately have bsf: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs (\<tau>(t:=0)) (\<theta>'(maxtime + 1:= 0))"
     by auto
-  hence "b_simulate maxtime cs ctrans (Poly_Mapping.update (maxtime + 1) 0 \<theta>')"
+  hence bs: "b_simulate maxtime cs (lookup ctrans) (\<theta>'(maxtime + 1:=0))"
     using b_simulate.intros[OF assms(1)] assms(2) by (auto simp add: Let_def)
-  thus "b_simulate maxtime cs ctrans beh"
-    unfolding the_beh[THEN sym] by (auto simp add: b_sim_init_deterministic intro: theI)
+  have "simulate maxtime cs ctrans (Abs_poly_mapping (\<theta>'(maxtime + 1:=0)))"
+  proof -
+    have "\<theta> = Femto_VHDL_raw.add_to_beh def_state 0 0 t"
+      using assms(2) by (auto simp add: Let_def)
+    hence "finite {x. \<theta> x \<noteq> 0}"
+      unfolding sym[OF eventually_cofinite] Femto_VHDL_raw.add_to_beh_def 
+      by (simp add: MOST_nat zero_fun_def)
+    hence "finite {x. (\<theta>'(maxtime + 1 := 0)) x \<noteq> 0}"
+      using b_simulate_fin_almost_all_zero bsf by blast
+    thus ?thesis
+      unfolding simulate.rep_eq using bs  by (simp add: lookup_Abs_poly_mapping)
+  qed
+  hence "simulate_ind maxtime cs ctrans (Abs_poly_mapping (\<theta>'(maxtime + 1 :=0)))"
+    using simulate_eq_simulate_ind by auto
+  thus "simulate_ind maxtime cs ctrans beh"
+    unfolding the_beh[THEN sym]  using assms(4) functional_simulate_complete the_beh 
+    by fastforce
 qed
 
-theorem
-  assumes "init' 0 def_state {} 0 cs ctrans = \<tau>"
-  assumes "update_config (0, def_state, {}, 0) \<tau> = (t, \<sigma>, \<gamma>, \<theta>)"
-  assumes "simulate_ss maxtime cs (rem_curr_trans t \<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
-  shows "functional_simulate maxtime cs ctrans = beh \<longleftrightarrow> b_simulate maxtime cs ctrans beh"
+theorem 
+  assumes "Femto_VHDL_raw.init' 0 def_state {} 0 cs (lookup ctrans) = \<tau>"
+  assumes "update_config_raw (0, def_state, {}, 0) \<tau> = (t, \<sigma>, \<gamma>, \<theta>)"
+  assumes "simulate_ss maxtime cs (\<tau>(t:=0), t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
+  shows "functional_simulate maxtime cs ctrans = beh \<longleftrightarrow> simulate_ind maxtime cs ctrans beh"
   using assms functional_simulate_sound functional_simulate_complete by metis
+
+subsection \<open>Code abbreviation for evaluating raw functions\<close>
+
+lemma [code_abbrev]: 
+  "lookup (to_transaction2' xs sig) = to_trans_raw_sig (lookup xs) sig"
+  unfolding to_transaction2'_def 
+  by (transfer')(rule ext, auto simp add: when_def zero_fun_def zero_option_def to_trans_raw_sig_def) 
+
+lemma evaluate_to_trans_raw_sig:
+  "to_trans_raw_sig (lookup test_beh) A 1 = Some True"
+  by eval
+
+lemma [code_abbrev]:
+  "beval now \<sigma> \<gamma> hist exp = beval_raw now \<sigma> \<gamma> (lookup hist) exp"
+  by transfer' auto
+
+lemma evaluate_beval_raw:
+  "beval_raw 0 def_state {} (lookup (Pm_fmap (fmap_of_list []))) (Bsig A) = False"
+  by eval
+
+lemma evaluate_purge_raw:
+  "(purge_raw (lookup (Pm_fmap (fmap_of_list []))) 1 1 C) 1 C = None"
+  by eval
+
+lemma evaluate_post_raw:
+  "post_raw C False (lookup test_beh) 10 10 C = Some False"
+  by eval
+
+lemma evaluate_preempt_raw: 
+  "preempt_raw A (lookup test_beh) 20 1 A = Some True"
+  by eval
+
+lemma evaluate_b_seq_exec:
+  "b_seq_exec 0 def_state {} (lookup (Pm_fmap (fmap_of_list []))) (Bnull :: sig seq_stmt)
+              (lookup (Pm_fmap (fmap_of_list []))) 10 A = None"
+  by eval
+
+lemma evaluate_b_conc_exec:
+  "b_conc_exec 1 def_state {A, B} (lookup test_beh) (process {A} : seq1) (lookup (Pm_fmap (fmap_of_list []))) 2 C = Some True"
+  by eval
+
+lemma evaluate_quiet_raw:
+  "Femto_VHDL_raw.quiet ((lookup (Pm_fmap (fmap_of_list []))) :: sig trans_raw) {}"
+  by eval
+
+lemma evaluate_next_time_raw:
+  "Femto_VHDL_raw.next_time 0 ((lookup (Pm_fmap (fmap_of_list []))) :: sig trans_raw) = 1"
+  by eval
+
+lemma evaluate_next_state_raw:
+  "Femto_VHDL_raw.next_state 0 ((lookup (Pm_fmap (fmap_of_list []))) :: sig trans_raw) def_state B = False"
+  by eval
+
+lemma evaluate_next_event:
+  "Femto_VHDL_raw.next_event 0 ((lookup (Pm_fmap (fmap_of_list []))) :: sig trans_raw) def_state = {}"
+  by eval
+  
 
 hide_const exp1 exp2 seq1 seq2
 
