@@ -57,17 +57,17 @@ code_thms simulate_fin
 
 code_thms functional_simulate_fin
 
-values  "{lookup beh 1 C | beh. simulate_fin_ind 10 0 def_state {A} 0 nand empty_trans beh}"
+values  "{lookup (get_beh beh) 1 C | beh. simulate_fin_ind 10 0 def_state {A} 0 nand empty_trans beh}"
 
-value " (lookup (functional_simulate_fin 10 0 def_state {A} 0 nand 0)) 1 C"
+value " ((lookup o get_beh) (functional_simulate_fin 10 0 def_state {A} 0 nand 0)) 1 C"
 
 theorem
-  "lookup (functional_simulate_fin 10 0 def_state {A} 0 nand empty_trans) 1 C = Some True"
+  "(lookup o get_beh) (functional_simulate_fin 10 0 def_state {A} 0 nand empty_trans) 1 C = Some True"
   by eval
 
-value "lookup (functional_simulate 10 nand empty_trans) 1 C"
+value "(lookup o get_beh) (functional_simulate 10 nand empty_trans) 1 C"
 
-value "signal_of2 False (functional_simulate 10 nand empty_trans) C 100"
+value "signal_of2 False (get_beh (functional_simulate 10 nand empty_trans)) C 100"
 
 value [code] "to_signal False (to_transaction_sig (empty_trans :: nat \<Rightarrow>\<^sub>0 sig \<rightharpoonup> bool)) A 123456"
 
@@ -79,7 +79,7 @@ hide_fact  Femto_VHDL.next_time_def Femto_VHDL.next_state_def Femto_VHDL.next_ev
 
 theorem
   assumes "10, 0, def_state, {A}, 0 \<turnstile> <nand, 0> \<leadsto> beh"
-  shows "beh 1 C = Some True"
+  shows "(get_beh beh) 1 C = Some True"
   using assms
 proof (cases)
   case (1 \<tau>')
@@ -150,7 +150,7 @@ proof (cases)
   define beh2 :: "(nat \<Rightarrow> sig \<Rightarrow> bool option)" where "beh2 = ?beh'"
   hence snd_cyc: "10, 1, def_state (C := True), {C} , beh2 \<turnstile> <nand , (\<tau>'(1:=0))> \<leadsto> beh"
     using 1 nt ns ne nb by metis
-  thus "beh 1 C = Some True"
+  thus "get_beh beh 1 C = Some True"
   proof (cases)
     case (1 \<tau>'')
     have t''_def: "\<tau>'' = 0"
@@ -207,7 +207,7 @@ definition nand2 :: "sig conc_stmt" where
 definition "test_trans = Pm_fmap (fmap_of_list [(4::nat, [A \<mapsto> True, B \<mapsto> True])])"
 definition  "test2 = functional_simulate_fin 2 0 def_state {A, B, C} 0 nand2 test_trans"
 
-value [code] "to_transaction_sig test2 C"
+value [code] "to_transaction_sig (get_beh test2) C"
 
 definition nand3 :: "sig conc_stmt" where
   "nand3 = process {A, B} : Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1"
@@ -244,7 +244,7 @@ lemma maxtime_maxtime_bigstep:
   assumes "maxtime, maxtime, \<sigma>, \<gamma>, \<theta> \<turnstile> <nand3, \<tau>> \<leadsto> beh"
   assumes "\<And>n. n \<le> maxtime \<Longrightarrow> \<tau> n = 0"
   assumes "\<And>n. maxtime \<le> n \<Longrightarrow> \<theta> n = 0"
-  shows "beh = \<theta> (maxtime := (Some o \<sigma>))"
+  shows "get_beh beh = \<theta> (maxtime := (Some o \<sigma>))"
 proof (cases "quiet \<tau> \<gamma>")
   case True
   then show ?thesis
@@ -288,7 +288,7 @@ next
       using `\<tau>' = 0` `\<gamma>2 = {}` unfolding quiet_def by auto
     hence "quiet (\<tau>'(next_time maxtime \<tau>':=0)) \<gamma>2"
       unfolding ntime using `\<tau>' = 0`  by (simp add: fun_upd_idem zero_fun_def)
-    have "beh = \<theta>(maxtime := (Some \<circ> \<sigma>))"
+    have "get_beh beh = \<theta>(maxtime := (Some \<circ> \<sigma>))"
       using case_timesup[OF _ big2] ntheta unfolding ntime by auto }
   moreover
   { assume "\<tau>' \<noteq> 0"
@@ -358,9 +358,9 @@ next
     hence new_beh: "add_to_beh \<sigma> \<theta> maxtime (next_time maxtime \<tau>') =  
                     \<theta>(maxtime := (Some o \<sigma>))"
       unfolding add_to_beh_def by auto
-    have "beh = \<theta>(maxtime := (Some \<circ> \<sigma>))"
+    have "get_beh beh = \<theta>(maxtime := (Some \<circ> \<sigma>))"
       using max_less case_timesup[OF _ big2] unfolding new_beh by auto }
-  ultimately show "beh = \<theta>(maxtime :=(Some \<circ> \<sigma>))"
+  ultimately show "get_beh beh = \<theta>(maxtime :=(Some \<circ> \<sigma>))"
     by auto
 qed
 
@@ -447,7 +447,7 @@ lemma beh_res2:
   assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
   assumes "t \<le> maxtime" and "cs = nand3"
   assumes "\<And>n. t \<le> n \<Longrightarrow> \<theta> n = 0"
-  shows "\<And>n. n \<le> t \<Longrightarrow> (\<theta>(t:= Some o \<sigma>)) n = beh n"
+  shows "\<And>n. n \<le> t \<Longrightarrow> (\<theta>(t:= Some o \<sigma>)) n = get_beh beh n"
   using assms
 proof (induction rule:b_simulate_fin.induct)
   case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs \<tau>' res)
@@ -475,14 +475,14 @@ proof (induction rule:b_simulate_fin.induct)
       by auto
     moreover
     { assume "t + 1 \<le> maxtime"
-      have "res = (\<theta>(t := Some o \<sigma>))(t + 1 := Some \<circ> \<sigma>)"
+      have "get_beh res = (\<theta>(t := Some o \<sigma>))(t + 1 := Some \<circ> \<sigma>)"
         using case_quiesce[OF `t + 1 \<le> maxtime` _ ul] unfolding `\<tau>' = 0` quiet_def 
         by (simp add: fun_upd_idem zero_fun_def)
       hence ?case
         using `n \<le> t` fun_upd_def by auto }
     moreover
     { assume "maxtime < t + 1"
-      hence "res = \<theta> (t := Some o \<sigma>)"
+      hence "get_beh res = \<theta> (t := Some o \<sigma>)"
         using case_timesup[OF _ ul] by auto
       hence ?case  by metis }
     ultimately have ?case
@@ -502,7 +502,7 @@ proof (induction rule:b_simulate_fin.induct)
       have h2: "\<And>n. next_time t \<tau>' \<le> n \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n = 0"
         unfolding add_to_beh_def
         using "1.prems"(5) \<open>t \<le> next_time t \<tau>'\<close> by auto
-      have " ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))(next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n = res n"
+      have " ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))(next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n = get_beh res n"
         using 1(5)[OF ind1 ind2 ind3 `cs = nand3` h2]  by blast
       hence ?case
         using `n \<le> t` `t < next_time t \<tau>'` unfolding add_to_beh_def
@@ -534,7 +534,7 @@ theorem nand3_correctness_ind:
   assumes "\<And>n. t \<le> n \<Longrightarrow>  beh n = 0"
   assumes "t \<le> i" and "A \<notin> \<gamma> \<and> B \<notin> \<gamma> \<Longrightarrow> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
   assumes "\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig ctrans C) n = 0"
-  shows "signal_of def res C (Suc i) \<longleftrightarrow> \<not> (signal_of (\<sigma> A) ctrans A i \<and> signal_of (\<sigma> B) ctrans B i)"
+  shows "signal_of def (get_beh res) C (Suc i) \<longleftrightarrow> \<not> (signal_of (\<sigma> A) ctrans A i \<and> signal_of (\<sigma> B) ctrans B i)"
   using assms
 proof (induction rule:b_simulate_fin.induct)
   case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs \<tau>' res)
@@ -847,7 +847,7 @@ proof (induction rule:b_simulate_fin.induct)
   have h5: "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
     using `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0` unfolding rem_curr_trans_def by  auto
   have IH: " next_time t \<tau>' \<le> i \<Longrightarrow>
-             signal_of def res C (Suc i) =
+             signal_of def (get_beh res) C (Suc i) =
              (\<not> (signal_of (next_state t \<tau>' \<sigma> A) (\<tau>'(next_time t \<tau>' := 0)) A i \<and>
                   signal_of (next_state t \<tau>' \<sigma> B) (\<tau>'(next_time t \<tau>' := 0)) B i))"
                 using 1(5)[OF `cs = nand3` `maxtime = Suc i` h0 h1 h2 _ h3 h4] by metis
@@ -881,12 +881,12 @@ proof (induction rule:b_simulate_fin.induct)
       have "next_time t \<tau>' \<le> maxtime \<or> maxtime < next_time t \<tau>'" by auto
       moreover
       { assume "next_time t \<tau>' \<le> maxtime"
-        hence pre: "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  res n"
+        hence pre: "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  get_beh res n"
           using   beh_res[OF next_big_step h0] by auto
-        hence "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (\<theta>(t:=(Some o \<sigma>))) n =  res n"
+        hence "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (\<theta>(t:=(Some o \<sigma>))) n =  get_beh res n"
           using`t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` unfolding add_to_beh_def by auto
         hence *: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>
-             ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))(next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n =  res n"
+             ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))(next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n =  get_beh res n"
           using beh_res2[OF next_big_step h0 `next_time t \<tau>' \<le> maxtime` `cs = nand3` h2]
           by auto
         have "Suc i \<le> next_time t \<tau>'"
@@ -897,17 +897,17 @@ proof (induction rule:b_simulate_fin.induct)
           using `i < next_time t \<tau>'` `next_time t \<tau>' \<le> maxtime` `maxtime = Suc i` by linarith
         ultimately have "Suc i = next_time t \<tau>'"
           by auto
-        hence **: "signal_of def res C (Suc i) =
+        hence **: "signal_of def (get_beh res) C (Suc i) =
                signal_of def ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))(next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) C (Suc i)"
           using "1.prems"(1) "1.prems"(2) h0 h2 maxtime_maxtime_bigstep next_big_step by auto 
         define t' where "t' = next_time t \<tau>'"
         define \<sigma>' where "\<sigma>' = next_state t \<tau>' \<sigma>"
         define \<theta>' where "\<theta>' = add_to_beh \<sigma> \<theta> t (next_time t \<tau>')"
-        hence "signal_of def res C (Suc i) = signal_of def (\<theta>' (t' := (Some o \<sigma>'))) C (Suc i)"
+        hence "signal_of def (get_beh res) C (Suc i) = signal_of def (\<theta>' (t' := (Some o \<sigma>'))) C (Suc i)"
           unfolding t'_def \<sigma>'_def \<theta>'_def using ** by auto
         also have "... = \<sigma>' C"
           by (metis \<open>Suc i = next_time t \<tau>'\<close> fun_upd_same t'_def trans_some_signal_of)
-        finally have "signal_of def res C (Suc i) = \<sigma>' C"
+        finally have "signal_of def (get_beh res) C (Suc i) = \<sigma>' C"
           by auto
         also have "... = \<sigma> C"
         proof -
@@ -919,7 +919,7 @@ proof (induction rule:b_simulate_fin.induct)
           ultimately show ?thesis
             unfolding \<sigma>'_def next_state_def \<tau>'_def * Let_def by auto
         qed
-        finally have "signal_of def res C (Suc i) = \<sigma> C"
+        finally have "signal_of def (get_beh res) C (Suc i) = \<sigma> C"
           by auto
         moreover have "\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
           using 1(12) `A \<notin> \<gamma> \<and> B \<notin> \<gamma>` by auto
@@ -927,16 +927,17 @@ proof (induction rule:b_simulate_fin.induct)
           using `signal_of (\<sigma> A) \<tau> A i = \<sigma> A` `signal_of (\<sigma> B) \<tau> B i = \<sigma> B` by auto }
       moreover
       { assume "maxtime < next_time t \<tau>'"
-        hence pre: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  res n"
+        hence pre: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  get_beh res n"
           using borderline_big_step[OF next_big_step `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` `t \<le> maxtime` `maxtime < next_time t \<tau>'` 1(10)]
           by auto
         have "Suc i < next_time t \<tau>'"
           using `maxtime = Suc i` `maxtime < next_time t \<tau>'` by auto
         hence "Suc i < next_time t \<tau>"
           unfolding \<tau>'_def by auto
-        hence "signal_of def res C (Suc i) =
+        hence "signal_of def (get_beh res) C (Suc i) =
                signal_of def (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) C (Suc i)"
-          using \<open>maxtime < next_time t \<tau>'\<close> bau next_big_step by fastforce
+          using \<open>maxtime < next_time t \<tau>'\<close> bau next_big_step
+          by (metis (mono_tags) case_timesup(1) leD)
         also have "... =  signal_of def (\<theta> (t:= (Some o \<sigma>))) C (Suc i)"
           unfolding add_to_beh_def using `t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` by auto
         also have "... = \<sigma> C"
@@ -947,7 +948,7 @@ proof (induction rule:b_simulate_fin.induct)
             unfolding to_signal_def comp_def
             by (simp add: lookup_update to_trans_raw_sig_def)
         qed   
-        finally have "signal_of def res C (Suc i) = \<sigma> C"
+        finally have "signal_of def (get_beh res) C (Suc i) = \<sigma> C"
           by auto
         moreover have "\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
           using 1(12) `A \<notin> \<gamma> \<and> B \<notin> \<gamma>` by auto
@@ -1024,12 +1025,12 @@ proof (induction rule:b_simulate_fin.induct)
         have "next_time t \<tau>' \<le> maxtime \<or> maxtime < next_time t \<tau>'" by auto
         moreover
         { assume "next_time t \<tau>' \<le> maxtime"
-          hence pre: "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  res n"
+          hence pre: "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  get_beh res n"
             using   beh_res[OF next_big_step h0] by auto
-          hence "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (\<theta> (t := (Some o \<sigma>))) n =  res n"
+          hence "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (\<theta> (t := (Some o \<sigma>))) n =  get_beh res n"
             using`t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` unfolding add_to_beh_def by auto
           hence *: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>
-               ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) (next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n =  res n"
+               ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) (next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n =  get_beh res n"
             using beh_res2[OF next_big_step h0 `next_time t \<tau>' \<le> maxtime` `cs = nand3` h2]
             by auto
           have "Suc i \<le> next_time t \<tau>'"
@@ -1040,17 +1041,17 @@ proof (induction rule:b_simulate_fin.induct)
             using `i < next_time t \<tau>'` `next_time t \<tau>' \<le> maxtime` `maxtime = Suc i` by auto
           ultimately have "Suc i = next_time t \<tau>'"
             by auto
-          hence **: "signal_of def res C (Suc i) =
+          hence **: "signal_of def (get_beh res) C (Suc i) =
                  signal_of def ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) (next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) C (Suc i)"
-            by (metis "*" "1.prems"(2) \<open>next_time t \<tau>' \<le> maxtime\<close> fun_upd_same trans_some_signal_of)
+            using "1.prems"(1) "1.prems"(2) h0 h2 maxtime_maxtime_bigstep next_big_step by auto
           define t' where "t' = next_time t \<tau>'"
           define \<sigma>' where "\<sigma>' = next_state t \<tau>' \<sigma>"
           define \<theta>' where "\<theta>' = add_to_beh \<sigma> \<theta> t (next_time t \<tau>')"
-          hence "signal_of def res C (Suc i) = signal_of def (\<theta>'(t' := (Some o \<sigma>'))) C (Suc i)"
+          hence "signal_of def (get_beh res) C (Suc i) = signal_of def (\<theta>'(t' := (Some o \<sigma>'))) C (Suc i)"
             unfolding t'_def \<sigma>'_def \<theta>'_def using ** by auto
           also have "... = \<sigma>' C"
             by (metis \<open>Suc i = next_time t \<tau>'\<close> fun_upd_same t'_def trans_some_signal_of)
-          finally have "signal_of def res C (Suc i) = \<sigma>' C"
+          finally have "signal_of def (get_beh res) C (Suc i) = \<sigma>' C"
             by auto
           also have "... = \<sigma> C"
           proof -
@@ -1060,21 +1061,22 @@ proof (induction rule:b_simulate_fin.induct)
             thus ?thesis
               unfolding \<sigma>'_def next_state_def \<tau>'_def Let_def  by simp
           qed
-          finally have "signal_of def res C (Suc i) = \<sigma> C"
+          finally have "signal_of def (get_beh res) C (Suc i) = \<sigma> C"
             by auto
           hence ?case
             using `signal_of (\<sigma> A) \<tau> A i = \<sigma> A` `signal_of (\<sigma> B) \<tau> B i = \<sigma> B` 
             `\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` by auto }
         moreover
         { assume "maxtime < next_time t \<tau>'"
-          hence pre: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  res n"
+          hence pre: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  get_beh res n"
             using borderline_big_step[OF next_big_step `t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` `t \<le> maxtime` `maxtime < next_time t \<tau>'` 1(10)]
             by auto
           have "Suc i < next_time t \<tau>'"
             using `maxtime = Suc i` `maxtime < next_time t \<tau>'` by auto
-          hence "signal_of def res C (Suc i) =
+          hence "signal_of def (get_beh res) C (Suc i) =
                  signal_of def (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) C (Suc i)"
-            using \<open>maxtime < next_time t \<tau>'\<close> bau next_big_step by fastforce
+            using \<open>maxtime < next_time t \<tau>'\<close> bau next_big_step 
+            by (metis (mono_tags) case_timesup(1) leD)
           also have "... =  signal_of def (\<theta>(t := (Some o \<sigma>))) C (Suc i)"
             unfolding add_to_beh_def using `t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` by auto
           also have "... = \<sigma> C"
@@ -1085,7 +1087,7 @@ proof (induction rule:b_simulate_fin.induct)
               unfolding to_signal_def comp_def
               by (simp add: lookup_update to_trans_raw_sig_def)
           qed
-          finally have "signal_of def res C (Suc i) = \<sigma> C"
+          finally have "signal_of def (get_beh res) C (Suc i) = \<sigma> C"
             by auto
           hence ?case
             using `signal_of (\<sigma> A) \<tau> A i = \<sigma> A` `signal_of (\<sigma> B) \<tau> B i = \<sigma> B` `\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
@@ -1224,13 +1226,13 @@ proof (induction rule:b_simulate_fin.induct)
         have "next_time t \<tau>' \<le> maxtime"
           using `next_time t \<tau>' = t + 1` `maxtime = Suc i` `i = t` by auto
         have "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>
-               ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) (next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n =  res n"
+               ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) (next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n =  get_beh res n"
           using beh_res2[OF next_big_step h0 `next_time t \<tau>' \<le> maxtime` `cs = nand3` h2] by auto
-        hence " res (next_time t \<tau>') = (Some o next_state t \<tau>' \<sigma>)"
+        hence " get_beh res (next_time t \<tau>') = (Some o next_state t \<tau>' \<sigma>)"
           by force
-        hence " res (Suc i) = (Some o next_state t \<tau>' \<sigma>)"
+        hence " get_beh res (Suc i) = (Some o next_state t \<tau>' \<sigma>)"
           using `next_time t \<tau>' = t + 1` `i = t` by auto
-        hence "signal_of def res C (Suc i) = next_state t \<tau>' \<sigma> C"
+        hence "signal_of def (get_beh res) C (Suc i) = next_state t \<tau>' \<sigma> C"
           by (meson trans_some_signal_of)
         also have "... = (let m =  \<tau>' (t + 1) in override_on \<sigma> (the o m) (dom m)) C"
           using `next_time t \<tau>' = t + 1` unfolding next_state_def by auto
@@ -1238,7 +1240,7 @@ proof (induction rule:b_simulate_fin.induct)
           using post_nec
           unfolding Let_def \<tau>'_def trans_post_raw_def preempt_raw_def post_raw_def
           by (auto split:option.split simp add: zero_fun_def zero_option_def override_on_def)
-        finally have "signal_of def res C (Suc i) \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
+        finally have "signal_of def (get_beh res) C (Suc i) \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)"
           by auto
         hence ?case
           using sigA sigB by auto }
@@ -1246,7 +1248,7 @@ proof (induction rule:b_simulate_fin.induct)
     ultimately have ?case by auto }
   moreover
   { assume "next_time t \<tau>' \<le> i"
-    with IH have IH': "signal_of def res C (Suc i) = 
+    with IH have IH': "signal_of def (get_beh res) C (Suc i) = 
       (\<not> (signal_of (next_state t \<tau>' \<sigma> A) (\<tau>'(next_time t \<tau>' := 0)) A i \<and> signal_of (next_state t \<tau>' \<sigma> B) (\<tau>'(next_time t \<tau>' := 0)) B i))"
       by auto
     have Anot: "A \<notin> set (signals_from cs)"
@@ -1312,7 +1314,7 @@ next
   moreover have "A \<notin> \<gamma> \<and> B \<notin> \<gamma>"
     using `quiet \<tau> \<gamma>` unfolding quiet_def  by (metis emptyE)
   ultimately show ?case
-    using 2(9) * ** by metis
+    using 2(9) * **  by (metis comp_apply fst_conv snd_conv)
 next
   case (3 t maxtime \<sigma> \<gamma> cs \<tau>)
   then show ?case by auto
@@ -1341,7 +1343,7 @@ qed
 theorem nand3_correctness:
   assumes "b_simulate (Suc i) nand3 \<tau> res"
   assumes "to_trans_raw_sig \<tau> C = 0"
-  shows "signal_of def res C (Suc i) \<longleftrightarrow> \<not> (signal_of False \<tau> A i \<and> signal_of False \<tau> B i)"
+  shows "signal_of def (get_beh res) C (Suc i) \<longleftrightarrow> \<not> (signal_of False \<tau> A i \<and> signal_of False \<tau> B i)"
 proof (cases " \<tau> 0 = 0")
   case True
   hence "init' 0 def_state {} 0 nand3 \<tau> = trans_post_raw C True False \<tau> 0 1" (is "_ = ?\<tau>'")
@@ -1411,7 +1413,7 @@ proof (cases " \<tau> 0 = 0")
       \<turnstile> <nand3 , (trans_post_raw C True False \<tau> 0 1)(next_time 0 (trans_post_raw C True False \<tau> 0 1) := 0)> \<leadsto> res"
     using bsimulate_obt_big_step[OF assms(1) `init' 0 def_state {} 0 nand3 \<tau> = ?\<tau>'`] by auto
   have *: "1 \<le> i \<Longrightarrow>
-     signal_of def res C (Suc i) \<longleftrightarrow>
+     signal_of def (get_beh res) C (Suc i) \<longleftrightarrow>
   \<not> (signal_of (next_state 0 ?\<tau>' def_state A) (?\<tau>'(1:=0)) A i \<and> signal_of (next_state 0 ?\<tau>' def_state B) (?\<tau>'(1:=0)) B i)"
     using nand3_correctness_ind[OF bigstep _ _ ind1' ind2' ind3 _ ind4 ind5']  unfolding ntime by auto
   moreover have "1 \<le> i \<Longrightarrow> signal_of (next_state 0 ?\<tau>' def_state A) ?\<tau>' A i = signal_of False ?\<tau>' A i"
@@ -1475,7 +1477,7 @@ proof (cases " \<tau> 0 = 0")
   moreover have "signal_of (next_state 0 ?\<tau>' def_state B) ?\<tau>' B i = signal_of (next_state 0 ?\<tau>' def_state B) (?\<tau>'(1:=0)) B i"
     apply(intro sym[OF signal_of_rem_curr_trans_at_t])
     using ind1 ntime ind2 by auto
-  ultimately have IR: "1 \<le> i \<Longrightarrow> signal_of def res C (Suc i) \<longleftrightarrow>
+  ultimately have IR: "1 \<le> i \<Longrightarrow> signal_of def (get_beh res) C (Suc i) \<longleftrightarrow>
                                             \<not> (signal_of False ?\<tau>' A i \<and> signal_of False ?\<tau>' B i)"
     by auto
   have " ?\<tau>' 0 = 0"
@@ -1489,7 +1491,7 @@ proof (cases " \<tau> 0 = 0")
   have "1 \<le> next_time 0 (trans_post_raw C True False \<tau> 0 1)"
     unfolding ntime by auto
 
-  have " res 1 = ((add_to_beh def_state 0 0 (next_time 0 (trans_post_raw C True False \<tau> 0 1)))
+  have " get_beh res 1 = ((add_to_beh def_state 0 0 (next_time 0 (trans_post_raw C True False \<tau> 0 1)))
  (next_time 0 (trans_post_raw C True False \<tau> 0 1) := Some \<circ> next_state 0 (trans_post_raw C True False \<tau> 0 1) def_state))
  1"
     using beh_res2[OF bigstep ind1' `next_time 0 (trans_post_raw C True False \<tau> 0 1) \<le> Suc i` _ ind3 `1 \<le> next_time 0 (trans_post_raw C True False \<tau> 0 1)`]
@@ -1498,16 +1500,16 @@ proof (cases " \<tau> 0 = 0")
     unfolding ntime by auto
   also have "... = Some o next_state 0 ?\<tau>' def_state"
     by simp
-  finally have " res 1  = Some o next_state 0 ?\<tau>' def_state"
+  finally have " get_beh res 1  = Some o next_state 0 ?\<tau>' def_state"
     by auto
-  hence "signal_of def res C 1 = next_state 0 ?\<tau>' def_state C"
+  hence "signal_of def (get_beh res) C 1 = next_state 0 ?\<tau>' def_state C"
     by (meson trans_some_signal_of)
   also have "... = True"
     using True unfolding next_state_def ntime Let_def 
     by (auto split:option.split simp add: trans_post_raw_def post_raw_def override_on_def zero_option_def zero_fun_def)
   also have "... \<longleftrightarrow> \<not> (signal_of False ?\<tau>' A 0 \<and> signal_of False ?\<tau>' B 0)"
     unfolding `signal_of False ?\<tau>' A 0 = False` `signal_of False ?\<tau>' B 0 = False` by auto
-  finally have IR0: "signal_of def res C 1 \<longleftrightarrow> \<not> (signal_of False ?\<tau>' A 0 \<and> signal_of False ?\<tau>' B 0)"
+  finally have IR0: "signal_of def (get_beh res) C 1 \<longleftrightarrow> \<not> (signal_of False ?\<tau>' A 0 \<and> signal_of False ?\<tau>' B 0)"
     by auto
   have "signal_of False ?\<tau>' A i = signal_of False \<tau> A i" and "signal_of False ?\<tau>' B i = signal_of False \<tau> B i"
     using signal_of_trans_post   by (metis sig.distinct(3))(meson sig.simps(6) signal_of_trans_post)
@@ -1697,7 +1699,7 @@ next
       hence ind5'': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow>  (to_trans_raw_sig (\<tau>''(next_time 0 \<tau>'' := 0)) C) n = 0"
         by (simp add: to_trans_raw_sig_def)
       have *: "1 \<le> i \<Longrightarrow>
-         signal_of def res C (Suc i) = (\<not> (signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'' := 0)) A i \<and> 
+         signal_of def (get_beh res) C (Suc i) = (\<not> (signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'' := 0)) A i \<and> 
                                            signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'' := 0)) B i))"
         using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5''] 
         unfolding `next_time 0 \<tau>'' = 1` by auto
@@ -1765,7 +1767,7 @@ next
       moreover have "signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'':=0)) B i = 
                      signal_of (\<sigma>'' B) \<tau>'' B i"
         apply (intro signal_of_rem_curr_trans_at_t) using ind1' ind2' by auto
-      ultimately have IR: "1 \<le> i \<Longrightarrow> signal_of def res C (Suc i) \<longleftrightarrow>
+      ultimately have IR: "1 \<le> i \<Longrightarrow> signal_of def (get_beh res) C (Suc i) \<longleftrightarrow>
                                             \<not> (signal_of (\<sigma>' A) \<tau>'' A i \<and> signal_of (\<sigma>' B) \<tau>'' B i)"
         by auto
       have " \<tau>'' 0 = 0"
@@ -1776,14 +1778,14 @@ next
         by (metis \<open>\<tau>'' 0 = 0\<close> signal_of_zero zero_fun_def) 
       have "next_time 0 \<tau>'' \<le> Suc i" and "1 \<le> next_time 0 \<tau>''"
         unfolding `next_time 0 \<tau>'' = 1` by auto
-      have " res 1 =  (\<theta>'' (1:=(Some \<circ> \<sigma>''))) 1"
+      have " get_beh res 1 =  (\<theta>'' (1:=(Some \<circ> \<sigma>''))) 1"
         using beh_res2[OF bigstep3 ind1'' `next_time 0 \<tau>'' \<le> Suc i` _ ind3' `1 \<le> next_time 0 \<tau>''`] 
         unfolding `next_time 0 \<tau>'' = 1` by auto
       also have "... = Some o \<sigma>''"
         by auto
-      finally have " res 1  = Some o \<sigma>''"
+      finally have " get_beh res 1  = Some o \<sigma>''"
         by auto
-      hence "signal_of def res C 1 = \<sigma>'' C"
+      hence "signal_of def (get_beh res) C 1 = \<sigma>'' C"
         by (meson trans_some_signal_of)
       also have "... \<longleftrightarrow> (let m =  \<tau>'' 1 in override_on \<sigma>' (the \<circ> m) (dom m)) C"
         unfolding \<sigma>''_def next_state_def `next_time 0 \<tau>'' = 1` by auto
@@ -1792,7 +1794,7 @@ next
         by (auto split:option.split simp add: zero_fun_def zero_option_def override_on_def)
       also have "... \<longleftrightarrow> \<not> (signal_of (\<sigma>' A) \<tau>'' A 0 \<and> signal_of (\<sigma>' B) \<tau>'' B 0)"
         using sA sB by auto
-      finally have IR0: "signal_of def res C 1 \<longleftrightarrow> \<not> (signal_of (\<sigma>' A) \<tau>'' A 0 \<and> signal_of (\<sigma>' B) \<tau>'' B 0)"
+      finally have IR0: "signal_of def (get_beh res) C 1 \<longleftrightarrow> \<not> (signal_of (\<sigma>' A) \<tau>'' A 0 \<and> signal_of (\<sigma>' B) \<tau>'' B 0)"
         by auto
   
       have "signal_of (\<sigma>' A) \<tau>'' A i = signal_of (\<sigma>' A) (?\<tau>'(0:=0)) A i"
@@ -1894,7 +1896,7 @@ next
       hence ind5'': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow>  (to_trans_raw_sig (\<tau>''(next_time 0 \<tau>'':=0)) C) n = 0"
         by (simp add: to_trans_raw_sig_def)
       have *: "next_time 0 \<tau>'' \<le> i \<Longrightarrow>
-         signal_of def res C (Suc i) = (\<not> (signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'' := 0)) A i \<and> signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'' := 0)) B i))"
+         signal_of def (get_beh res) C (Suc i) = (\<not> (signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'' := 0)) A i \<and> signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'' := 0)) B i))"
         using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5'']  
         by auto
       moreover have "next_time 0 \<tau>'' \<le> i \<Longrightarrow> signal_of (\<sigma>'' A) \<tau>'' A i = signal_of (\<sigma>' A) \<tau>'' A i"
@@ -1962,7 +1964,7 @@ next
         apply (intro signal_of_rem_curr_trans_at_t)
         using ind1' ind2' by auto
       ultimately have **: "next_time 0 \<tau>'' \<le> i \<Longrightarrow>
-         signal_of def res C (Suc i) = (\<not> (signal_of (\<sigma>' A) \<tau>'' A i \<and> signal_of (\<sigma>' B) \<tau>'' B i))"
+         signal_of def (get_beh res) C (Suc i) = (\<not> (signal_of (\<sigma>' A) \<tau>'' A i \<and> signal_of (\<sigma>' B) \<tau>'' B i))"
         by auto
       have "signal_of (\<sigma>' A) \<tau>'' A i = signal_of (\<sigma>' A) (?\<tau>'(0:=0)) A i"
         unfolding \<tau>''_def   using signal_of_trans_post by fastforce
@@ -2030,9 +2032,9 @@ next
           using `i < next_time 0 \<tau>''` by auto
         moreover
         { assume "Suc i = next_time 0 \<tau>''"
-          hence " res (Suc i) =  (\<theta>''(Suc i := Some \<circ> \<sigma>'')) (Suc i)"
+          hence " get_beh res (Suc i) =  (\<theta>''(Suc i := Some \<circ> \<sigma>'')) (Suc i)"
             using beh_res2[OF bigstep3 ind1'' _ _ ind3']  by force
-          hence "signal_of def res C (Suc i) = \<sigma>'' C"
+          hence "signal_of def (get_beh res) C (Suc i) = \<sigma>'' C"
             using trans_some_signal_of by fastforce
           also have "... = \<sigma>' C"
           proof -
@@ -2043,34 +2045,35 @@ next
             thus ?thesis
               unfolding \<sigma>''_def next_state_def Let_def override_on_def m_def by auto
           qed
-          finally have "signal_of def res C (Suc i) = \<sigma>' C"
+          finally have "signal_of def (get_beh res) C (Suc i) = \<sigma>' C"
             by auto
           with sA sB hel hel2 have ?thesis
             using `\<sigma>' C \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B)` by auto }
         moreover
         { assume "Suc i < next_time 0 \<tau>''"
-          hence "\<And>t. t \<le> Suc i \<Longrightarrow>  \<theta>'' t =  res t"
+          hence "\<And>t. t \<le> Suc i \<Longrightarrow>  \<theta>'' t =  get_beh res t"
             using   beh_and_res_same_until_now[OF bigstep3 ind1''] by auto
           have "0 < next_time 0 \<tau>''"
             using `Suc i < next_time 0 \<tau>''` by auto
           hence "\<theta>'' = 0 (0:=(Some o \<sigma>'))"
             using \<theta>''_def unfolding add_to_beh_def by auto
-          have "signal_of def res C (Suc i) = signal_of def res C 0"
+          have "signal_of def (get_beh res) C (Suc i) = signal_of def (get_beh res) C 0"
           proof (intro signal_of_less_ind)
-            show "\<And>n. 0 < n \<Longrightarrow> n \<le> Suc i \<Longrightarrow>  res n = 0"
-              using `\<And>t. t \<le> Suc i \<Longrightarrow>  \<theta>'' t =  res t` 
-              `\<theta>'' = 0 (0:=Some o \<sigma>')`  by (metis fun_upd_apply gr_implies_not_zero zero_fun_def)
+            show "\<And>n. 0 < n \<Longrightarrow> n \<le> Suc i \<Longrightarrow>  get_beh res n = 0"
+              using `\<And>t. t \<le> Suc i \<Longrightarrow>  \<theta>'' t =  get_beh res t` 
+              `\<theta>'' = 0 (0:=Some o \<sigma>')`  
+              by (metis (full_types) fun_upd_apply not_less_zero zero_fun_def)
           qed auto
           also have "... = \<sigma>' C"
-            by (metis \<open>0 \<le> Suc i\<close> \<open>\<And>t. t \<le> Suc i \<Longrightarrow> \<theta>'' t = res t\<close> \<open>\<theta>'' = 0(0 := Some \<circ> \<sigma>')\<close>
+            by (metis \<open>0 \<le> Suc i\<close> \<open>\<And>t. t \<le> Suc i \<Longrightarrow> \<theta>'' t = get_beh res t\<close> \<open>\<theta>'' = 0(0 := Some \<circ> \<sigma>')\<close>
             fun_upd_same trans_some_signal_of)
-          finally have "signal_of def res C (Suc i) = \<sigma>' C"
+          finally have "signal_of def (get_beh res) C (Suc i) = \<sigma>' C"
             by auto
           with sA sB hel hel2 have ?thesis
             using `\<sigma>' C \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B)` by auto }
-        ultimately have "signal_of def res C (Suc i) = (\<not> (signal_of False \<tau> A i \<and> signal_of False \<tau> B i))"
+        ultimately have "signal_of def (get_beh res) C (Suc i) = (\<not> (signal_of False \<tau> A i \<and> signal_of False \<tau> B i))"
           by auto }
-      hence "i < next_time 0 \<tau>'' \<Longrightarrow> signal_of def res C (Suc i) = (\<not> (signal_of False \<tau> A i \<and> signal_of False \<tau> B i))"
+      hence "i < next_time 0 \<tau>'' \<Longrightarrow> signal_of def (get_beh res) C (Suc i) = (\<not> (signal_of False \<tau> A i \<and> signal_of False \<tau> B i))"
         by auto
       with ** have ?thesis
         using hel hel2  using le_less_linear by blast }
@@ -2143,7 +2146,7 @@ next
     hence ind5'': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow>  (to_trans_raw_sig (\<tau>'' (next_time 0 \<tau>'':=0)) C) n = 0"
       by (simp add: to_trans_raw_sig_def)
     have *: "1 \<le> i \<Longrightarrow>
-       signal_of def res C (Suc i) = (\<not> (signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'' := 0)) A i \<and> signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'' := 0)) B i))"
+       signal_of def (get_beh res) C (Suc i) = (\<not> (signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'' := 0)) A i \<and> signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'' := 0)) B i))"
       using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5'']
       unfolding `next_time 0 \<tau>'' = 1` by auto
     moreover have "1 \<le> i \<Longrightarrow> signal_of (\<sigma>'' A) \<tau>'' A i = signal_of (\<sigma>' A) \<tau>'' A i"
@@ -2210,7 +2213,7 @@ next
     moreover have "signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'':=0)) B i =  signal_of (\<sigma>'' B) \<tau>'' B i"
       apply (intro signal_of_rem_curr_trans_at_t)
       using ind1' ind2' by auto
-    ultimately have IR: "1 \<le> i \<Longrightarrow> signal_of def res C (Suc i) \<longleftrightarrow>
+    ultimately have IR: "1 \<le> i \<Longrightarrow> signal_of def (get_beh res) C (Suc i) \<longleftrightarrow>
                                           \<not> (signal_of (\<sigma>' A) \<tau>'' A i \<and> signal_of (\<sigma>' B) \<tau>'' B i)"
       by auto
     have " \<tau>'' 0 = 0"
@@ -2221,14 +2224,14 @@ next
       by (metis \<open>\<tau>'' 0 = 0\<close> signal_of_zero zero_fun_def) 
     have "next_time 0 \<tau>'' \<le> Suc i" and "1 \<le> next_time 0 \<tau>''"
       unfolding `next_time 0 \<tau>'' = 1` by auto
-    have " res 1 =  (\<theta>''(next_time 0 \<tau>'' := Some \<circ> \<sigma>'')) 1"
+    have " get_beh res 1 =  (\<theta>''(next_time 0 \<tau>'' := Some \<circ> \<sigma>'')) 1"
       using beh_res2[OF bigstep3 ind1'' `next_time 0 \<tau>'' \<le> Suc i` _ ind3' `1 \<le> next_time 0 \<tau>''`] 
       unfolding `next_time 0 \<tau>'' = 1` by auto
     also have "... = Some o \<sigma>''"
       by (simp add: \<open>next_time 0 \<tau>'' = 1\<close>)
-    finally have " res 1  = Some o \<sigma>''"
+    finally have " get_beh res 1  = Some o \<sigma>''"
       by auto
-    hence "signal_of def res C 1 = \<sigma>'' C"
+    hence "signal_of def (get_beh res) C 1 = \<sigma>'' C"
       using trans_some_signal_of by fastforce
     also have "... \<longleftrightarrow> (let m =  \<tau>'' 1 in override_on \<sigma>' (the \<circ> m) (dom m)) C"
       unfolding \<sigma>''_def next_state_def `next_time 0 \<tau>'' = 1` by auto
@@ -2237,7 +2240,7 @@ next
         unfolding trans_post_raw_def  post_raw_def by (auto simp add: override_on_def)
     also have "... \<longleftrightarrow> \<not> (signal_of (\<sigma>' A) \<tau>'' A 0 \<and> signal_of (\<sigma>' B) \<tau>'' B 0)"
       using sA sB by auto
-    finally have IR0: "signal_of def res C 1 \<longleftrightarrow> \<not> (signal_of (\<sigma>' A) \<tau>'' A 0 \<and> signal_of (\<sigma>' B) \<tau>'' B 0)"
+    finally have IR0: "signal_of def (get_beh res) C 1 \<longleftrightarrow> \<not> (signal_of (\<sigma>' A) \<tau>'' A 0 \<and> signal_of (\<sigma>' B) \<tau>'' B 0)"
       by auto
 
     have "signal_of (\<sigma>' A) \<tau>'' A i = signal_of (\<sigma>' A) (?\<tau>'(0:= 0)) A i"

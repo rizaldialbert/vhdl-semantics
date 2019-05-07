@@ -634,6 +634,22 @@ definition trans_post_raw ::
        else 
           preempt_raw s \<tau> (t + dly))"
 
+lemma trans_post_raw_almost_all_zero:
+  fixes \<tau> :: "nat \<Rightarrow> 'signal \<rightharpoonup> bool"
+  assumes " \<forall>\<^sub>\<infinity>x. \<tau> x = 0"
+  shows "\<forall>\<^sub>\<infinity>x. trans_post_raw s v def \<tau> t dly x = 0"
+proof (cases "post_necessary_raw (dly - 1) \<tau> t s v def")
+  case True
+  then show ?thesis 
+    using assms unfolding trans_post_raw_def post_raw_def
+    by (smt MOST_mono MOST_neq(2) MOST_rev_mp fun_upd_idem_iff zero_fun_def zero_option_def)
+next
+  case False
+  then show ?thesis 
+    using assms unfolding trans_post_raw_def preempt_raw_def
+    by (smt MOST_mono fun_upd_idem_iff zero_fun_def zero_option_def) 
+qed
+
 lemma trans_post_raw_imply_neq_map_empty:
   assumes "\<tau>' =  trans_post_raw sig e def \<tau> t dly"
   assumes "(\<forall>i\<ge>t. i \<le> t + (dly-1) \<longrightarrow> \<tau> i sig = None) \<Longrightarrow> e \<noteq> def"
@@ -912,6 +928,22 @@ definition inr_post_raw :: "'signal \<Rightarrow> val \<Rightarrow> val \<Righta
       trans_post_raw sig val cur_val \<tau> now dly
     else
       trans_post_raw sig val cur_val (purge_raw \<tau> now dly sig) now dly)"
+
+lemma inr_post_raw_almost_all_zero:
+  assumes "\<forall>\<^sub>\<infinity>x. \<tau> x = 0"
+  shows "\<forall>\<^sub>\<infinity>x. inr_post_raw sig val cur_val \<tau> now dly x = 0"
+proof (cases "is_stable_raw dly \<tau> now sig cur_val")
+  case True
+  thus ?thesis
+    unfolding inr_post_raw_def using trans_post_raw_almost_all_zero[OF assms]  by auto
+next
+  case False
+  have **: "\<forall>\<^sub>\<infinity>x. (purge_raw \<tau> now dly sig) x = 0"
+    unfolding purge_raw_def using assms
+    by (smt MOST_mono fun_upd_idem override_on_apply_in override_on_apply_notin zero_fun_def zero_option_def)  
+  thus ?thesis
+    unfolding inr_post_raw_def using False trans_post_raw_almost_all_zero[OF **] by auto 
+qed
 
 lemma inr_post_purged:
   assumes "(\<forall>s. s \<in> dom (\<tau> now) \<longrightarrow> \<sigma> s = the (\<tau> now s))"
@@ -1269,6 +1301,15 @@ abbreviation b_seq_exec_abb :: "nat \<Rightarrow> 'signal state \<Rightarrow> 's
                                'signal seq_stmt \<Rightarrow> 'signal trans_raw \<Rightarrow> 'signal trans_raw \<Rightarrow> bool"
     ("_ , _ , _ , _ \<turnstile> <_ , _> \<longrightarrow>\<^sub>s _") where
   "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>') \<equiv> (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau> = \<tau>')"
+
+lemma b_seq_exec_almost_all_zero:
+  fixes \<tau> \<theta> :: "'signal trans_raw"
+  assumes "\<forall>\<^sub>\<infinity>x. \<theta> x = 0"
+  assumes "\<forall>\<^sub>\<infinity>x. \<tau> x = 0"
+  shows "\<forall>\<^sub>\<infinity>x. b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau> x = 0"
+  using assms
+  by (induction ss arbitrary: \<tau>, auto simp add: trans_post_raw_almost_all_zero
+  inr_post_raw_almost_all_zero)  
 
 definition
   "map_diff m1 m2 = (\<lambda>x. if m1 x = m2 x \<and> m1 x \<noteq> None then None else m1 x)"
@@ -1630,6 +1671,31 @@ definition clean_zip_raw :: "'signal trans_raw \<Rightarrow> 'signal trans_raw \
   "clean_zip_raw \<tau> \<tau>s1 \<tau>s2 = (let (\<tau>1, s1) = \<tau>s1; (\<tau>2, s2) = \<tau>s2
                               in (\<lambda>t s. if s \<in> s1 then \<tau>1 t s else if s \<in> s2 then \<tau>2 t s else \<tau> t s))"
 
+lemma clean_zip_raw_almost_all_zero:
+  fixes f g1 g2 :: "nat \<Rightarrow> 'signal \<Rightarrow> bool option"
+  assumes "\<forall>\<^sub>\<infinity>x. f  x = 0"
+  assumes "\<forall>\<^sub>\<infinity>x. g1 x = 0"
+  assumes "\<forall>\<^sub>\<infinity>x. g2 x = 0"
+  shows   "\<forall>\<^sub>\<infinity>x. clean_zip_raw f (g1, s1) (g2,s2) x = 0"
+proof -
+  have "\<And>i. g2 i = 0 \<Longrightarrow> f i = 0 \<Longrightarrow> (\<lambda>s. if s \<in> s2 then g2 i s else f i s) = 0"
+    unfolding zero_fun_def by (rule ext) auto
+  hence "\<forall>\<^sub>\<infinity>i. (\<lambda>s. if s \<in> s2 then g2 i s else f i s) = 0"
+    using eventually_elim2[where F="cofinite" and P="\<lambda>x. g2 x = 0" and Q="\<lambda>x. f x = 0"
+                          and R="\<lambda>x. (\<lambda>s. if s \<in> s2 then g2 x s else f x s) = 0"]
+    assms by auto
+  moreover have "\<And>i. g1 i = 0 \<Longrightarrow> (\<lambda>s. if s \<in> s2 then g2 i s else f i s) = 0 \<Longrightarrow> 
+                              (\<lambda>s. if s \<in> s1 then g1 i s else if s \<in> s2 then g2 i s else f i s) = 0"
+    unfolding zero_fun_def by (rule ext) meson
+  ultimately show ?thesis
+    unfolding clean_zip_raw_def Let_def 
+    using eventually_elim2[where F="cofinite" and P="\<lambda>x. g1 x = 0" and 
+                      Q="\<lambda>x. (\<lambda>s. if s \<in> s2 then g2 x s else f x s) = 0" and 
+                      R="\<lambda>x. (\<lambda>s. if s \<in> s1 then g1 x s else if s \<in> s2 then g2 x s else f x s) = 0", 
+                      OF assms(2)]
+    by auto
+qed
+
 lemma dom_map_diff_clean_zip_union:
   "\<And>n. dom (map_diff_trans_raw (clean_zip_raw \<tau> (\<tau>', s') (\<tau>'', s'')) \<tau> n) \<subseteq>
                                   dom (map_diff_trans_raw \<tau>' \<tau> n) \<union> dom (map_diff_trans_raw \<tau>'' \<tau> n)"
@@ -1738,6 +1804,14 @@ abbreviation  b_conc_exec_abb :: "nat \<Rightarrow> 'signal state \<Rightarrow> 
   ("_ , _ , _ , _ \<turnstile> <_ , _> \<longrightarrow>\<^sub>c _") where
   "(t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>') \<equiv> (b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>')"
 
+lemma b_conc_exec_almost_all_zero:
+  assumes "finite {x. \<tau> x \<noteq> 0}"
+  assumes "finite {x. \<theta> x \<noteq> 0}"
+  shows "finite {x. b_conc_exec t  \<sigma>  \<gamma>  \<theta> cs \<tau> x \<noteq> 0}"
+  using assms unfolding sym[OF eventually_cofinite]
+  by (induction cs arbitrary:\<tau>)
+     (auto simp add: clean_zip_raw_almost_all_zero b_seq_exec_almost_all_zero)
+
 theorem conc_stmts_modify_local_only_raw:
   assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
   shows "\<And>n. dom (map_diff (\<tau>' n) (\<tau> n)) \<subseteq> set (signals_from cs)"
@@ -1818,6 +1892,14 @@ fun init' :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Righ
   | "init' t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> =
                        (let \<tau>1 = init' t \<sigma> \<gamma> \<theta> cs1 \<tau>;  \<tau>2 = init' t \<sigma> \<gamma> \<theta> cs2 \<tau> in 
                           clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2)))"
+
+lemma init'_raw_almost_all_zero: 
+  assumes "finite {x. \<theta> x \<noteq> 0}"
+  assumes "finite {x. \<tau> x \<noteq> 0}"
+  shows "finite {x. Femto_VHDL_raw.init' t \<sigma> \<gamma> \<theta> cs \<tau> x \<noteq> 0}"
+  using assms unfolding sym[OF eventually_cofinite]
+    by (induction cs arbitrary:\<tau>)
+       (auto simp add: clean_zip_raw_almost_all_zero b_seq_exec_almost_all_zero)  
 
 definition rem_curr_trans :: "nat \<Rightarrow> 'signal trans_raw_sig \<Rightarrow> 'signal trans_raw_sig" where
   "rem_curr_trans t \<tau> s = (\<tau> s)(t := 0)"
@@ -2547,6 +2629,12 @@ following function does exactly this purpose.\<close>
 definition next_time :: "nat \<Rightarrow> 'signal trans_raw \<Rightarrow> nat" where
   "next_time t \<tau> = (if \<tau> = 0 then t + 1 else LEAST n. dom (\<tau> n) \<noteq> {})"
 
+lemma rem_next_time_almost_all_zero:
+  assumes "finite {x. \<tau>' x \<noteq> 0}"
+  shows "finite {x. (\<tau>'(Femto_VHDL_raw.next_time t \<tau>' := 0)) x \<noteq> 0}"
+  using assms unfolding sym[OF eventually_cofinite] 
+  by (metis (mono_tags) upd_eventually_cofinite)
+
 lemma until_next_time_zero:
   "\<forall>n. t < n \<and> n < next_time t \<tau>' \<longrightarrow> \<tau>' n = 0"
 proof (cases "\<tau>' = 0")
@@ -2828,6 +2916,12 @@ the maximum simulation time is reached).\<close>
 definition add_to_beh :: "'signal state \<Rightarrow> 'signal trans_raw \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal trans_raw" where
   "add_to_beh \<sigma> \<theta> st fi = (if st < fi then \<theta>(st := Some o \<sigma>) else \<theta>)"
 
+lemma add_to_beh_almost_all_zero:
+  assumes "finite {x. \<theta> x \<noteq> 0}"
+  shows "finite {x. Femto_VHDL_raw.add_to_beh \<sigma> \<theta> t (Femto_VHDL_raw.next_time t \<tau>') x \<noteq> 0}"
+  using assms unfolding sym[OF eventually_cofinite] Femto_VHDL_raw.add_to_beh_def
+  by (metis (mono_tags) upd_eventually_cofinite)
+
 lemma [simp]:
   "add_to_beh \<sigma> \<theta> t t = \<theta>"
   unfolding add_to_beh_def by (transfer, auto)
@@ -2863,9 +2957,8 @@ In case the current time is much later than the maximum time, we just have to de
 from @{term "maxtime + 1"} to @{term "t"}.
 \<close>
 
-
 inductive b_simulate_fin :: "nat \<Rightarrow> nat \<Rightarrow> 'signal  state \<Rightarrow> 'signal event \<Rightarrow> 'signal trans_raw \<Rightarrow>
-                            'signal conc_stmt \<Rightarrow> 'signal trans_raw \<Rightarrow> 'signal trans_raw \<Rightarrow> bool"
+                            'signal conc_stmt \<Rightarrow> 'signal trans_raw \<Rightarrow> nat \<times> 'signal state \<times> 'signal trans_raw \<times> 'signal trans_raw \<Rightarrow> bool"
   ("_, _ , _ , _ , _ \<turnstile> <_ , _> \<leadsto> _") where
 
   \<comment> \<open>Business as usual: not quiesced yet and there is still time\<close>
@@ -2882,16 +2975,21 @@ inductive b_simulate_fin :: "nat \<Rightarrow> nat \<Rightarrow> 'signal  state 
   \<comment> \<open>The simulation has quiesced and there is still time\<close>
 | "    (t \<le> maxtime)
    \<Longrightarrow> (quiet \<tau> \<gamma>)
-   \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> \<theta>(t:= Some o \<sigma>))"
+   \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> (maxtime + 1, \<sigma>, \<theta>(t:= Some o \<sigma>), 0))"
 
   \<comment> \<open>Time is up\<close>
 | "  \<not> (t \<le> maxtime)
-   \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> \<theta>)"
+   \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> (t, \<sigma>, \<theta>, \<tau>))"
+
+abbreviation get_time  where "get_time  \<equiv> fst"
+abbreviation get_state where "get_state \<equiv> fst o snd"
+abbreviation get_beh   where "get_beh   \<equiv> fst o snd o snd"
+abbreviation get_trans where "get_trans \<equiv> snd o snd o snd"
 
 lemma b_simulate_fin_almost_all_zero:
   assumes "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res"
   assumes "finite {x. \<theta> x \<noteq> 0}"
-  shows "finite {x. res x \<noteq> 0}"
+  shows "finite {x. (get_beh res) x \<noteq> 0}"
   using assms unfolding sym[OF eventually_cofinite]
 proof (induction rule: b_simulate_fin.induct)
   case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs \<tau>' res)
@@ -2902,10 +3000,41 @@ proof (induction rule: b_simulate_fin.induct)
 next
   case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs)
   then show ?case 
-    by (metis (mono_tags) upd_eventually_cofinite)
+  proof -
+    have "\<forall>\<^sub>\<infinity>n. (\<theta>(t := Some \<circ> \<sigma>)) n = 0"
+      by (metis "2.prems" upd_eventually_cofinite)
+    then show ?thesis
+      by simp
+  qed
 next
   case (3 t maxtime \<sigma> \<gamma> \<theta> cs \<tau>)
-  then show ?case by auto
+  then show ?case  by auto
+qed
+
+lemma b_simulate_fin_almost_all_zero2:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res"
+  assumes "finite {x. \<tau> x \<noteq> 0}"
+  assumes "finite {x. \<theta> x \<noteq> 0}"
+  shows "finite {x. (get_trans res) x \<noteq> 0}"
+  using assms unfolding sym[OF eventually_cofinite]
+proof (induction rule: b_simulate_fin.induct)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs \<tau>' res)
+  have "\<forall>\<^sub>\<infinity>x. \<tau>' x = 0"
+    using b_conc_exec_almost_all_zero \<open>\<forall>\<^sub>\<infinity>x. \<tau> x = 0\<close> \<open>\<forall>\<^sub>\<infinity>x. \<theta> x = 0\<close> 
+    eventually_cofinite  using "1.hyps"(3) by fastforce
+  hence "\<forall>\<^sub>\<infinity>x. (\<tau>'(next_time t \<tau>' := 0)) x = 0"
+    using upd_eventually_cofinite by fastforce
+  moreover have "\<forall>\<^sub>\<infinity>x. add_to_beh \<sigma> \<theta> t (next_time t \<tau>') x = 0"  
+    unfolding add_to_beh_def  by (metis (mono_tags) "1.prems"(2) upd_eventually_cofinite)
+  ultimately show ?case
+    using "1.IH" by blast
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs)
+  then show ?case 
+    by (metis comp_apply quiet_def snd_conv)
+next
+  case (3 t maxtime \<sigma> \<gamma> \<theta> cs \<tau>)
+  then show ?case  by auto
 qed
 
 inductive_cases bau: "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> beh"
@@ -2914,14 +3043,14 @@ lemma case_quiesce:
   assumes "t \<le> maxtime"
   assumes "quiet \<tau> \<gamma>"
   assumes "(maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
-  shows "res = \<theta> (t:= (Some o \<sigma>))"
-  using bau[OF assms(3)] assms by auto
+  shows "get_beh res = \<theta> (t:= (Some o \<sigma>))" and "get_state res = \<sigma>" and "get_trans res = 0"
+  using bau[OF assms(3)] assms by (metis comp_apply fst_conv snd_conv)+
 
 lemma case_timesup:
   assumes "\<not> (t \<le> maxtime)"
   assumes "(maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res)"
-  shows "res = \<theta>"
-  using bau[OF assms(2)] assms by auto
+  shows "get_beh res = \<theta>" and "get_state res = \<sigma>" and "get_trans res = \<tau>"
+  using bau[OF assms(2)] assms  by (metis comp_apply fst_conv snd_conv)+
 
 lemma case_bau:
   assumes "t \<le> maxtime"
@@ -2951,7 +3080,7 @@ lemma beh_res:
   assumes "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> beh"
   assumes "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
   assumes "t \<le> maxtime"
-  shows "\<And>n. n < t \<Longrightarrow>  \<theta> n =  beh n"
+  shows "\<And>n. n < t \<Longrightarrow>  \<theta> n =  (get_beh beh) n"
   using assms
 proof (induction rule:b_simulate_fin.induct)
   case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs \<tau>' res)
@@ -2967,7 +3096,7 @@ proof (induction rule:b_simulate_fin.induct)
     by auto
   moreover
   { assume ind3: "next_time t \<tau>' \<le> maxtime"
-    with 1(5)[OF ind1 ind2] have " (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  res n"
+    with 1(5)[OF ind1 ind2] have " (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  (get_beh res) n"
       by auto
     hence ?case using `n < t`
       unfolding add_to_beh_def  by (metis (full_types) fun_upd_apply nat_neq_iff) }
@@ -2982,7 +3111,7 @@ proof (induction rule:b_simulate_fin.induct)
       using `add_to_beh \<sigma> \<theta> t (next_time t \<tau>') = \<theta>(t :=(Some o \<sigma>))` by auto
     hence "maxtime, next_time t \<tau>', \<sigma>', \<gamma>', \<theta>' \<turnstile> <cs, \<tau>'(next_time t \<tau>' := 0)> \<leadsto> res"
       using 1(4) unfolding \<theta>'_def \<sigma>'_def \<gamma>'_def by auto
-    hence "res = \<theta>'"
+    hence "get_beh res = \<theta>'"
       using case_timesup[OF `\<not> next_time t \<tau>' \<le> maxtime`] by metis
     hence ?case
       unfolding \<theta>'_def2 using `n < t` `t \<le> maxtime` `maxtime < next_time t \<tau>'`
@@ -2998,15 +3127,14 @@ lemma borderline_big_step:
   assumes "t \<le> maxtime" and "maxtime < t'"
   assumes "\<And>n. t < n \<Longrightarrow> \<theta> n = 0"
   assumes "\<theta>' = add_to_beh \<sigma> \<theta> t t'"
-  shows "\<And>n. n \<le> t' \<Longrightarrow> \<theta>' n = beh n"
+  shows "\<And>n. n \<le> t' \<Longrightarrow> \<theta>' n = get_beh beh n"
   using assms
   by (induction rule:b_simulate_fin.induct, auto)
-
 
 lemma beh_and_res_same_until_now:
   assumes "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res"
   assumes "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
-  shows "\<And>i. i < t \<Longrightarrow> i \<le> maxtime \<Longrightarrow>  \<theta> i = res i"
+  shows "\<And>i. i < t \<Longrightarrow> i \<le> maxtime \<Longrightarrow>  \<theta> i = get_beh res i"
   using assms
 proof (induction rule:b_simulate_fin.induct)
   case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs \<tau>' res)
@@ -3043,7 +3171,7 @@ proof (induction rule:b_simulate_fin.induct)
     ultimately show " (\<tau>'(next_time t \<tau>' := 0)) n = 0"
       by auto
   qed
-  ultimately have IH: " (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) i =  res i"
+  ultimately have IH: "(add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) i =  get_beh res i"
     using 1(5)[of "i"] 
     by (metis (full_types) "1.hyps"(3) "1.prems"(1) "1.prems"(3) b_conc_exec_preserve_trans_removal
     le_less_trans next_time_at_least not_le)
@@ -3613,12 +3741,10 @@ theorem b_simulate_fin_deterministic:
   assumes "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res1"
   assumes "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> res2"
   shows "res2 = res1"
-  using assms apply (induction arbitrary: res2 rule:b_simulate_fin.induct)
-  using case_bau apply blast
-  using case_quiesce apply blast
-  using case_timesup by blast
+  using assms Suc_eq_plus1 bau
+  by (induction arbitrary: res2 rule:b_simulate_fin.induct)(blast)+
 
-inductive b_simulate :: "nat \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal trans_raw \<Rightarrow> 'signal trans_raw \<Rightarrow> bool"
+inductive b_simulate :: "nat \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal trans_raw \<Rightarrow> nat \<times> 'signal state \<times> 'signal trans_raw  \<times> 'signal trans_raw \<Rightarrow> bool"
   where
   "     init' 0 def_state {} 0 cs \<tau> = \<tau>'
    \<Longrightarrow>  next_time  0 \<tau>' = t'
@@ -3675,14 +3801,14 @@ inductive b_simulate_fin_ss :: "nat \<Rightarrow> 'signal conc_stmt \<Rightarrow
   where
    \<comment> \<open>Time is up\<close>
  "  \<not>  t \<le> maxnat
-   \<Longrightarrow> b_simulate_fin_ss maxnat cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxnat + 1, \<sigma>, \<gamma>, \<theta>)"
+   \<Longrightarrow> b_simulate_fin_ss maxnat cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, t, \<sigma>, \<gamma>, \<theta>)"
 
-   \<comment> \<open>The simulation has quiesced and there is still nat\<close>
+   \<comment> \<open>The simulation has quiesced and there is still time\<close>
 | "    t \<le> maxnat
    \<Longrightarrow> quiet \<tau> \<gamma>
    \<Longrightarrow> b_simulate_fin_ss maxnat cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>, maxnat + 1, \<sigma>, \<gamma>, \<theta>(t:= Some o \<sigma>))"
 
-   \<comment> \<open>Business as usual: not quiesced yet and there is still nat\<close>
+   \<comment> \<open>Business as usual: not quiesced yet and there is still time\<close>
 | "    t \<le> maxnat
    \<Longrightarrow> \<not> quiet \<tau> \<gamma>
    \<Longrightarrow> t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'
@@ -3738,7 +3864,7 @@ lemma b_simulate_fin_ss_preserve_hist:
   shows   "\<And>n. (min (maxtime+1) t') \<le> n \<Longrightarrow>  \<theta>' n = 0"
 proof (rule sim_ss_ic[OF assms(1)])
   fix n
-  assume "min (maxtime+1) t' \<le> n" and " t' = Suc maxtime " and "\<not> t \<le> maxtime" and "\<theta>' = \<theta>"
+  assume "min (maxtime+1) t' \<le> n" and " t' = t " and "\<not> t \<le> maxtime" and "\<theta>' = \<theta>"
   thus "  \<theta>' n = 0"
     using assms(2) by auto
 next
@@ -3819,9 +3945,9 @@ lemma small_step_preserve_trans_removal:
   shows   "\<And>n. n < t' \<Longrightarrow>  \<tau>' n = 0"
 proof (rule sim_ss_ic[OF assms(1)])
   fix n
-  assume "t' = Suc maxtime"
+  assume "t' = t"
   assume "\<not> t \<le> maxtime" hence "maxtime < t" by auto
-  hence "t' \<le> t" using `t' = Suc maxtime` by auto
+  hence "t' \<le> t" using `t' = t` by auto
   assume "n < t'" and "\<tau>' = \<tau>"
   hence "n < t" using `t' \<le> t` by auto
   thus " \<tau>' n = 0"
@@ -3854,7 +3980,6 @@ next
     using `n < t'` unfolding \<tau>'_def  by (simp add: rem_curr_trans_preserve_trans_removal)
 qed
 
-
 lemma ss_big_continue:
   assumes "b_simulate_fin_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', t', \<sigma>', \<gamma>', \<theta>')"
   assumes "b_simulate_fin maxtime t' \<sigma>' \<gamma>' \<theta>' cs \<tau>' res"
@@ -3866,26 +3991,33 @@ proof (rule sim_ss_ic[OF assms(1)])
   assume **: "\<theta>' = \<theta>"
   hence *: " \<theta>' (Suc maxtime) = 0"
     using assms(3) by auto
-  assume t'suc: "t' = Suc maxtime"
-  have "res = \<theta>' "
-    using case_timesup[OF _ assms(2)] t'suc by auto
+  assume t'suc: "t' = t"
+  assume " \<tau>' = \<tau>"
+  assume "\<sigma>' = \<sigma>"
+  have "res = (t', \<sigma>', \<theta>', \<tau>')"
+    using case_timesup[OF _ assms(2)] t'suc 
+    using \<open>\<not> t \<le> maxtime\<close> assms(2) bau by blast
   with `\<not> t \<le> maxtime` show "maxtime, t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<leadsto> res"
-    by (simp add: "**" b_simulate_fin.intros(3))
+    using b_simulate_fin.intros(3)[OF \<open>\<not> t \<le> maxtime\<close>, of "\<sigma>" "\<gamma>" "\<theta>" "cs" "\<tau>"]
+    ** \<open>\<tau>' = \<tau>\<close> \<open>\<sigma>' = \<sigma>\<close>  by (simp add: t'suc) 
 next
   \<comment> \<open>from small step\<close>
   assume t'suc: "t' = Suc maxtime"
   assume "t \<le> maxtime"
   assume "(quiet \<tau> \<gamma>)"
+  assume " \<sigma>' = \<sigma>"
   assume **: "\<theta>' = \<theta>(t:= (Some \<circ> \<sigma>))"
   hence *: " \<theta>' (Suc maxtime) = 0"
     using assms(1) assms(3) t'suc \<open>t \<le> maxtime\<close> by auto
 
   \<comment> \<open>from big step\<close>
-  have "res = \<theta>'"
-    using t'suc case_timesup[OF _ assms(2)] t'suc by auto
-  hence "\<theta>(t:=(Some o \<sigma>)) = res" by (simp add: "**")
+  have "res = (t', \<sigma>', \<theta>', \<tau>')"
+    using t'suc case_timesup[OF _ assms(2)] t'suc  by (metis Suc_n_not_le_n assms(2) bau)
+  hence "\<theta>(t:=(Some o \<sigma>)) = get_beh res" by (simp add: "**")
   with `t \<le> maxtime` show "maxtime, t , \<sigma> , \<gamma> , \<theta> \<turnstile> <cs , \<tau>> \<leadsto> res"
-    using `quiet \<tau> \<gamma>` by (auto intro: b_simulate_fin.intros)
+    using b_simulate_fin.intros(2)[OF \<open>t \<le> maxtime\<close> `quiet \<tau> \<gamma>`, of "\<sigma>" "\<theta>" "cs"]
+    \<open> \<sigma>' = \<sigma>\<close> \<open>res = (t', \<sigma>', \<theta>', \<tau>')\<close> `quiet \<tau> \<gamma>` unfolding quiet_def
+    by (smt Suc_eq_plus1 \<open>quiet \<tau> \<gamma>\<close> assms(1) sim_ss_ic)
 next
   assume asm1: "t \<le> maxtime"
   assume asm2: "\<not> quiet \<tau> \<gamma>"
@@ -3905,19 +4037,17 @@ next
 qed
 
 theorem small_step_implies_big_step:
-  assumes "simulate_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')"
+  assumes "simulate_ss maxtime cs (\<tau>, t, \<sigma>, \<gamma>, \<theta>) (\<tau>', t', \<sigma>', \<gamma>', \<theta>')"
   assumes "\<forall>n. (min (maxtime+1) t) \<le> n \<longrightarrow>  \<theta> n = 0"
   assumes "\<forall>n. n < t \<longrightarrow> \<tau> n = 0"
-  shows "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> (\<theta>'(maxtime + 1:= 0))"
+  assumes "maxtime < t'"
+  shows "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> cs \<tau> (t', \<sigma>', \<theta>', \<tau>')"
   using assms
-proof (induction "(\<tau>, t, \<sigma>, \<gamma>, \<theta>)" "(\<tau>', maxtime + 1, \<sigma>', \<gamma>', \<theta>')" arbitrary: \<tau> t \<sigma> \<gamma> \<theta>
+proof (induction "(\<tau>, t, \<sigma>, \<gamma>, \<theta>)" "(\<tau>', t', \<sigma>', \<gamma>', \<theta>')" arbitrary: \<tau> t \<sigma> \<gamma> \<theta>
                                                                                   rule: star.induct)
   case refl
-  hence " \<theta>'(maxtime + 1:= 0)= \<theta>'"
-     unfolding override_on_def by auto
   then show ?case
-    using b_simulate_fin.intros(3)[of "maxtime + 1" "maxtime" "\<sigma>'" "\<gamma>'" "\<theta>'(maxtime+1 := 0)" "cs" "\<tau>'"]
-    by auto
+    using b_simulate_fin.intros(3)[of "t'" "maxtime" "\<sigma>'" "\<gamma>'" "\<theta>'" "cs" "\<tau>'"] by auto
 next
   case (step y)
   obtain \<tau>'' t'' \<sigma>'' \<gamma>'' \<theta>'' where y_def: "y = (\<tau>'', t'', \<sigma>'', \<gamma>'', \<theta>'')"
@@ -3929,7 +4059,8 @@ next
   have ***: "\<forall>n<t''.  \<tau>'' n = 0"
     using "*" small_step_preserve_trans_removal step.prems(2) by blast
   show ?case
-    using ss_big_continue[OF * step(3)[OF y_def ** ***] step(4)] by auto
+    using ss_big_continue[OF * step(3)[OF y_def ** ***] step(4)] 
+    \<open>maxtime < t'\<close> by auto
 qed
 
 end
