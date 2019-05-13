@@ -41,7 +41,29 @@ Comp2: "\<lbrakk> \<turnstile> [P] s1 [Q]; \<turnstile> [Q] s2 [R]\<rbrakk> \<Lo
 If2: "\<lbrakk>\<turnstile> [\<lambda>tw. P tw \<and> beval_world_raw2 tw g] s1 [Q]; \<turnstile> [\<lambda>tw. P tw \<and> \<not> beval_world_raw2 tw g] s2 [Q]\<rbrakk>
         \<Longrightarrow>  \<turnstile> [P] Bguarded g s1 s2 [Q]" |
 
-Conseq2: "\<lbrakk>\<forall>w. P' w \<longrightarrow> P w; \<turnstile> [P] s [Q]; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<turnstile> [P'] s [Q']"
+Conseq2: "\<lbrakk>\<forall>tw. P' tw \<longrightarrow> P tw; \<turnstile> [P] s [Q]; \<forall>tw. Q tw \<longrightarrow> Q' tw\<rbrakk> \<Longrightarrow> \<turnstile> [P'] s [Q']" | 
+
+Conj: "\<turnstile> [P] s [Q1] \<Longrightarrow> \<turnstile> [P] s [Q2] \<Longrightarrow> \<turnstile> [P] s [\<lambda>tw. Q1 tw \<and> Q2 tw]"
+
+text \<open>Derived rules\<close>
+
+lemma strengthen_precondition:
+  "\<turnstile> [P] ss [Q] \<Longrightarrow> \<turnstile> [\<lambda>tw. P tw \<and> P' tw] ss [Q]"
+  by (rule Conseq2[where Q="Q" and P="P"]) auto
+
+lemma compositional_conj:
+  assumes "\<turnstile> [P1] ss [Q1]" and "\<turnstile> [P2] ss [Q2]"
+  shows "\<turnstile> [\<lambda>tw. P1 tw \<and> P2 tw] ss [\<lambda>tw. Q1 tw \<and> Q2 tw]"
+  apply(rule Conj)
+   apply(rule Conseq2[where P="P1" and Q="Q1"])
+     apply simp
+    apply(rule assms(1))
+   apply simp
+  apply(rule Conseq2[where P="P2" and Q="Q2"])
+    apply simp
+   apply (rule assms(2))
+  apply simp
+  done
 
 inductive_cases seq_hoare2_ic: "\<turnstile> [P] s [Q]"
 
@@ -74,14 +96,30 @@ lemma Bassign_inertE_hoare2:
 proof (induction rule: seq_hoare2.induct)
   case (Conseq2 P' P s Q Q')
   then show ?case by blast
-qed auto
+qed auto 
 
 lemma BcompE_hoare2:
   assumes "\<turnstile> [P] s [R]"
   assumes "s = Bcomp s1 s2"
   shows "\<exists>Q. \<turnstile> [P] s1 [Q] \<and> \<turnstile> [Q] s2 [R]"
-  using assms Conseq2
-  by (induction rule:seq_hoare2.induct, auto) (blast)
+  using assms
+proof (induction rule:seq_hoare2.induct)
+  case (Conseq2 P' P s Q Q')
+  then show ?case 
+    using seq_hoare2.Conseq2 by blast
+next
+  case (Conj P s Q1 Q2)
+  then obtain Q1' Q2' where " \<turnstile> [P] s1 [Q1']" and "\<turnstile> [Q1'] s2 [Q1]" and " \<turnstile> [P] s1 [Q2']" and "\<turnstile> [Q2'] s2 [Q2]"
+    by auto
+  hence "\<turnstile> [P] s1 [\<lambda>tw. Q1' tw \<and> Q2' tw]"
+    using seq_hoare2.Conj by auto
+  moreover have "\<turnstile> [\<lambda>tw. Q1' tw \<and> Q2' tw] s2 [\<lambda>tw. Q1 tw \<and> Q2 tw]"
+    by (simp add: compositional_conj \<open>\<turnstile> [Q1'] s2 [Q1]\<close> \<open>\<turnstile> [Q2'] s2 [Q2]\<close>)
+  ultimately have "\<turnstile> [P] s1 [\<lambda>tw. Q1' tw \<and> Q2' tw] \<and> \<turnstile> [\<lambda>tw. Q1' tw \<and> Q2' tw] s2 [\<lambda>tw. Q1 tw \<and> Q2 tw]"
+    by auto
+  then show ?case 
+    by (auto)
+qed (auto simp add: Conseq2)
 
 lemmas [simp] = seq_hoare2.Null2 seq_hoare2.Assign2 seq_hoare2.Comp2 seq_hoare2.If2
 lemmas [intro!] = seq_hoare2.Null2 seq_hoare2.Assign2 seq_hoare2.Comp2 seq_hoare2.If2
@@ -2580,6 +2618,9 @@ proof (induction rule:seq_hoare2.induct)
 next
   case (Conseq2 P' P s Q Q')
   then show ?case by (metis seq_hoare_valid2_def)
+next
+  case (Conj P s Q1 Q2)
+  then show ?case by (simp add: seq_hoare_valid2_def)
 qed (auto simp add: Bnull_sound_hoare2 Bassign_trans_sound_hoare2 Bcomp_hoare_valid' Bguarded_hoare_valid2)
 
 lemma  world_seq_exec_bnull:
@@ -2721,6 +2762,61 @@ subsection \<open>A sound and complete Hoare logic for VHDL's concurrent stateme
 
 definition event_of :: "nat \<times> 'signal worldline  \<Rightarrow> 'signal event" where
   "event_of tw = (fst o snd o snd) (destruct_worldline tw)"
+
+lemma event_of_alt_def1:
+  "0 < fst tw \<Longrightarrow> event_of tw = {s. snd tw s (fst tw) \<noteq> snd tw s (fst tw - 1)}"
+proof-
+  assume "0 < fst tw"
+  obtain t \<sigma> \<gamma> \<theta> \<tau> where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)"
+    using prod_cases5 by blast
+  hence "event_of tw = \<gamma>"
+    unfolding event_of_def by auto
+  also have "... = {s. \<sigma> s \<noteq> signal_of False \<theta> s (t - 1)}"
+    using \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)\<close> unfolding destruct_worldline_def Let_def 
+    by auto
+  finally have "event_of tw = {s. \<sigma> s \<noteq> signal_of False \<theta> s (t - 1)}"
+    by auto
+  have "\<And>s. \<sigma> s = snd tw s (fst tw)"
+    using des unfolding destruct_worldline_def Let_def by auto
+  have \<theta>_def: "\<theta> = derivative_hist_raw (snd tw) (get_time tw)" and t_def: "t = fst tw"
+    using des unfolding destruct_worldline_def Let_def by auto
+  have "\<And>s. signal_of False \<theta> s (t - 1) = snd tw s (fst tw - 1)"
+    using \<open>0 < fst tw\<close> unfolding \<theta>_def t_def by (intro  signal_of_derivative_hist_raw) simp
+  thus ?thesis
+    using \<open>\<And>s. \<sigma> s = snd tw s (get_time tw)\<close> \<open>event_of tw = {s. \<sigma> s \<noteq> signal_of False \<theta> s (t - 1)}\<close>
+    by auto
+qed
+
+lemma event_of_alt_def2:
+  "fst tw = 0 \<Longrightarrow> event_of tw = {s. snd tw s (fst tw) \<noteq> False}"
+proof -
+  assume "fst tw = 0"
+  obtain t \<sigma> \<gamma> \<theta> \<tau> where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)"
+    using prod_cases5 by blast
+  hence "event_of tw = \<gamma>"
+    unfolding event_of_def by auto
+  also have "... = {s. \<sigma> s \<noteq> signal_of False \<theta> s (t - 1)}"
+    using \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, \<tau>)\<close> unfolding destruct_worldline_def Let_def 
+    by auto
+  finally have "event_of tw = {s. \<sigma> s \<noteq> signal_of False \<theta> s (t - 1)}"
+    by auto
+  have "\<And>s. \<sigma> s = snd tw s (fst tw)"
+    using des unfolding destruct_worldline_def Let_def by auto
+  have \<theta>_def: "\<theta> = derivative_hist_raw (snd tw) (get_time tw)" and t_def: "t = fst tw"
+    using des unfolding destruct_worldline_def Let_def by auto
+  have "\<And>s. signal_of False \<theta> s (t - 1) = False"
+    using \<open>fst tw = 0\<close> unfolding \<theta>_def t_def 
+    by (metis derivative_hist_raw_def diff_0_eq_0 le_numeral_extra(3) signal_of_zero zero_option_def)
+  thus ?thesis
+    using \<open>\<And>s. \<sigma> s = snd tw s (get_time tw)\<close> \<open>event_of tw = {s. \<sigma> s \<noteq> signal_of False \<theta> s (t - 1)}\<close> 
+    by auto
+qed
+
+lemma event_of_alt_def:
+  "event_of tw = (if fst tw = 0 then {s. snd tw s (fst tw) \<noteq> False} else 
+                                     {s. snd tw s (fst tw) \<noteq> snd tw s (fst tw - 1)})"
+  using event_of_alt_def1 event_of_alt_def2 
+  by (metis (mono_tags, lifting) gr0I)
 
 inductive
   conc_hoare :: "'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"
@@ -4109,6 +4205,80 @@ proof -
     by auto
 qed
 
+lemma next_time_world_at_least:
+  "fst tw < next_time_world tw"
+proof -
+  have "\<exists>n\<ge>get_time tw. (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n) \<or> 
+       \<not> (\<exists>n\<ge>get_time tw. (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n))"
+    by auto
+  moreover
+  { assume "\<not> (\<exists>n\<ge>get_time tw. (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n))"
+    hence "next_time_world tw = get_time tw + 1"
+      unfolding next_time_world_alt_def Let_def by auto
+    hence "fst tw < next_time_world tw"
+      by auto }
+  moreover
+  { assume *: "\<exists>n\<ge>get_time tw. (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n)"
+    hence "next_time_world tw = (LEAST n. get_time tw \<le> n \<and> (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n))"
+      unfolding next_time_world_alt_def Let_def by auto
+    hence "get_time tw < next_time_world tw"
+      using LeastI_ex[OF *] by auto
+    hence "fst tw < next_time_world tw"
+      by auto }
+  ultimately show ?thesis by auto
+qed
+
+lemma unchanged_until_next_time_world:
+  "\<forall>i\<ge>fst tw. i < next_time_world tw \<longrightarrow> (\<forall>s. snd tw s i = snd tw s (fst tw))"
+proof (rule allI, rule impI, rule impI)
+  fix i 
+  assume "fst tw \<le> i"
+  assume "i < next_time_world tw"
+  have "   \<exists>n\<ge>get_time tw. (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n) \<or> 
+        \<not> (\<exists>n\<ge>get_time tw. (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n))"
+    by auto
+  moreover
+  { assume "\<exists>n\<ge>get_time tw. (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n)"
+    hence "next_time_world tw = (LEAST n. get_time tw \<le> n \<and> (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n))"
+      unfolding next_time_world_alt_def Let_def by auto
+    hence "i < (LEAST n. fst tw  \<le> n \<and> (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n))"
+      using \<open>i < next_time_world tw\<close> by auto
+    hence "\<not> (get_time tw \<le> i \<and> (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s i))"
+      using not_less_Least by auto
+    with \<open>fst tw \<le> i\<close> have "\<forall>s. snd tw s i = snd tw s (fst tw)"
+      by meson }
+  moreover 
+  { assume "\<not> (\<exists>n\<ge>get_time tw. (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n))"
+    hence "\<forall>n\<ge>fst tw. \<forall>s. snd tw s n = snd tw s (fst tw)"
+      by meson
+    hence "\<forall>s. snd tw s i = snd tw s (fst tw)"
+      using \<open>fst tw \<le> i\<close>  by blast }
+  ultimately show "\<forall>s. snd tw s i = snd tw s (fst tw)"
+    by auto
+qed
+
+lemma successive_empty_event:
+  assumes "event_of tw = {}" and "event_of (next_time_world tw, snd tw) = {}"
+  shows "next_time_world tw = fst tw + 1"
+proof (rule ccontr)
+  assume "next_time_world tw \<noteq> fst tw + 1"
+  hence "fst tw + 1 < next_time_world tw"
+    using next_time_world_at_least by (metis discrete less_le)
+  hence *: "\<exists>n\<ge>fst tw. (\<lambda>s. snd tw s (fst tw)) \<noteq> (\<lambda>s. snd tw s n)" and 
+        "next_time_world tw = (LEAST n. get_time tw \<le> n \<and> (\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s n))"
+    unfolding next_time_world_alt_def Let_def  by presburger+
+  hence "(\<lambda>s. snd tw s (get_time tw)) \<noteq> (\<lambda>s. snd tw s (next_time_world tw))"
+    using LeastI_ex[OF *]  by simp
+  hence **: "\<exists>s. snd tw s (next_time_world tw) \<noteq> snd tw s (fst tw)"
+    by auto
+  have "\<And>s. snd tw s (next_time_world tw) = snd tw s (next_time_world tw - 1)"
+    using assms(2) unfolding event_of_alt_def 
+    by (smt diff_0_eq_0 empty_Collect_eq fst_conv snd_conv)
+  thus False
+    by (metis ** \<open>get_time tw + 1 < next_time_world tw\<close> diff_Suc_1 le_less lessI less_diff_conv 
+        less_imp_Suc_add unchanged_until_next_time_world)
+qed
+
 inductive
   conc_sim :: "'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"
   ("\<turnstile>\<^sub>s (\<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>)" 50)
@@ -5356,5 +5526,9 @@ next
   case (Conseq_sim P' P cs Q Q')
   then show ?case by (metis (full_types) sim_hoare_valid_def)
 qed
+
+subsection \<open>Initialisation\<close>
+
+
 
 end
