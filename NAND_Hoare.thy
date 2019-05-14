@@ -93,10 +93,26 @@ proof -
     unfolding nand_inv_def by auto 
 qed
 
+lemma nand_inv_next_time0:
+  assumes "fst tw = 0"
+  defines "tw' \<equiv> tw[C, 1 :=\<^sub>2 beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))]"
+  shows   "nand_inv (next_time_world tw', snd tw')"
+proof -
+  have "nand_inv tw"
+    using assms(1) unfolding nand_inv_def by auto
+  from nand_inv_next_time[OF this] show ?thesis
+    unfolding tw'_def by auto
+qed
+
 lemma nand_seq_hoare_next_time:
   "\<turnstile> [nand_inv] (Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1) [\<lambda>tw. nand_inv (next_time_world tw, snd tw)]"
   apply (rule Conseq2[where Q="\<lambda>tw. nand_inv (next_time_world tw, snd tw)", rotated 1], rule Assign2)
   using nand_inv_next_time by auto
+
+lemma nand_seq_hoare_next_time0:
+  " \<turnstile> [\<lambda>tw. get_time tw = 0] Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 [\<lambda>tw. nand_inv (next_time_world tw, snd tw)]"
+  apply (rule Conseq2[where Q="\<lambda>tw. nand_inv (next_time_world tw, snd tw)", rotated 1], rule Assign2)
+  using nand_inv_next_time0 by auto
 
 lemma nand_inv2_next_time:
   fixes tw
@@ -517,5 +533,71 @@ lemma nand_conc_sim2:
   by (rule Conseq_sim[where Q="\<lambda>tw. nand_inv tw \<and> nand_inv2 tw \<and> nand_inv3 tw" and 
                             P="\<lambda>tw. nand_inv tw \<and> nand_inv2 tw \<and> nand_inv3 tw"])
      (simp_all add: nand_conc_sim)
+
+text \<open>Initialisation preserves the invariant\<close>
+
+lemma init_sat_nand_inv:
+  "init_sim_hoare (\<lambda>tw. fst tw = 0) nand3 nand_inv"
+  unfolding nand3_def
+  apply (rule AssignI)
+  apply (rule SingleI)
+  apply (rule nand_seq_hoare_next_time0)
+  done
+
+lemma init_sat_nand_inv2:
+  "init_sim_hoare (\<lambda>tw. True) nand3 nand_inv2"
+  unfolding nand3_def
+  apply (rule AssignI)
+  apply (rule SingleI)
+  apply (rule nand_seq_hoare_next_time2)
+  done
+
+lemma init_sat_nand_inv3:
+  "init_sim_hoare (\<lambda>tw. True) nand3 nand_inv3"
+  unfolding nand3_def
+  apply (rule AssignI)
+  apply (rule SingleI)
+  apply (rule nand_seq_hoare_next_time3)
+  done
+
+lemma init_sat_nand_inv_comb:
+  "init_sim_hoare (\<lambda>tw. fst tw = 0) nand3 (\<lambda>tw. nand_inv tw \<and> nand_inv2 tw \<and> nand_inv3 tw)"
+  apply (rule ConjI_sim)
+  apply (rule init_sat_nand_inv)
+  apply (rule ConjI_sim)
+  apply (rule ConseqI_sim[where P="\<lambda>tw. True" and Q="nand_inv2"])
+  apply (simp, rule init_sat_nand_inv2, simp)
+  apply (rule ConseqI_sim[where P="\<lambda>tw. True" and Q="nand_inv3"])
+  apply (simp, rule init_sat_nand_inv3, simp)
+  done
+
+lemma nand_correctness:
+  assumes "sim_fin w (i + 1) nand3 tw'"
+  shows "snd tw' C (i + 1) \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
+proof -
+  obtain tw where "init_sim (0, w) nand3 = tw" and  "tw, i + 1, nand3 \<Rightarrow>\<^sub>S tw'" 
+    using premises_sim_fin_obt[OF assms] by auto
+  hence "i + 1 < fst tw'"
+    using world_maxtime_lt_fst_tres  by blast
+  have "conc_stmt_wf nand3"
+    unfolding conc_stmt_wf_def nand3_def by auto
+  moreover have "nonneg_delay_conc nand3"
+    unfolding nand3_def by auto
+  ultimately have "init_sim_valid (\<lambda>tw. fst tw = 0) nand3 (\<lambda>tw. nand_inv tw \<and> nand_inv2 tw \<and> nand_inv3 tw)"
+    using init_sim_hoare_soundness[OF init_sat_nand_inv_comb] by auto
+  hence "nand_inv tw" and "nand_inv2 tw" and "nand_inv3 tw"
+    using \<open>init_sim (0, w) nand3 = tw\<close> fst_conv unfolding init_sim_valid_def 
+    by fastforce+ 
+  moreover have "\<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. nand_inv tw \<and> nand_inv2 tw \<and> nand_inv3 tw\<rbrace> nand3 \<lbrace>nand_inv\<rbrace>"
+    using conc_sim_soundness[OF nand_conc_sim2] \<open>conc_stmt_wf nand3\<close> \<open>nonneg_delay_conc nand3\<close>
+    by auto
+  ultimately have "nand_inv tw'"
+    using \<open>tw, i + 1, nand3 \<Rightarrow>\<^sub>S tw'\<close> unfolding sim_hoare_valid_def by blast
+  hence "\<forall>i < fst tw'. snd tw' C (i + 1) \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
+    unfolding nand_inv_def by auto
+  with \<open>i + 1 < fst tw'\<close> show ?thesis
+    by auto
+qed
+
                 
 end

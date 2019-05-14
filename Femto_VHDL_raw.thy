@@ -1479,9 +1479,20 @@ lemma trans_post_preserve_trans_removal:
   shows "\<And>n. n < t \<Longrightarrow> (trans_post_raw sig x def \<tau> t dly) n = 0"
   using assms  by (auto simp add: preempt_raw_def trans_post_raw_def post_raw_def)
 
+lemma trans_post_preserve_trans_removal_nonstrict:
+  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
+  assumes "0 < dly"
+  shows "\<And>n. n \<le> t \<Longrightarrow> (trans_post_raw sig x def \<tau> t dly) n = 0"
+  using assms  by (auto simp add: preempt_raw_def trans_post_raw_def post_raw_def)
+
 lemma purge_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
   shows "\<And>n. n < t \<Longrightarrow> (purge_raw \<tau> t dly sig) n = 0"
+  using assms by (auto simp add: purge_raw_def)
+
+lemma purge_preserve_trans_removal_nonstrict:
+  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
+  shows "\<And>n. n \<le> t \<Longrightarrow> (purge_raw \<tau> t dly sig) n = 0"
   using assms by (auto simp add: purge_raw_def)
 
 lemma inr_post_preserve_trans_removal:
@@ -1490,11 +1501,12 @@ lemma inr_post_preserve_trans_removal:
   using assms  unfolding inr_post_raw_def 
   by (auto simp add: trans_post_preserve_trans_removal purge_preserve_trans_removal)
 
-lemma inr_post_preserve_trans_removal':
-  assumes "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
-  shows "\<And>n. n < t \<Longrightarrow> (inr_post_raw sig x c \<tau> t dly) n = 0"
-  using assms  unfolding inr_post_raw_def
-  by (auto simp add: trans_post_preserve_trans_removal purge_preserve_trans_removal)
+lemma inr_post_preserve_trans_removal_nonstrict:
+  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
+  assumes "0 < dly"
+  shows "\<And>n. n \<le> t \<Longrightarrow> (inr_post_raw sig x (\<sigma> sig) \<tau> t dly) n = 0"
+  using assms  unfolding inr_post_raw_def 
+  by (auto simp add: trans_post_preserve_trans_removal_nonstrict purge_preserve_trans_removal_nonstrict)
 
 lemma signal_of_inr_post2:
   assumes "now \<le> t" and "t < now + dly"
@@ -1513,7 +1525,7 @@ next
   have *: "\<And>n. n < now \<Longrightarrow>  \<tau> n = 0"
     using assms(3) by auto
   have **: "\<And>n. n < now \<Longrightarrow>  (inr_post_raw s v (\<sigma> s) \<tau> now dly) n = 0"
-    using inr_post_preserve_trans_removal'[OF *] by auto
+    by (simp add: "*" inr_post_preserve_trans_removal)
   have "now \<le> t'"
   proof (rule ccontr)
     assume "\<not> now \<le> t'" hence "t' < now" by auto
@@ -1542,6 +1554,14 @@ lemma b_seq_exec_preserve_trans_removal:
   using assms
   by (induction ss arbitrary: \<tau>)
      (auto simp add: trans_post_preserve_trans_removal inr_post_preserve_trans_removal)
+
+lemma b_seq_exec_preserve_trans_removal_nonstrict:
+  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
+  assumes "nonneg_delay ss"
+  shows "\<And>n. n \<le> t \<Longrightarrow> (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>) n = 0"
+  using assms
+  by (induction ss arbitrary: \<tau>)
+     (auto simp add: trans_post_preserve_trans_removal_nonstrict inr_post_preserve_trans_removal_nonstrict)
 
 lemma b_seq_exec_modifies_local:
   assumes "b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau> = \<tau>'"
@@ -2069,6 +2089,13 @@ lemma clean_zip_raw_preserve_trans_removal:
   shows "\<And>n. n < t \<Longrightarrow> (clean_zip_raw \<tau> (\<tau>1,s1) (\<tau>2,s2)) n = 0"
   using assms  unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
 
+lemma clean_zip_raw_preserve_trans_removal_nonstrict:
+  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau>  n = 0"
+  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau>1 n = 0"
+  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau>2 n = 0"
+  shows "\<And>n. n \<le> t \<Longrightarrow> (clean_zip_raw \<tau> (\<tau>1,s1) (\<tau>2,s2)) n = 0"
+  using assms  unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+
 lemma b_conc_exec_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
   shows   "\<And>n. n < t \<Longrightarrow>  (b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau>) n = 0"
@@ -2087,6 +2114,26 @@ next
   then show ?case by (auto simp add: b_seq_exec_preserve_trans_removal)
 qed
 
+lemma init'_preserves_trans_removal:
+  assumes "\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0"
+  assumes "nonneg_delay_conc cs"
+  shows   "\<And>n. n \<le> t \<Longrightarrow>  (init' t \<sigma> \<gamma> \<theta> cs \<tau>) n = 0"
+  using assms
+proof (induction cs arbitrary: \<tau>)
+  case (Bpar cs1 cs2)
+  let ?\<tau>1 = "init' t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+  let ?\<tau>2 = "init' t \<sigma> \<gamma> \<theta> cs2 \<tau>"
+  have "init' t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip_raw \<tau> (?\<tau>1, set (signals_from cs1)) (?\<tau>2, set (signals_from cs2))"
+    by auto
+  have "\<And>n. n \<le> t \<Longrightarrow>  (clean_zip_raw \<tau> (?\<tau>1, set (signals_from cs1)) (?\<tau>2, set (signals_from cs2))) n = 0"
+    using clean_zip_raw_preserve_trans_removal_nonstrict[OF Bpar(4)] Bpar by auto
+  then show ?case  using Bpar(3) by auto
+next
+  case (Bsingle x1 x2)
+  then show ?case 
+    by (auto simp add: b_seq_exec_preserve_trans_removal_nonstrict)
+qed
+
 lemma  rem_curr_trans_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
   shows "\<And>n. n < t \<Longrightarrow>  (\<tau>(t:=0)) n = 0"
@@ -2101,7 +2148,6 @@ lemma b_conc_exec_rem_curr_trans_preserve_trans_removal:
 lemma b_conc_exec_modifies_local:
   assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
   shows "\<And>i s. s \<notin> set (signals_from cs) \<Longrightarrow> i \<ge> t \<Longrightarrow>  \<tau> i s =  \<tau>' i s"
-  using assms
   using assms
 proof (induction cs arbitrary: \<tau> \<tau>')
   case (Bpar cs1 cs2)
@@ -2135,6 +2181,35 @@ next
     hence ?case
       using b_seq_exec_modifies_local[OF _ `s \<notin> set (signals_in x2)` `t \<le> i`] by metis }
   ultimately show ?case by auto
+qed
+
+lemma init'_modifies_local:
+  assumes "init' t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
+  shows "\<And>i s. s \<notin> set (signals_from cs) \<Longrightarrow> i \<ge> t \<Longrightarrow>  \<tau> i s =  \<tau>' i s"
+  using assms
+proof (induction cs arbitrary: \<tau> \<tau>')
+  case (Bpar cs1 cs2)
+  hence "s \<notin> set (signals_from cs1)" and "s \<notin> set (signals_from cs2)"
+    by auto
+  obtain \<tau>1 \<tau>2 where "init' t \<sigma> \<gamma> \<theta> cs1 \<tau> = \<tau>1" and \<tau>2_def: "init' t \<sigma> \<gamma> \<theta> cs2 \<tau> = \<tau>2"
+    and \<tau>'_def: "\<tau>' = clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
+    using Bpar(5) by auto
+  hence " \<tau> i s =  \<tau>1 i s"
+    using Bpar `s \<notin> set (signals_from cs1)` by blast
+  moreover have " \<tau> i s =  \<tau>2 i s"
+    using \<tau>2_def `s \<notin> set (signals_from cs2)` Bpar(2) `i \<ge> t` by blast
+  ultimately have " \<tau> i s =  (clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))) i s"
+    by (transfer', simp add: clean_zip_raw_def)
+  then show ?case
+    by (auto simp add: \<tau>'_def)
+next
+  case (Bsingle x1 x2)
+  hence "s \<notin> set (signals_in x2)"
+    by auto
+  hence \<tau>'_def: "\<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> x2 \<tau>"
+    using Bsingle by auto
+  thus ?case
+    using b_seq_exec_modifies_local[OF _ `s \<notin> set (signals_in x2)` `t \<le> i`] by metis
 qed
 
 lemma b_conc_exec_modifies_local_before_now:
@@ -2175,6 +2250,36 @@ next
   ultimately show ?case by auto
 qed
 
+lemma init'_modifies_local_before_now:
+  assumes "init' t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
+  shows "\<And>i s. s \<notin> set (signals_from cs) \<Longrightarrow> i < t \<Longrightarrow>  \<tau> i s =  \<tau>' i s"
+  using assms
+proof (induction cs arbitrary: \<tau> \<tau>')
+  case (Bpar cs1 cs2)
+  hence "s \<notin> set (signals_from cs1)" and "s \<notin> set (signals_from cs2)"
+    by auto
+  obtain \<tau>1 \<tau>2 where "init' t \<sigma> \<gamma> \<theta> cs1 \<tau> = \<tau>1" and \<tau>2_def: "init' t \<sigma> \<gamma> \<theta> cs2 \<tau> = \<tau>2"
+    and \<tau>'_def: "\<tau>' = clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
+    using Bpar(5) by auto
+  hence " \<tau> i s =  \<tau>1 i s"
+    using Bpar `s \<notin> set (signals_from cs1)` by blast
+  moreover have " \<tau> i s =  \<tau>2 i s"
+    using \<tau>2_def `s \<notin> set (signals_from cs2)` Bpar(2) `i < t` by blast
+  ultimately have " \<tau> i s =  (clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))) i s"
+    by (transfer', simp add: clean_zip_raw_def)
+  then show ?case
+    by (auto simp add: \<tau>'_def)
+next
+  case (Bsingle x1 x2)
+  hence "s \<notin> set (signals_in x2)"
+    by auto
+  hence \<tau>'_def: "\<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> x2 \<tau>"
+    using Bsingle by auto
+  thus ?case
+    using b_seq_exec_modifies_local_before_now[OF _ `s \<notin> set (signals_in x2)` `i < t`] 
+    by metis
+qed
+
 lemma b_conc_exec_modifies_local':
   assumes "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
   assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
@@ -2186,6 +2291,11 @@ lemma b_conc_exec_modifies_local_strongest:
   assumes "b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
   shows "\<And>s. s \<notin> set (signals_from cs) \<Longrightarrow>  \<tau> i s =  \<tau>' i s"
   by (metis assms b_conc_exec_modifies_local b_conc_exec_modifies_local_before_now not_le)
+
+lemma init'_modifies_local_strongest:
+  assumes "init' t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
+  shows "\<And>s. s \<notin> set (signals_from cs) \<Longrightarrow>  \<tau> i s =  \<tau>' i s"
+  by (metis assms init'_modifies_local init'_modifies_local_before_now not_le)
 
 lemma b_conc_exec_empty_event:
   "b_conc_exec t \<sigma> {} \<theta> cs \<tau> = \<tau>"
@@ -2551,6 +2661,76 @@ next
   ultimately show ?case by auto
 qed
 
+lemma init'_same:
+  assumes "\<And>k s. s \<in> set (signals_from cs) \<Longrightarrow>  \<tau> k s =  \<tau>1 k s"
+  assumes "conc_stmt_wf cs"
+  shows "\<And>k s. s \<in> set (signals_from cs) \<Longrightarrow>  (init' t \<sigma> \<gamma> \<theta> cs \<tau>1) k s =  (init' t \<sigma> \<gamma> \<theta> cs \<tau>) k s"
+  using assms
+proof (induction cs)
+  case (Bpar cs1 cs2)
+  hence "conc_stmt_wf cs2" and "conc_stmt_wf cs1"
+    by (simp add: conc_stmt_wf_def)+
+  define \<tau>a where "\<tau>a = init' t \<sigma> \<gamma> \<theta> cs1 \<tau>1"
+  define \<tau>b where "\<tau>b = init' t \<sigma> \<gamma> \<theta> cs2 \<tau>1"
+
+  define \<tau>a' where "\<tau>a' = init' t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+  define \<tau>b' where "\<tau>b' = init' t \<sigma> \<gamma> \<theta> cs2 \<tau>"
+  have "\<And>k.  \<tau> k s =  \<tau>1 k s"
+    using Bpar by auto
+  have "init' t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau>1 = clean_zip_raw \<tau>1 (\<tau>a, set (signals_from cs1)) (\<tau>b, set (signals_from cs2))"
+    unfolding \<tau>a_def \<tau>b_def by auto
+  hence *: " (init' t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau>1) k s =
+          (clean_zip_raw \<tau>1 (\<tau>a, set (signals_from cs1)) (\<tau>b, set (signals_from cs2))) k s"
+    by auto
+  have "s \<in> set (signals_from cs1) \<or> s \<in> set (signals_from cs2)"
+    using Bpar by auto
+  moreover
+  { assume "s \<in> set (signals_from cs1)"
+    hence " (clean_zip_raw \<tau>1 (\<tau>a, set (signals_from cs1)) (\<tau>b, set (signals_from cs2))) k s =
+            \<tau>a k s"
+       unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+    also have "... =  \<tau>a' k s"
+      using Bpar(1)[OF `s \<in> set (signals_from cs1)`] Bpar(4) `conc_stmt_wf cs1` unfolding \<tau>a_def \<tau>a'_def by auto
+    also have "... =  (clean_zip_raw \<tau> (\<tau>a', set (signals_from cs1)) (\<tau>b', set (signals_from cs2))) k s"
+      using `s \<in> set (signals_from cs1)`
+       unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+    finally have ?case
+      using *  by (simp add: \<tau>a'_def \<tau>b'_def) }
+  moreover
+  { assume "s \<in> set (signals_from cs2)"
+    moreover hence "s \<notin> set (signals_from cs1)"
+      using ` conc_stmt_wf (cs1 || cs2)`
+      by (metis conc_stmt_wf_def disjnt_def disjnt_iff distinct_append signals_from.simps(2))
+    ultimately have " (clean_zip_raw \<tau>1 (\<tau>a, set (signals_from cs1)) (\<tau>b, set (signals_from cs2))) k s =
+            \<tau>b k s"
+       unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+    also have "... =  \<tau>b' k s"
+      using Bpar(2)[OF `s \<in> set (signals_from cs2)`] Bpar(4) `conc_stmt_wf cs2` unfolding \<tau>b_def \<tau>b'_def
+      by auto
+    also have "... =  (clean_zip_raw \<tau> (\<tau>a', set (signals_from cs1)) (\<tau>b', set (signals_from cs2))) k s"
+      using `s \<in> set (signals_from cs2)` `s \<notin> set (signals_from cs1)`
+       unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+    finally have ?case
+      using *  by (simp add: \<tau>a'_def \<tau>b'_def) }
+  ultimately show ?case
+    by auto
+next
+  case (Bsingle sl ss)
+  hence *: "\<And>k s.  s \<in> set (signals_in ss) \<Longrightarrow>  \<tau> k s =  \<tau>1 k s"
+    by auto
+  hence "init' t \<sigma> \<gamma> \<theta> (Bsingle sl ss) \<tau>1 = b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1"
+    by auto
+  hence " (init' t \<sigma> \<gamma> \<theta> (Bsingle sl ss) \<tau>1) k s =
+          (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1) k s"
+    by auto
+  also have "... =  (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>) k s"
+    using b_seq_exec_same[OF *] Bsingle by auto
+  also have "... =  (init' t \<sigma> \<gamma> \<theta> (Bsingle sl ss) \<tau>) k s"
+    by auto
+  finally show ?case
+    by auto 
+qed
+
 lemma b_conc_exec_sequential:
   assumes "conc_stmt_wf (cs1 || cs2)"
   shows "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 (b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>)"
@@ -2613,6 +2793,74 @@ proof -
       finally have " (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s =  (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
         using * by auto }
     ultimately show " (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s =  (b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
+      by auto
+  qed
+  finally show ?thesis
+    unfolding \<tau>1_def by auto
+qed
+
+lemma init'_sequential:
+  assumes "conc_stmt_wf (cs1 || cs2)"
+  shows "init' t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = init' t \<sigma> \<gamma> \<theta> cs2 (init' t \<sigma> \<gamma> \<theta> cs1 \<tau>)"
+proof -
+  have "conc_stmt_wf cs2"
+    using assms by (simp add: conc_stmt_wf_def)
+  define \<tau>1 where "\<tau>1 = init' t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+  define \<tau>2 where "\<tau>2 = init' t \<sigma> \<gamma> \<theta> cs2 \<tau>"
+  define s1 where "s1 = set (signals_from cs1)"
+  define s2 where "s2 = set (signals_from cs2)"
+  have "init' t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)"
+    unfolding \<tau>1_def \<tau>2_def s1_def s2_def by auto
+  also have "... = init' t \<sigma> \<gamma> \<theta> cs2 \<tau>1"
+  proof (rule ext, rule)
+    fix k s
+    have "s \<in> s1 \<or> s \<in> s2 \<or> s \<notin> s1 \<and> s \<notin> s2"
+      by auto
+    moreover
+    { assume "s \<in> s1"
+      hence *: " (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s =  \<tau>1 k s"
+         unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+      moreover have "s \<notin> set (signals_from cs2)"
+        using `s \<in> s1` assms(1)
+        by (metis conc_stmt_wf_def disjoint_insert(1) distinct_append mk_disjoint_insert s1_def
+            signals_from.simps(2))
+      have " (init' t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s =  \<tau>1 k s"
+        by (metis \<open>s \<notin> set (signals_from cs2)\<close> init'_modifies_local_strongest)
+      with * have "  (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s =  (init' t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
+        by auto }
+    moreover
+    { assume "s \<in> s2"
+      moreover have "s \<notin> s1" using assms(1)
+        by (metis calculation conc_stmt_wf_def disjoint_insert(1) distinct_append mk_disjoint_insert
+            s1_def s2_def signals_from.simps(2))
+      ultimately have *: " (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s =  \<tau>2 k s"
+         unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+      have "s \<in> set (signals_from cs2)" and "s \<notin> set (signals_from cs1)"
+        using `s \<in> s2` `s \<notin> s1` unfolding s2_def s1_def by auto
+      have "\<And>k s. s \<in> set (signals_from cs2) \<Longrightarrow>  \<tau> k s =  \<tau>1 k s"
+        using init'_modifies_local_strongest[OF _ `s \<notin> set (signals_from cs1)`]
+        by (metis \<tau>1_def assms init'_modifies_local_strongest conc_stmt_wf_def disjoint_insert(1)
+            distinct_append mk_disjoint_insert signals_from.simps(2))
+      hence " (init' t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s =  (init' t \<sigma> \<gamma> \<theta> cs2 \<tau>) k s"
+        using init'_same[OF _ `conc_stmt_wf cs2` `s \<in> set (signals_from cs2)`] by blast
+      also have "... =  \<tau>2 k s"
+        unfolding \<tau>2_def by auto
+      finally have " (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s =  (init' t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
+        using * by auto }
+    moreover
+    { assume "s \<notin> s1 \<and> s \<notin> s2"
+      hence *: " (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s =  \<tau> k s"
+         unfolding clean_zip_raw_def Let_def by (auto split:prod.splits)
+      have "s \<notin> set (signals_from cs2)" and "s \<notin> set (signals_from cs1)"
+        using `s \<notin> s1 \<and> s \<notin> s2` unfolding s2_def s1_def by auto
+      have " (init' t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s =  \<tau>1 k s"
+        using init'_modifies_local_strongest[OF _ ` s \<notin> set (signals_from cs2)`]  by presburger
+      also have "... =  \<tau> k s"
+        unfolding \<tau>1_def  using init'_modifies_local_strongest[OF _ ` s \<notin> set (signals_from cs1)`]
+        by presburger
+      finally have " (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s =  (init' t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
+        using * by auto }
+    ultimately show " (clean_zip_raw \<tau> (\<tau>1, s1) (\<tau>2, s2)) k s =  (init' t \<sigma> \<gamma> \<theta> cs2 \<tau>1) k s"
       by auto
   qed
   finally show ?thesis
@@ -2980,6 +3228,21 @@ inductive b_simulate_fin :: "nat \<Rightarrow> nat \<Rightarrow> 'signal  state 
   \<comment> \<open>Time is up\<close>
 | "  \<not> (t \<le> maxtime)
    \<Longrightarrow> (maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> (t, \<sigma>, \<theta>, \<tau>))"
+
+lemma maxtime_lt_fst_tres:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta> \<turnstile> <cs, \<tau>> \<leadsto> tres"
+  shows   "maxtime < fst tres"
+  using assms
+proof (induction )
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs \<tau>' res)
+  then show ?case by auto
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> cs)
+  then show ?case by auto
+next
+  case (3 t maxtime \<sigma> \<gamma> \<theta> cs \<tau>)
+  then show ?case by auto
+qed
 
 abbreviation get_time  where "get_time  \<equiv> fst"
 abbreviation get_state where "get_state \<equiv> fst o snd"
@@ -3720,6 +3983,39 @@ next
       using Bsingle by auto
     hence ?case
       using b_seq_exec_preserves_context_invariant Bsingle by fastforce }
+  ultimately show ?case by auto
+qed
+
+lemma init'_preserves_context_invariant:
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> \<tau>"
+  assumes "init' t \<sigma> \<gamma> \<theta> cs \<tau> = \<tau>'"
+  assumes "nonneg_delay_conc cs"
+  shows "context_invariant t \<sigma> \<gamma> \<theta> \<tau>'"
+  using assms
+proof (induction cs arbitrary: \<tau> \<tau>')
+  case (Bpar cs1 cs2)
+  define \<tau>1 where "\<tau>1 = init' t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+  define \<tau>2 where "\<tau>2 = init' t \<sigma> \<gamma> \<theta> cs2 \<tau>"
+  have \<tau>'_def: "\<tau>' = clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
+    using Bpar(4) unfolding \<tau>1_def \<tau>2_def  by auto
+  have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>1"
+    using Bpar(1) Bpar(3) Bpar(5)  using \<tau>1_def nonneg_delay_conc.simps(2) by blast
+  have "context_invariant t \<sigma> \<gamma> \<theta> \<tau>2"
+    using Bpar.IH(2) Bpar.prems(1) Bpar.prems(3) \<tau>2_def nonneg_delay_conc.simps(2) by blast
+  have "\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0"
+    using Bpar(3) unfolding context_invariant_def by auto
+  hence "\<And>n. n \<le> t \<Longrightarrow>  \<tau>' n = 0"
+    using init'_preserves_trans_removal Bpar(4-5)  by metis
+  then show ?case
+    using Bpar(3) unfolding context_invariant_def by auto
+next
+  case (Bsingle sl ss)
+  hence "\<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>"
+    using Bsingle by auto
+  moreover have "nonneg_delay ss"
+    using Bsingle by auto
+  hence ?case
+    using b_seq_exec_preserves_context_invariant Bsingle by fastforce
   ultimately show ?case by auto
 qed
 
