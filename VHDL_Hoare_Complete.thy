@@ -5575,6 +5575,4 @@ lemma premises_sim_fin_obt:
   obtains tw where "init_sim (0, w) cs = tw" and "tw, T, cs \<Rightarrow>\<^sub>S tw'"
   using premises_sim_fin[OF assms] by blast
 
-
-
 end

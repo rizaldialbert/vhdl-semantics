@@ -197,7 +197,6 @@ lemma trans_empty_keys:
   shows "\<tau> = 0 \<longleftrightarrow> keys \<tau> = {}"
   unfolding zero_fun_def zero_option_def keys_def by auto
 
-(*TODO: Would this be more appropriate if we use Inf? *)
 definition inf_time :: "'signal trans_raw_sig \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> nat option" where
   "inf_time \<tau> sig n = 
            (if \<exists>k\<in> keys(\<tau> sig). k \<le> n then Some (GREATEST k. k \<in> keys (\<tau> sig) \<and> k \<le> n)  else None)"
@@ -380,6 +379,16 @@ definition to_signal :: "val \<Rightarrow> 'signal trans_raw_sig \<Rightarrow> '
   "to_signal def \<tau> sig t = (case inf_time \<tau> sig t of
                               None    \<Rightarrow> def
                             | Some t' \<Rightarrow> the ((\<tau> sig) t'))"
+
+lemma inf_time_ex1:
+  assumes "\<exists>k\<in> keys(\<tau> sig). k \<le> n"
+  shows "the (inf_time \<tau> sig n) = (GREATEST k. k \<in> keys (\<tau> sig) \<and> k \<le> n)"
+  using assms unfolding inf_time_def by auto
+
+lemma inf_time_ex2:
+  assumes "\<not> (\<exists>k\<in> keys(\<tau> sig). k \<le> n)"
+  shows "inf_time \<tau> sig n = None"
+  using assms unfolding inf_time_def by auto
 
 lemma to_signal_equal_when_trans_equal_upto:
   fixes \<tau>1 \<tau>2 :: "'signal trans_raw"
@@ -2114,6 +2123,26 @@ next
   then show ?case by (auto simp add: b_seq_exec_preserve_trans_removal)
 qed
 
+lemma b_conc_exec_preserve_trans_removal_nonstrict:
+  assumes "\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0"
+  assumes "nonneg_delay_conc cs"
+  shows   "\<And>n. n \<le> t \<Longrightarrow>  (b_conc_exec t \<sigma> \<gamma> \<theta> cs \<tau>) n = 0"
+  using assms
+proof (induction cs arbitrary: \<tau>)
+  case (Bpar cs1 cs2)
+  let ?\<tau>1 = "b_conc_exec t \<sigma> \<gamma> \<theta> cs1 \<tau>"
+  let ?\<tau>2 = "b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>"
+  have "b_conc_exec t \<sigma> \<gamma> \<theta> (cs1 || cs2) \<tau> = clean_zip_raw \<tau> (?\<tau>1, set (signals_from cs1)) (?\<tau>2, set (signals_from cs2))"
+    by auto
+  have "\<And>n. n \<le> t \<Longrightarrow>  (clean_zip_raw \<tau> (?\<tau>1, set (signals_from cs1)) (?\<tau>2, set (signals_from cs2))) n = 0"
+    using clean_zip_raw_preserve_trans_removal_nonstrict[OF Bpar(4)] Bpar by auto
+  then show ?case  using Bpar(3) by auto
+next
+  case (Bsingle x1 x2)
+  then show ?case 
+    by (auto simp add: b_seq_exec_preserve_trans_removal_nonstrict)
+qed
+
 lemma init'_preserves_trans_removal:
   assumes "\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0"
   assumes "nonneg_delay_conc cs"
@@ -3517,26 +3546,11 @@ proof (induction ss arbitrary: \<tau> \<tau>')
     by auto
   have \<tau>'_def: "\<tau>' = b_seq_exec t \<sigma> \<gamma> \<theta> ss2 \<tau>''"
     unfolding \<tau>''_def using Bcomp(3) by auto
-  have "\<tau>'' \<noteq> 0 \<or> \<tau>'' = 0" by auto
-  moreover
-  { assume "\<tau>'' = 0"
-    hence ?case
-      using Bcomp(2) \<tau>'_def `\<tau>' \<noteq> 0` `nonneg_delay (Bcomp ss1 ss2)`  by (simp add: zero_fun_def) }
-  moreover
-  { assume "\<tau>'' \<noteq> 0"
-    hence t_less: "(LEAST n. dom ( \<tau>'' n) \<noteq> {}) > t"
-      using Bcomp(1) \<tau>''_def `nonneg_delay (Bcomp ss1 ss2)`  Bcomp(5) by auto
-    have "\<And>n. n < t \<Longrightarrow>  \<tau>'' n = 0"
-      using Bcomp(5)  unfolding \<tau>''_def  by (simp add: b_seq_exec_preserve_trans_removal)
-    have "dom ( \<tau>'' t) = {}"
-      using not_less_Least[OF t_less] by auto
-    hence " \<tau>'' t = 0"
-      by (transfer', auto simp add: zero_fun_def zero_option_def)
-    hence "\<And>n. n \<le> t \<Longrightarrow>  \<tau>'' n = 0"
-      using `\<And>n. n < t \<Longrightarrow>  \<tau>'' n = 0`  le_imp_less_or_eq by auto
-    hence ?case
-      using Bcomp(2) `nonneg_delay (Bcomp ss1 ss2)` \<tau>'_def `\<tau>' \<noteq> 0` by auto }
-  ultimately show ?case by auto
+  have "\<And>n. n \<le> t \<Longrightarrow>  \<tau>'' n = 0"
+    using Bcomp(5)  unfolding \<tau>''_def  
+    using Bcomp.prems(2) b_seq_exec_preserve_trans_removal_nonstrict nonneg_delay.simps(2) by blast
+  thus ?case
+    using Bcomp(2) `nonneg_delay (Bcomp ss1 ss2)` \<tau>'_def `\<tau>' \<noteq> 0` by auto
 next
   case (Bguarded x1 ss1 ss2)
   moreover hence "nonneg_delay ss1" and "nonneg_delay ss2"
@@ -3717,32 +3731,12 @@ proof (cases "\<tau>' \<noteq> 0")
     hence \<tau>'_def: "\<tau>' = b_conc_exec t \<sigma> \<gamma> \<theta> cs2 \<tau>''"
       using Bpar(4) unfolding \<tau>''_def using b_conc_exec_sequential[OF `conc_stmt_wf (cs1 || cs2)`]
       by auto
-    have "\<tau>'' = 0 \<or> \<tau>'' \<noteq> 0" by auto
-    moreover
-    { assume "\<tau>'' = 0"
-      hence *: "\<And>n. n \<le> t \<Longrightarrow>  \<tau>'' n = 0"
-        by (auto simp add: zero_fun_def zero_option_def)
-      have ?case
-        using Bpar(2)[OF * _ _ _ `\<tau>' \<noteq> 0`] \<tau>'_def `nonneg_delay_conc (cs1 || cs2)` `conc_stmt_wf (cs1 || cs2)`
-        by (simp add: conc_stmt_wf_def) }
-    moreover
-    { assume "\<tau>'' \<noteq> 0"
-      hence t_less: "t < (LEAST n. dom ( \<tau>'' n) \<noteq> {})"
-        using Bpar(1)[OF Bpar(3)] \<tau>''_def `nonneg_delay_conc (cs1 || cs2)` `conc_stmt_wf (cs1 || cs2)`
-        unfolding conc_stmt_wf_def by auto
-      have "\<And>n. n < t \<Longrightarrow>  \<tau>'' n = 0"
-        using \<tau>''_def Bpar(3) by (simp add: b_conc_exec_preserve_trans_removal)
-      have "dom ( \<tau>'' t) = {}"
-        using not_less_Least[OF t_less] by auto
-      hence " \<tau>'' t = 0"
-        by (transfer', auto simp add: zero_fun_def zero_option_def)
-      hence "\<And>n. n \<le> t \<Longrightarrow>  \<tau>'' n = 0"
-        using `\<And>n. n < t \<Longrightarrow>  \<tau>'' n = 0`  le_imp_less_or_eq by auto
-      hence ?case
-        using Bpar(2) `nonneg_delay_conc (cs1 || cs2)` \<tau>'_def `\<tau>' \<noteq> 0`  `conc_stmt_wf (cs1 || cs2)`
-        unfolding conc_stmt_wf_def by auto }
-    ultimately show ?case
-      by auto
+    have "\<And>n. n \<le> t \<Longrightarrow>  \<tau>'' n = 0"
+      using \<tau>''_def Bpar(3) 
+      Bpar.prems(3) b_conc_exec_preserve_trans_removal_nonstrict nonneg_delay_conc.simps(2) by blast
+    thus ?case
+      using Bpar(2) `nonneg_delay_conc (cs1 || cs2)` \<tau>'_def `\<tau>' \<noteq> 0`  `conc_stmt_wf (cs1 || cs2)`
+      unfolding conc_stmt_wf_def by auto
   next
     case (Bsingle sl ss)
     have "disjnt sl \<gamma> \<or> \<not> disjnt sl \<gamma>" by auto

@@ -124,7 +124,6 @@ lemma [code]:
 lemma [code]:
   "preempt sig (Pm_fmap xs) t = 
                           (let 
-                             current  = lookup0 xs t;
                              chopped = fmmap_keys (\<lambda>t'. if t \<le> t' then map_drop sig else id)
                            in 
                              Pm_fmap (chopped xs))"
