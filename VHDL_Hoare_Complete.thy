@@ -19,12 +19,34 @@ definition worldline_upd2 ::
   "nat \<times> 'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> nat \<times> 'signal worldline" ("_[ _, _ :=\<^sub>2 _]")
   where "worldline_upd2 \<equiv> \<lambda>tw sig dly val. (fst tw, worldline_upd (snd tw) sig (fst tw + dly) val)"
 
+lemma worldline_upd2_before_dly:
+  fixes tw val dly sig
+  defines "tw' \<equiv> tw[sig, dly :=\<^sub>2 val]"
+  shows "\<And>s i. i < fst tw + dly \<Longrightarrow> snd tw' s i = snd tw s i"
+  unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+
+lemma worldline_upd2_at_dly:
+  fixes tw val dly sig
+  defines "tw' \<equiv> tw[sig, dly :=\<^sub>2 val]"
+  shows "snd tw' sig (fst tw + dly) = val"
+  unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+
+lemma worldline_upd2_at_dly_nonsig:
+  fixes tw val dly sig
+  defines "tw' \<equiv> tw[sig, dly :=\<^sub>2 val]"
+  shows "s \<noteq> sig \<Longrightarrow> snd tw' s (fst tw + dly) = snd tw s (fst tw + dly)"
+  unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+  
 definition worldline_inert_upd2 ::
   "nat \<times> 'signal worldline \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> nat \<times> 'signal worldline" ("_\<lbrakk> _, _ :=\<^sub>2 _\<rbrakk>")
   where "worldline_inert_upd2 \<equiv> \<lambda>tw sig dly v. (fst tw, worldline_inert_upd (snd tw) sig (fst tw) dly v)"
 
 definition beval_world_raw2 :: "nat \<times> 'signal worldline \<Rightarrow> 'signal bexp \<Rightarrow> val" where 
   "beval_world_raw2 \<equiv> \<lambda>tw exp. beval_world_raw (snd tw) (fst tw) exp" 
+
+lemma beval_world_raw2_Bsig:
+  "beval_world_raw2 tw (Bsig s) = snd tw s (fst tw)"
+  unfolding beval_world_raw2_def beval_world_raw_def state_of_world_def by auto
 
 type_synonym 'signal assn2 = "nat \<times> 'signal worldline \<Rightarrow> bool"
 
@@ -67,6 +89,22 @@ lemma compositional_conj:
 
 inductive_cases seq_hoare2_ic: "\<turnstile> [P] s [Q]"
 
+lemma Assign2_altI:
+  "\<forall>tw. P tw \<longrightarrow> Q(tw[sig, dly :=\<^sub>2 beval_world_raw2 tw exp]) \<Longrightarrow> \<turnstile> [P] Bassign_trans sig exp dly [Q]"
+  apply (rule Conseq2[where Q="Q", rotated 1])
+    apply (rule Assign2)
+   apply simp
+  apply simp
+  done
+
+lemma AssignI2_altI:
+  "\<forall>tw. P tw \<longrightarrow> Q(tw\<lbrakk>sig, dly :=\<^sub>2 beval_world_raw2 tw exp\<rbrakk>) \<Longrightarrow> \<turnstile> [P] Bassign_inert sig exp dly [Q]"
+  apply (rule Conseq2[where Q="Q", rotated 1])
+    apply (rule AssignI2)
+   apply simp
+  apply simp
+  done
+
 lemma BnullE_hoare2:
   assumes "\<turnstile> [P] s [Q]"
   assumes "s = Bnull"
@@ -87,6 +125,7 @@ proof (induction rule: seq_hoare2.induct)
   case (Conseq2 P' P s Q Q')
   then show ?case by blast
 qed auto
+
 
 lemma Bassign_inertE_hoare2:
   assumes "\<turnstile> [P] s [Q]"
