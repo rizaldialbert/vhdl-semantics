@@ -406,6 +406,17 @@ qed
 
 abbreviation "signal_of def \<equiv> to_signal def o to_trans_raw_sig"
 
+lemma signal_of_def:
+  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n s = 0"
+  shows "signal_of def \<tau> s t = def"
+proof -
+  have "inf_time (to_trans_raw_sig \<tau>) s t = None"
+    unfolding sym[OF inf_time_none_iff] using assms 
+    by (metis domIff leI to_trans_raw_sig_def zero_option_def)
+  thus ?thesis
+    unfolding to_signal_def comp_def by auto
+qed
+
 lemma [simp]:
   "to_trans_raw_sig 0 = 0"
     by (simp add: zero_fun_def to_trans_raw_sig_def)
@@ -486,34 +497,73 @@ lemma signal_of_less_ind:
 
 lemma signal_of_elim:
   assumes "signal_of def \<tau> sig k = val"
-  shows "(\<exists>m \<le> k.  (to_trans_raw_sig \<tau> sig) m = Some val) \<or>
-         (\<forall>m \<le> k.  (to_trans_raw_sig \<tau> sig) m = None \<and> val = def)"
-proof -
-  obtain t' where "inf_time (to_trans_raw_sig \<tau>) sig k = None \<or> 
-                   inf_time (to_trans_raw_sig \<tau>) sig k = Some t'"
+  shows "  \<exists>m \<le> k.  to_trans_raw_sig \<tau> sig m = Some val \<and> (\<forall>j > m. j \<le> k \<longrightarrow> to_trans_raw_sig \<tau> sig j = None)
+        \<or> (\<forall>i. i \<le> k \<longrightarrow> \<tau> i sig = None) \<and> val = def"
+proof (cases "inf_time (to_trans_raw_sig \<tau>) sig k = None")
+  case True
+  hence "\<forall>ka\<le>k. \<tau> ka sig = None"
+    using inf_time_noneE2[OF True]  by (simp add: to_trans_raw_sig_def zero_option_def)
+  moreover have "val = def"
+    using assms True unfolding to_signal_def comp_def by auto
+  ultimately show "(\<exists>m \<le> k.  to_trans_raw_sig \<tau> sig m = Some val \<and> (\<forall>j > m. j \<le> k \<longrightarrow> to_trans_raw_sig \<tau> sig j = None)
+        \<or> (\<forall>i. i \<le> k \<longrightarrow> \<tau> i sig = None) \<and> val = def)"
+    by auto    
+next
+  case False
+  then obtain t' where *: "inf_time (to_trans_raw_sig \<tau>) sig k = Some t'"
     by (meson inf_time_def)
-  moreover
-  { assume none: "inf_time (to_trans_raw_sig \<tau>) sig k = None"
-    have "\<forall>m \<le> k.  (to_trans_raw_sig \<tau> sig) m = None"
-      using inf_time_noneE2[OF none] unfolding to_trans_raw_sig_def by (auto simp add: zero_option_def)
-    moreover have "val = def"
-      using assms none unfolding to_signal_def comp_def by auto
-    ultimately have ?thesis 
-      by auto }
-  moreover
-  { assume some: "inf_time (to_trans_raw_sig \<tau>) sig k = Some t'"
-    have "t' \<in> keys (to_trans_raw_sig \<tau> sig) \<and> t' \<le> k"
-      using inf_time_some_exists[OF some] by auto
-    then obtain val' where "to_trans_raw_sig \<tau> sig t' = Some val'" and "t' \<le> k"
-      unfolding to_trans_raw_sig_def keys_def by (auto simp add: zero_option_def)
-    moreover have "the (to_trans_raw_sig \<tau> sig t') = val"
-      using assms some unfolding to_signal_def comp_def by auto
-    ultimately have "val = val'"
-      by auto
-    with \<open>t' \<le> k\<close> have ?thesis
-      using \<open>to_trans_raw_sig \<tau> sig t' = Some val'\<close> by auto }
-  ultimately show ?thesis by auto
+  have snd: "\<forall>j > t'. j \<le> k \<longrightarrow> (to_trans_raw_sig \<tau>) sig j = None"
+    by (metis "*" domIff inf_time_someE not_le)
+  have "t' \<in> keys ((to_trans_raw_sig \<tau>) sig) \<and> t' \<le> k"
+    using inf_time_some_exists[OF *] by auto
+  then obtain val' where "(to_trans_raw_sig \<tau>) sig t' = Some val'" and "t' \<le> k"
+    unfolding to_trans_raw_sig_def keys_def by (auto simp add: zero_option_def)
+  moreover have "the ((to_trans_raw_sig \<tau>) sig t') = val"
+    using assms * unfolding to_signal_def comp_def by auto
+  ultimately have "val = val'"
+    by auto
+  with \<open>t' \<le> k\<close> have "((to_trans_raw_sig \<tau>) sig) t' = Some val"
+    using \<open> (to_trans_raw_sig \<tau>) sig t' = Some val'\<close> by auto
+  with snd show ?thesis
+    using \<open>t' \<le> k\<close> by (auto intro!: exI[where x="t'"]) 
 qed
+
+lemma signal_of_intro:
+  assumes "(\<exists>m \<le> k.  to_trans_raw_sig \<tau> sig m = Some val \<and> (\<forall>j > m. j \<le> k \<longrightarrow> to_trans_raw_sig \<tau> sig j = None) \<or> (\<forall>i. i \<le> k \<longrightarrow> \<tau> i sig = None) \<and> val = def)"
+  shows "signal_of def \<tau> sig k = val"
+proof -
+  { assume "\<exists>m \<le> k.  to_trans_raw_sig \<tau> sig m = Some val \<and> (\<forall>j > m. j \<le> k \<longrightarrow> to_trans_raw_sig \<tau> sig j = None)"
+    then obtain m where "m \<le> k" and "to_trans_raw_sig \<tau> sig m = Some val" and  "\<forall>j > m. j \<le> k \<longrightarrow> to_trans_raw_sig \<tau> sig j = None"
+      by blast
+    have "inf_time (to_trans_raw_sig \<tau>) sig k = Some m"
+    proof (rule inf_time_someI)  
+      show "m \<in> dom (to_trans_raw_sig \<tau> sig)"
+        by (simp add: \<open>to_trans_raw_sig \<tau> sig m = Some val\<close> domIff)
+    next
+      show "m \<le> k"
+        by (simp add: \<open>m \<le> k\<close>)
+    next
+      show "\<forall>t\<in>dom (to_trans_raw_sig \<tau> sig). t \<le> k \<longrightarrow> t \<le> m"
+        by (meson \<open>\<forall>j>m. j \<le> k \<longrightarrow> to_trans_raw_sig \<tau> sig j = None\<close> domIff not_le_imp_less)
+    qed
+    hence "signal_of def \<tau> sig k = val"
+      unfolding to_signal_def comp_def 
+      by (simp add: \<open>to_trans_raw_sig \<tau> sig m = Some val\<close>) }
+  moreover
+  { assume "(\<forall>i. i \<le> k \<longrightarrow> \<tau> i sig = None) \<and> val = def"
+    hence "signal_of def \<tau> sig k = val"
+      by (metis option.distinct(1) signal_of_elim to_trans_raw_sig_def) }
+  ultimately show "signal_of def \<tau> sig k = val"
+    using assms by auto
+qed
+
+lemma signal_of_val_eq:
+  "signal_of def \<tau> sig k = val \<longleftrightarrow> 
+  (\<exists>m \<le> k.  to_trans_raw_sig \<tau> sig m = Some val \<and> (\<forall>j > m. j \<le> k \<longrightarrow> to_trans_raw_sig \<tau> sig j = None) \<or> (\<forall>i. i \<le> k \<longrightarrow> \<tau> i sig = None) \<and> val = def)"
+  apply rule
+   apply (erule signal_of_elim)
+  apply (erule signal_of_intro)
+  done
 
 subsection \<open>Semantics of @{typ "'signal bexp"}\<close>
 
@@ -568,67 +618,25 @@ definition preempt_raw_strict :: "'signal \<Rightarrow> 'signal trans_raw \<Righ
   where
   "preempt_raw_strict sig \<tau> t = (\<lambda>t'. if t' > t then (\<tau> t') (sig := None) else \<tau> t')"
 
+(*
 fun post_necessary_raw :: "nat \<Rightarrow> (nat \<Rightarrow> 'signal \<rightharpoonup> bool) \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow> bool" where
   "post_necessary_raw 0       \<tau> t s val def \<longleftrightarrow> (case \<tau> t s of None \<Rightarrow> val \<noteq> def | Some v \<Rightarrow> v \<noteq> val)"
 | "post_necessary_raw (Suc n) \<tau> t s val def \<longleftrightarrow> (case \<tau> (t + Suc n) s of None \<Rightarrow> post_necessary_raw n \<tau> t s val def | Some v \<Rightarrow> v \<noteq> val)"
+ *)
+
+abbreviation post_necessary_raw :: "nat \<Rightarrow> 'signal trans_raw \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow> bool" where
+  "post_necessary_raw n \<tau> t s val def \<equiv> (signal_of def \<tau> s (t + n) \<noteq> val)"
 
 lemma post_necessary_raw_correctness:
-  "\<not> post_necessary_raw n \<tau> t s val def \<longleftrightarrow> (\<exists>i\<ge>t. i \<le> t + n \<and> \<tau> i s = Some val \<and> (\<forall>j>i. j \<le> t + n \<longrightarrow> \<tau> j s = None))
-                                        \<or>   (\<forall>i\<ge>t. i \<le> t + n \<longrightarrow> \<tau> i s = None) \<and> val = def"
-proof (induction n)
-  case 0
-  then show ?case by (auto split:option.splits)
-next
-  case (Suc n)
-  obtain v where "\<tau> (t + Suc n) s = None \<or> \<tau> (t + Suc n) s = Some v"
-    by (meson not_None_eq)
-  moreover
-  { assume "\<tau> (t + Suc n) s = None"
-    hence "\<not> post_necessary_raw (Suc n) \<tau> t s val def \<longleftrightarrow> \<not> post_necessary_raw n \<tau> t s val def"
-      by auto
-    also have "... \<longleftrightarrow> ((\<exists>i\<ge>t. i \<le> t + n \<and> \<tau> i s = Some val \<and> (\<forall>j>i. j \<le> t + n \<longrightarrow> \<tau> j s = None)) \<or> (\<forall>i\<ge>t. i \<le> t + n \<longrightarrow> \<tau> i s = None) \<and> val = def)"
-      using Suc by auto
-    also have "... \<longleftrightarrow> ((\<exists>i\<ge>t. i \<le> t + Suc n \<and> \<tau> i s = Some val \<and> (\<forall>j>i. j \<le> t + Suc n \<longrightarrow> \<tau> j s = None)) \<or> (\<forall>i\<ge>t. i \<le> t + Suc n \<longrightarrow> \<tau> i s = None) \<and> val = def)"
-      using `\<tau> (t + Suc n) s = None` by (metis add_Suc_right le_SucE le_SucI option.distinct(1))
-    finally have ?case by auto }
-  moreover
-  { assume "\<tau> (t + Suc n) s = Some v"
-    hence "\<not> post_necessary_raw (Suc n) \<tau> t s val def \<longleftrightarrow> v = val"
-      by auto
-    hence ?case
-      using `\<tau> (t + Suc n) s = Some v`
-      by (smt le_add1 le_eq_less_or_eq not_le option.distinct(1) option.inject) }
-  ultimately show ?case by fastforce
-qed  
+  "\<not> post_necessary_raw n \<tau> t s val def \<longleftrightarrow> (\<exists>i. i \<le> t + n \<and> \<tau> i s = Some val \<and> (\<forall>j>i. j \<le> t + n \<longrightarrow> \<tau> j s = None))
+                                        \<or>   (\<forall>i. i \<le> t + n \<longrightarrow> \<tau> i s = None) \<and> val = def"
+  using signal_of_val_eq[of "def" "\<tau>" "s" "t + n" "val"] unfolding to_trans_raw_sig_def by auto
 
 lemma post_necessary_raw_correctness2:
-  "post_necessary_raw n \<tau> t s val def \<longleftrightarrow> (\<exists>i\<ge>t. i \<le> t + n \<and> \<tau> i s = Some (\<not> val) \<and> (\<forall>j>i. j \<le> t + n \<longrightarrow> \<tau> j s = None))
-                                      \<or>   (\<forall>i\<ge>t. i \<le> t + n \<longrightarrow> \<tau> i s = None) \<and> val \<noteq> def"
-proof (induction n)
-  case 0
-  then show ?case by (auto split:option.splits)
-next
-  case (Suc n)
-  obtain v where "\<tau> (t + Suc n) s = None \<or> \<tau> (t + Suc n) s = Some v"
-    by (meson not_None_eq)
-  moreover
-  { assume "\<tau> (t + Suc n) s = None"
-    hence "post_necessary_raw (Suc n) \<tau> t s val def \<longleftrightarrow> post_necessary_raw n \<tau> t s val def"
-      by auto
-    also have "... \<longleftrightarrow> ((\<exists>i\<ge>t. i \<le> t + n \<and> \<tau> i s = Some (\<not> val) \<and> (\<forall>j>i. j \<le> t + n \<longrightarrow> \<tau> j s = None)) \<or> (\<forall>i\<ge>t. i \<le> t + n \<longrightarrow> \<tau> i s = None) \<and> val \<noteq> def)"
-      using Suc by auto
-    also have "... \<longleftrightarrow> ((\<exists>i\<ge>t. i \<le> t + Suc n \<and> \<tau> i s = Some (\<not> val) \<and> (\<forall>j>i. j \<le> t + Suc n \<longrightarrow> \<tau> j s = None)) \<or> (\<forall>i\<ge>t. i \<le> t + Suc n \<longrightarrow> \<tau> i s = None) \<and> val \<noteq> def)"
-      using `\<tau> (t + Suc n) s = None` by (metis add_Suc_right le_SucE le_SucI option.distinct(1))
-    finally have ?case by auto }
-  moreover
-  { assume "\<tau> (t + Suc n) s = Some v"
-    hence "post_necessary_raw (Suc n) \<tau> t s val def \<longleftrightarrow> v \<noteq> val"
-      by auto
-    hence ?case
-      using `\<tau> (t + Suc n) s = Some v`
-      by (smt calculation(2) leD le_add1 le_eq_less_or_eq option.inject) }
-  ultimately show ?case by fastforce
-qed
+  "post_necessary_raw n \<tau> t s val def \<longleftrightarrow> (\<exists>i. i \<le> t + n \<and> \<tau> i s = Some (\<not> val) \<and> (\<forall>j>i. j \<le> t + n \<longrightarrow> \<tau> j s = None))
+                                      \<or>   (\<forall>i. i \<le> t + n \<longrightarrow> \<tau> i s = None) \<and> val \<noteq> def"
+  using signal_of_val_eq[of "def" "\<tau>" "s" "t + n" "\<not> val"] unfolding to_trans_raw_sig_def comp_def
+  by auto
 
 lemma post_necessary_raw_same:
   assumes "\<And>k. \<tau>1 k s = \<tau>2 k s"
@@ -656,12 +664,12 @@ next
   case False
   then show ?thesis 
     using assms unfolding trans_post_raw_def preempt_raw_def
-    by (smt MOST_mono fun_upd_idem_iff zero_fun_def zero_option_def) 
+    by (simp add: MOST_mono zero_fun_def zero_option_def)
 qed
 
 lemma trans_post_raw_imply_neq_map_empty:
   assumes "\<tau>' =  trans_post_raw sig e def \<tau> t dly"
-  assumes "(\<forall>i\<ge>t. i \<le> t + (dly-1) \<longrightarrow> \<tau> i sig = None) \<Longrightarrow> e \<noteq> def"
+  assumes "(\<forall>i. i \<le> t + (dly-1) \<longrightarrow> \<tau> i sig = None) \<Longrightarrow> e \<noteq> def"
   assumes "0 < dly"
   shows "\<tau>' \<noteq> 0"
 proof (cases "post_necessary_raw (dly - 1) \<tau> t sig e def ")
@@ -671,12 +679,11 @@ proof (cases "post_necessary_raw (dly - 1) \<tau> t sig e def ")
     by (metis fun_upd_apply option.distinct(1) post_raw_def zero_fun_def zero_option_def)
 next
   case False
-  hence *: "(\<exists>i\<ge>t. i \<le> t + (dly-1) \<and> \<tau> i sig = Some e \<and> (\<forall>j>i. j \<le> t + (dly-1) \<longrightarrow> \<tau> j sig = None))"
-    using post_necessary_raw_correctness[of "dly-1" "\<tau>" "t" "sig" "e" "def"] assms(2)
-    by auto
+  hence *: "(\<exists>i. i \<le> t + (dly-1) \<and> \<tau> i sig = Some e \<and> (\<forall>j>i. j \<le> t + (dly-1) \<longrightarrow> \<tau> j sig = None))"
+    unfolding post_necessary_raw_correctness using assms(2) by blast
   hence lookup: "\<tau>' =  preempt_raw sig \<tau> (t + dly)"
     using assms(1) False  by (simp add: trans_post_raw_def)
-  obtain i where "t \<le> i" and "i \<le> t + (dly - 1)" and "\<tau> i sig = Some e"
+  obtain i where "i \<le> t + (dly - 1)" and "\<tau> i sig = Some e"
     using * by auto
   hence "\<tau>' i sig = Some e"
     using lookup `0 < dly`  unfolding preempt_raw_def by auto
@@ -771,12 +778,12 @@ proof -
       unfolding to_signal_def comp_def by auto }
   moreover
   { assume as_not: "\<not> post_necessary_raw (dly-1) \<tau> k s v def"
-    then obtain t' where "k \<le> t' \<and> t' \<le> k + (dly-1) \<and>  \<tau> t' s = Some v \<and> (\<forall>j>t'. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None)
-                       \<or> (\<forall>j\<ge>k. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None) \<and> v = def"
-      using post_necessary_raw_correctness[of "dly-1" "\<tau>" "k" "s" "v" "def"] by auto
+    then obtain t' where "t' \<le> k + (dly-1) \<and>  \<tau> t' s = Some v \<and> (\<forall>j>t'. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None)
+                       \<or> (\<forall>j. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None) \<and> v = def"
+      using post_necessary_raw_correctness[of "def" "\<tau>" "s" "k" "dly - 1" "v"] by auto
     moreover
-    { assume "k \<le> t' \<and> t' \<le> k + (dly-1) \<and>  \<tau> t' s = Some v \<and> (\<forall>j>t'. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None)"
-      hence "k \<le> t'" and "t' \<le> k + (dly-1)" and " \<tau> t' s = Some v" and "(\<forall>j>t'. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None)"
+    { assume "t' \<le> k + (dly-1) \<and>  \<tau> t' s = Some v \<and> (\<forall>j>t'. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None)"
+      hence "t' \<le> k + (dly-1)" and " \<tau> t' s = Some v" and "(\<forall>j>t'. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None)"
         by auto
       have "inf_time (to_trans_raw_sig (trans_post_raw s v def \<tau> k dly)) s t = Some t'"
       proof (rule inf_time_someI)
@@ -809,7 +816,7 @@ proof -
       ultimately have ?thesis
         unfolding to_signal_def comp_def by auto }
     moreover
-    { assume "(\<forall>j\<ge>k. j \<le> k + (dly-1) \<longrightarrow> \<tau> j s = None) \<and> v = def"
+    { assume "(\<forall>j. j \<le> k + (dly-1) \<longrightarrow> \<tau> j s = None) \<and> v = def"
       have "\<forall>ta\<in>dom (to_trans_raw_sig (trans_post_raw s v def \<tau> k dly) s). t < ta"
       proof (rule ccontr)
         assume "\<not> (\<forall>ta\<in>dom (to_trans_raw_sig (trans_post_raw s v def \<tau> k dly) s). t < ta)"
@@ -827,21 +834,21 @@ proof -
         moreover
         { assume "k \<le> ta \<and> ta \<le> k + dly"
           hence " (to_trans_raw_sig (trans_post_raw s v def \<tau> k dly) s) ta = 0"
-            using `(\<forall>j\<ge>k. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None) \<and> v = def` as_not
+            using `(\<forall>j. j \<le> k + (dly-1) \<longrightarrow>  \<tau> j s = None) \<and> v = def` as_not
             by (auto simp add: to_trans_raw_sig_def trans_post_raw_def preempt_raw_def zero_option_def)
           with ` (to_trans_raw_sig (trans_post_raw s v def \<tau> k dly) s) ta \<noteq> 0` have "False" by auto }
         moreover
         { assume "k + dly < ta"
           hence " (to_trans_raw_sig (trans_post_raw s v def \<tau> k dly) s) ta = 0"
             using as_not  unfolding to_trans_raw_sig_def 
-            by (auto simp add: preempt_raw_def trans_post_raw_def zero_option_def)
+            by (metis as_not fun_upd_same less_imp_le_nat preempt_raw_def trans_post_raw_def zero_option_def)
           with ` (to_trans_raw_sig (trans_post_raw s v def \<tau> k dly) s) ta \<noteq> 0` have "False" by auto }
         ultimately show "False"by auto
       qed
       hence "inf_time (to_trans_raw_sig (trans_post_raw s v def \<tau> k dly)) s t = None"
         by (auto simp add: inf_time_none_iff)
       hence ?thesis
-        unfolding to_signal_def comp_def using `(\<forall>j\<ge>k. j \<le> k + (dly-1) \<longrightarrow> \<tau> j s = None) \<and> v = def`
+        unfolding to_signal_def comp_def using `(\<forall>j. j \<le> k + (dly-1) \<longrightarrow> \<tau> j s = None) \<and> v = def`
         by auto }
     ultimately have ?thesis by auto }
   ultimately show ?thesis
@@ -886,154 +893,349 @@ lemma is_stable_raw_correct:
   "is_stable_raw dly \<tau> now sig val \<longleftrightarrow> (\<forall>m. now < m \<and> m \<le> now + dly \<longrightarrow> check (\<tau> m) sig val)"
   using is_stable_raw_correct_if is_stable_raw_correct_only_if by metis
 
-definition purge_raw :: "'signal trans_raw \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> 'signal trans_raw" where
+(* definition purge_raw :: "'signal trans_raw \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> 'signal trans_raw" where
   "purge_raw \<tau> t dly sig = override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) {t <.. t + dly}"
+ *)
+
+definition purge_raw :: "'signal trans_raw \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow> 'signal trans_raw" where
+  "purge_raw \<tau> t dly sig def val \<equiv> 
+    let
+        s1 = signal_of def \<tau> sig t;
+        s2 = signal_of def \<tau> sig (t + dly);
+        k2 = inf_time (to_trans_raw_sig \<tau>) sig (t + dly) 
+    in 
+        if s1 = val \<or> s2 = (\<not> val)then 
+          override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) {t <.. t + dly} 
+        else 
+          override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) ({t <..< the k2} \<union> {the k2 <.. t + dly})"
 
 lemma purge_raw_induct:
-  "\<And>m. now + Suc n \<le> m \<Longrightarrow> purge_raw \<tau> now n sig m = \<tau> m"
-  by (auto simp add :  purge_raw_def override_on_def)
-
+  "\<And>m. now + Suc n \<le> m \<Longrightarrow> purge_raw \<tau> now n sig def val m = \<tau> m"
+proof -
+  have 0: "\<And>m. now + Suc n \<le> m \<Longrightarrow> override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) {now <.. now + n} m = \<tau> m"
+    by auto
+  let ?s1 = "signal_of def \<tau> sig now"
+  let ?s2 = "signal_of def \<tau> sig (now + n)"
+  let ?k2 = "inf_time (to_trans_raw_sig \<tau>) sig (now + n)"
+  { assume "?s1 \<noteq> val \<and> ?s2 \<noteq> (\<not> val)"
+    hence "?s1 = (\<not> val)" and "?s2 = val"
+      by auto
+    hence *: "\<exists>k\<in> keys(to_trans_raw_sig \<tau> sig). k \<le> now + n"
+    proof -
+      have f1: "\<not> to_signal def (to_trans_raw_sig \<tau>) sig (n + now) \<or> val"
+        by (metis \<open>signal_of def \<tau> sig (now + n) = val\<close> add.commute comp_apply)
+      have f2: "\<not> val \<or> to_signal def (to_trans_raw_sig \<tau>) sig (n + now)"
+        by (metis (no_types) \<open>signal_of def \<tau> sig (now + n) = val\<close> add.commute comp_apply)
+      have f3: "\<not> val \<or> \<not> to_signal def (to_trans_raw_sig \<tau>) sig now"
+        by (metis \<open>signal_of def \<tau> sig now = (\<not> val)\<close> comp_apply)
+      have f4: "val \<or> to_signal def (to_trans_raw_sig \<tau>) sig now"
+        by (metis \<open>signal_of def \<tau> sig now = (\<not> val)\<close> comp_apply)
+      have "\<forall>f a n. \<exists>na. (na \<le> n \<or> inf_time f (a::'a) n = None) \<and> (na \<in> keys (f a) \<or> inf_time f a n = None)"
+        by (metis inf_time_def)
+      then show ?thesis
+        using f4 f3 f2 f1 by (metis (no_types) add.commute to_signal_def trans_le_add2)
+    qed
+    hence "?k2 = Some (GREATEST k. k \<in> keys (to_trans_raw_sig \<tau> sig) \<and> k \<le> now + n)" (is "_ = Some ?k2'")
+      unfolding inf_time_def by auto
+    hence "?k2' \<le> now + n"
+      using GreatestI_ex_nat[where P="\<lambda>x. x \<in> keys (to_trans_raw_sig \<tau> sig) \<and> x \<le> now + n" and b="now + n"] 
+      * by auto
+    hence "\<And>m. now + Suc n \<le> m \<Longrightarrow> override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) ({now <..< the ?k2} \<union> {the ?k2 <.. now + n}) m = \<tau> m"
+      using \<open>inf_time (to_trans_raw_sig \<tau>) sig (now + n) = Some (GREATEST k. k \<in> keys
+      (to_trans_raw_sig \<tau> sig) \<and> k \<le> now + n)\<close> by auto }
+  with 0 show "\<And>m. now + Suc n \<le> m \<Longrightarrow> purge_raw \<tau> now n sig def val m = \<tau> m"
+    unfolding purge_raw_def by smt
+qed
+  
 lemma purge_raw_induct':
-  "purge_raw \<tau> now n sig = \<tau>' \<Longrightarrow>  \<tau>' (now + Suc n) = \<tau> (now + Suc n)"
+  "purge_raw \<tau> now n sig def val = \<tau>' \<Longrightarrow>  \<tau>' (now + Suc n) = \<tau> (now + Suc n)"
   using purge_raw_induct[of "now" "n" "now + Suc n" "\<tau>"] by auto
 
-lemma purge_raw_correctness':
-  assumes "purge_raw \<tau> now n sig = \<tau>'"
+(* lemma purge_raw_correctness':
+  assumes "purge_raw \<tau> now n sig def val = \<tau>'"
   shows "\<forall>m. now < m \<and> m \<le> now + n \<longrightarrow> \<tau>' m sig = None"
   using assms unfolding override_on_def purge_raw_def by auto
+ *)
 
 lemma purge_raw_before_now_unchanged:
-  assumes "purge_raw \<tau> now n sig = \<tau>'"
+  assumes "purge_raw \<tau> now n sig def val = \<tau>'"
   shows "\<forall>m. m \<le> now \<longrightarrow> \<tau> m =  \<tau>' m"
-  using assms unfolding purge_raw_def by auto
+proof (rule, rule)
+  fix m
+  assume "m \<le> now"
+  hence 0: "\<tau> m = override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) {now <.. now + n} m"  
+    by simp
+  let ?s1 = "signal_of def \<tau> sig now"
+  let ?s2 = "signal_of def \<tau> sig (now + n)"
+  let ?k2 = "inf_time (to_trans_raw_sig \<tau>) sig (now + n)"  
+  { assume "?s1 \<noteq> val \<and> ?s2 \<noteq> (\<not> val)"
+    hence "?s1 = (\<not> val)" and "?s2 = val"
+      by auto
+    hence *: "\<exists>k\<in> keys(to_trans_raw_sig \<tau> sig). k \<le> now + n"
+    proof -
+      have f1: "\<not> to_signal def (to_trans_raw_sig \<tau>) sig (n + now) \<or> val"
+        by (metis \<open>signal_of def \<tau> sig (now + n) = val\<close> add.commute comp_apply)
+      have f2: "\<not> val \<or> to_signal def (to_trans_raw_sig \<tau>) sig (n + now)"
+        by (metis (no_types) \<open>signal_of def \<tau> sig (now + n) = val\<close> add.commute comp_apply)
+      have f3: "\<not> val \<or> \<not> to_signal def (to_trans_raw_sig \<tau>) sig now"
+        by (metis \<open>signal_of def \<tau> sig now = (\<not> val)\<close> comp_apply)
+      have f4: "val \<or> to_signal def (to_trans_raw_sig \<tau>) sig now"
+        by (metis \<open>signal_of def \<tau> sig now = (\<not> val)\<close> comp_apply)
+      have "\<forall>f a n. \<exists>na. (na \<le> n \<or> inf_time f (a::'a) n = None) \<and> (na \<in> keys (f a) \<or> inf_time f a n = None)"
+        by (metis inf_time_def)
+      then show ?thesis
+        using f4 f3 f2 f1 by (metis (no_types) add.commute to_signal_def trans_le_add2)
+    qed
+    hence "?k2 = Some (GREATEST k. k \<in> keys (to_trans_raw_sig \<tau> sig) \<and> k \<le> now + n)" (is "_ = Some ?k2'")
+      unfolding inf_time_def by auto
+    have "?k2' \<in> keys (to_trans_raw_sig \<tau> sig)"
+      using GreatestI_ex_nat[where P="\<lambda>x. x \<in> keys (to_trans_raw_sig \<tau> sig) \<and> x \<le> now + n" and b="now + n"]
+      * by auto
+    hence **: "\<And>m. m > ?k2' \<Longrightarrow> m \<le> now + n \<Longrightarrow> m \<notin> keys (to_trans_raw_sig \<tau> sig)"
+      using Greatest_le_nat[where P="\<lambda>x. x \<in> keys (to_trans_raw_sig \<tau> sig) \<and> x \<le> now + n" and b= "now + n"]
+      using leD by blast
+    hence "\<tau> (the ?k2) sig = Some val"
+      using \<open>?s2 = val\<close> \<open>?k2 = Some ?k2'\<close> \<open>?k2' \<in> keys (to_trans_raw_sig \<tau> sig)\<close>
+      unfolding to_signal_def comp_def to_trans_raw_sig_def
+      by (smt domI domIff keys_def mem_Collect_eq option.case_eq_if option.collapse option.sel zero_option_def)
+    have "now \<le> ?k2'"
+    proof (rule ccontr)
+      assume "\<not> now \<le> ?k2'"
+      hence "?k2' < now"
+        by auto
+      hence ***: "\<And>m. m > ?k2' \<Longrightarrow> m \<le> now \<Longrightarrow> \<tau> m sig = None"
+        using ** 
+        by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+      have "inf_time (to_trans_raw_sig \<tau>) sig now = Some ?k2'"
+      proof (intro inf_time_someI)
+        show "?k2' \<in> dom (to_trans_raw_sig \<tau> sig)"
+          using \<open>?k2' \<in> keys (to_trans_raw_sig \<tau> sig)\<close>  by (simp add: dom_def keys_def zero_option_def)
+      next
+        show "?k2' \<le> now"
+          using \<open>?k2' < now\<close> by auto
+      next
+        show "\<forall>t\<in>dom (to_trans_raw_sig \<tau> sig). t \<le> now \<longrightarrow> t \<le> ?k2'"
+          using *** 
+          by (metis \<open>inf_time (to_trans_raw_sig \<tau>) sig (now + n) = Some (GREATEST k. k \<in> keys
+          (to_trans_raw_sig \<tau> sig) \<and> k \<le> now + n)\<close> add_leD1 inf_time_someE le_Suc_ex le_add1)
+      qed
+      hence "?s1 = val"
+        unfolding to_signal_def comp_def using \<open>\<tau> (the ?k2) sig = Some val\<close>
+        using \<open>inf_time (to_trans_raw_sig \<tau>) sig (now + n) = Some (GREATEST k. k \<in> keys
+        (to_trans_raw_sig \<tau> sig) \<and> k \<le> now + n)\<close> \<open>signal_of def \<tau> sig now \<noteq> val \<and> signal_of def \<tau>
+        sig (now + n) \<noteq> (\<not> val)\<close> to_signal_def by fastforce
+      with \<open>?s1 = (\<not> val)\<close> show False      
+        by auto
+    qed
+    hence "\<tau> m = override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) ({now <..< the ?k2} \<union> {the ?k2 <.. now + n}) m"
+      using \<open>?k2 = Some ?k2'\<close>  using \<open>m \<le> now\<close> by auto }
+  with 0 show "\<tau> m = \<tau>' m"
+    using assms unfolding purge_raw_def  by smt
+qed
 
 lemma purge_raw_after_delay_unchanged:
-  assumes "purge_raw \<tau> now n sig = \<tau>'"
+  assumes "purge_raw \<tau> now n sig def val = \<tau>'"
   shows "\<forall>m. now + n < m \<longrightarrow> \<tau> m = \<tau>' m"
-  using assms unfolding purge_raw_def by auto
+  using assms purge_raw_induct  by (metis Suc_leI add_Suc_right)
 
 lemma purge_raw_does_not_affect_other_sig:
-  assumes "purge_raw \<tau> now n sig = \<tau>'"
+  assumes "purge_raw \<tau> now n sig def val = \<tau>'"
   shows "\<forall>m s. s \<noteq> sig \<longrightarrow> \<tau>' m s = \<tau> m s"
-  using assms by (auto simp add: purge_raw_def override_on_def)
+  using assms 
+  by (smt fun_upd_other override_on_apply_in override_on_apply_notin purge_raw_def)
 
 lemma purge_raw_correctness:
-  assumes "purge_raw \<tau> now n sig = \<tau>'"
+  assumes "purge_raw \<tau> now n sig def val = \<tau>'"
   shows "\<forall>m. now < m \<and> m \<le> now + n \<longrightarrow> check (\<tau>' m) sig val"
-  using assms unfolding purge_raw_def by auto
+proof (rule, rule)
+  fix m
+  assume "now < m \<and> m \<le> now + n"
+  have 0: "check (override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) {now <.. now + n} m) sig val"
+    by (simp add: \<open>now < m \<and> m \<le> now + n\<close>)
+  let ?s1 = "signal_of def \<tau> sig now"
+  let ?s2 = "signal_of def \<tau> sig (now + n)"
+  let ?k2 = "inf_time (to_trans_raw_sig \<tau>) sig (now + n)"
+  { assume "?s1 \<noteq> val \<and> ?s2 \<noteq> (\<not> val)"
+    hence "?s1 = (\<not> val)" and "?s2 = val"
+      by auto
+    hence *: "\<exists>k\<in> keys(to_trans_raw_sig \<tau> sig). k \<le> now + n"
+    proof -
+      have f1: "\<not> to_signal def (to_trans_raw_sig \<tau>) sig (n + now) \<or> val"
+        by (metis \<open>signal_of def \<tau> sig (now + n) = val\<close> add.commute comp_apply)
+      have f2: "\<not> val \<or> to_signal def (to_trans_raw_sig \<tau>) sig (n + now)"
+        by (metis (no_types) \<open>signal_of def \<tau> sig (now + n) = val\<close> add.commute comp_apply)
+      have f3: "\<not> val \<or> \<not> to_signal def (to_trans_raw_sig \<tau>) sig now"
+        by (metis \<open>signal_of def \<tau> sig now = (\<not> val)\<close> comp_apply)
+      have f4: "val \<or> to_signal def (to_trans_raw_sig \<tau>) sig now"
+        by (metis \<open>signal_of def \<tau> sig now = (\<not> val)\<close> comp_apply)
+      have "\<forall>f a n. \<exists>na. (na \<le> n \<or> inf_time f (a::'a) n = None) \<and> (na \<in> keys (f a) \<or> inf_time f a n = None)"
+        by (metis inf_time_def)
+      then show ?thesis
+        using f4 f3 f2 f1 by (metis (no_types) add.commute to_signal_def trans_le_add2)
+    qed    
+    hence "?k2 = Some (GREATEST k. k \<in> keys (to_trans_raw_sig \<tau> sig) \<and> k \<le> now + n)" (is "_ = Some ?k2'")
+      unfolding inf_time_def by auto
+    have "?k2' \<in> keys (to_trans_raw_sig \<tau> sig)"
+      using GreatestI_ex_nat[where P="\<lambda>x. x \<in> keys (to_trans_raw_sig \<tau> sig) \<and> x \<le> now + n" and b="now + n"]
+      * by auto
+    hence **: "\<And>m. m > ?k2' \<Longrightarrow> m \<le> now + n \<Longrightarrow> m \<notin> keys (to_trans_raw_sig \<tau> sig)"
+      using Greatest_le_nat[where P="\<lambda>x. x \<in> keys (to_trans_raw_sig \<tau> sig) \<and> x \<le> now + n" and b= "now + n"]
+      using leD by blast
+    hence "\<tau> (the ?k2) sig = Some val"
+      using \<open>?s2 = val\<close> \<open>?k2 = Some ?k2'\<close> \<open>?k2' \<in> keys (to_trans_raw_sig \<tau> sig)\<close>
+      unfolding to_signal_def comp_def to_trans_raw_sig_def
+      by (smt domI domIff keys_def mem_Collect_eq option.case_eq_if option.collapse option.sel zero_option_def)
+    hence "check (override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) ({now <..< the ?k2} \<union> {the ?k2 <.. now + n}) m) sig val"
+      using \<open>now < m \<and> m \<le> now + n\<close> 
+    proof -
+      have "check (override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) ({now<..<the (inf_time (to_trans_raw_sig \<tau>) sig (now + n))} \<union> {the (inf_time (to_trans_raw_sig \<tau>) sig (now + n))<..now + n}) m) sig val \<or> m \<in> {now<..<the (inf_time (to_trans_raw_sig \<tau>) sig (now + n))} \<union> {the (inf_time (to_trans_raw_sig \<tau>) sig (now + n))<..now + n} \<and> check ((\<tau> m)(sig := None)) sig val"
+        using \<open>\<tau> (the (inf_time (to_trans_raw_sig \<tau>) sig (now + n))) sig = Some val\<close> \<open>now < m \<and> m \<le> now + n\<close> by force
+      then show ?thesis
+        by force
+    qed }
+  with 0 show "check (\<tau>' m) sig val"
+    by (smt assms override_on_def purge_raw_def)
+qed
 
 lemma stable_after_purge2:
-  assumes "purge_raw \<tau> now n sig = \<tau>'"
+  assumes "purge_raw \<tau> now n sig def val = \<tau>'"
   shows "is_stable_raw n \<tau>' now sig val"
   using purge_raw_correctness is_stable_raw_correct assms by fastforce
 
 text \<open>This is the function for posting a transaction in an inertial assignment statement.\<close>
 
 definition inr_post_raw :: "'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow> 'signal trans_raw \<Rightarrow> nat \<Rightarrow> nat 
-                                                                             \<Rightarrow> 'signal trans_raw"
-  where
+                                                                             \<Rightarrow> 'signal trans_raw" where
+  "inr_post_raw sig val def \<tau> now dly = trans_post_raw sig val def (purge_raw \<tau> now dly sig def val) now dly"
+
+(*   where
   "inr_post_raw sig val cur_val \<tau> now dly =
    (if is_stable_raw dly \<tau> now sig cur_val then
       trans_post_raw sig val cur_val \<tau> now dly
     else
       trans_post_raw sig val cur_val (purge_raw \<tau> now dly sig) now dly)"
+ *)
+
+lemma inr_post_raw_does_not_affect_other_sig:
+  fixes dly \<tau> now def val sig
+  defines "\<tau>' \<equiv> inr_post_raw sig val def \<tau> now dly"
+  shows " \<forall>m s. s \<noteq> sig \<longrightarrow> \<tau>' m s = \<tau> m s"
+  by (metis assms inr_post_raw_def purge_raw_does_not_affect_other_sig to_trans_raw_sig_def trans_post_raw_diff_sig)
+
+lemma purge_raw_almost_all_zero:
+  assumes "\<forall>\<^sub>\<infinity>x. \<tau> x = 0"
+  shows "\<forall>\<^sub>\<infinity>x. (purge_raw \<tau> now dly sig def val) x = 0"
+proof -
+  let ?k2 = "inf_time (to_trans_raw_sig \<tau>) sig (now + dly)"
+  have "\<forall>\<^sub>\<infinity>x. override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) {now <.. now + dly} x = 0"
+    using assms  by (simp add: MOST_mono override_on_def zero_fun_def zero_option_def)
+  moreover have "\<forall>\<^sub>\<infinity>x. override_on \<tau> (\<lambda>n. (\<tau> n)(sig := None)) ({now <..< the ?k2} \<union> {the ?k2 <.. now + dly}) x = 0"
+    using assms  by (simp add: eventually_mono override_on_def zero_fun_def zero_option_def)
+  ultimately show ?thesis
+    unfolding purge_raw_def Let_def by auto
+qed
+
+lemma signal_of_inr_post_before_now:
+  assumes "n < now"
+  assumes "\<forall>i < now. \<tau> i = 0"
+  shows "signal_of def (inr_post_raw s v c \<tau> now dly) s n = def"
+proof -
+  have "\<forall>t \<le> n. inr_post_raw s v c \<tau> now dly t = 0"
+    using assms(2) 
+    by (smt add_leE assms(1) inr_post_raw_def le_Suc_ex nat_less_le not_less post_raw_def
+    preempt_raw_def purge_raw_before_now_unchanged trans_post_raw_def)
+  hence "\<forall>t \<in> dom (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s). n < t"
+    by (metis domIff not_less to_trans_raw_sig_def zero_fun_def zero_option_def)
+  hence " inf_time (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly)) s n = None"
+    unfolding sym[OF inf_time_none_iff] by auto
+  thus ?thesis
+    unfolding to_signal_def comp_def by auto
+qed
 
 lemma inr_post_raw_almost_all_zero:
   assumes "\<forall>\<^sub>\<infinity>x. \<tau> x = 0"
-  shows "\<forall>\<^sub>\<infinity>x. inr_post_raw sig val cur_val \<tau> now dly x = 0"
-proof (cases "is_stable_raw dly \<tau> now sig cur_val")
-  case True
+  shows "\<forall>\<^sub>\<infinity>x. inr_post_raw sig val def \<tau> now dly x = 0"
+proof -
+  have **: "\<forall>\<^sub>\<infinity>x. (purge_raw \<tau> now dly sig def val) x = 0"
+    using purge_raw_almost_all_zero[OF assms] by auto
   thus ?thesis
-    unfolding inr_post_raw_def using trans_post_raw_almost_all_zero[OF assms]  by auto
-next
-  case False
-  have **: "\<forall>\<^sub>\<infinity>x. (purge_raw \<tau> now dly sig) x = 0"
-    unfolding purge_raw_def using assms
-    by (smt MOST_mono fun_upd_idem override_on_apply_in override_on_apply_notin zero_fun_def zero_option_def)  
-  thus ?thesis
-    unfolding inr_post_raw_def using False trans_post_raw_almost_all_zero[OF **] by auto 
+    unfolding inr_post_raw_def using trans_post_raw_almost_all_zero[OF **] by auto 
 qed
 
 lemma inr_post_purged:
-  assumes "(\<forall>s. s \<in> dom (\<tau> now) \<longrightarrow> \<sigma> s = the (\<tau> now s))"
-  shows "\<And>n. now \<le> n \<Longrightarrow> n < now + dly \<Longrightarrow>
-                                     (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some (\<sigma> sig)
+  shows "\<And>n. now < n \<Longrightarrow> n \<le> now + dly \<Longrightarrow>
+                                     (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some val
                                   \<or>  (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = None"
 proof -
   fix n
-  assume "now \<le> n" and "n < now + dly"
-  have "is_stable_raw dly \<tau> now sig (\<sigma> sig) \<or> \<not> is_stable_raw dly \<tau> now sig (\<sigma> sig)"
+  assume "now < n" and "n \<le> now + dly"
+  hence "n < now + dly \<or> n = now + dly"
     by auto
   moreover
-  { assume "is_stable_raw dly \<tau> now sig (\<sigma> sig)"
-    hence "(\<forall>m. now < m \<and> m \<le> now + dly \<longrightarrow> check ( \<tau> m) sig (\<sigma> sig))"
-      using is_stable_raw_correct by metis
-    hence "\<forall>m. now < m \<and> m \<le> now + dly \<longrightarrow> (case  \<tau> m sig of None \<Rightarrow> True | Some val' \<Rightarrow> \<sigma> sig = val')"
+  { assume "n < now + dly"
+    have "inr_post_raw sig val (\<sigma> sig) \<tau> now dly = trans_post_raw sig val (\<sigma> sig) (purge_raw \<tau> now dly sig (\<sigma> sig) val) now dly"
+        (is "?inr = ?trans") unfolding inr_post_raw_def by auto
+    hence "?inr n sig =  ?trans n sig"
       by auto
-    hence "\<forall>m. now < m \<and> m \<le> now + dly \<longrightarrow>  \<tau> m sig = None \<or>  \<tau> m sig = Some (\<sigma> sig)"
-      using option.inject by fastforce
-    hence disj: " \<tau> n sig = None \<or>  \<tau> n sig = Some (\<sigma> sig)"
-      using `now \<le> n` `n < now + dly` using assms by (smt domIff le_eq_less_or_eq option.exhaust_sel)
-    have "inr_post_raw sig val (\<sigma> sig) \<tau> now dly = trans_post_raw sig val (\<sigma> sig) \<tau> now dly" (is "?inr = ?trans")
-      using `is_stable_raw dly \<tau> now sig (\<sigma> sig)` unfolding inr_post_raw_def by auto
-    hence " ?inr n sig =  ?trans n sig"
-      by auto
-    also have "... =  \<tau> n sig"
-      using `n < now + dly`  unfolding trans_post_raw_def post_raw_def preempt_raw_def by auto
-    finally have " ?inr n sig =  \<tau> n sig"
-      by auto
-    hence " ?inr n sig = None \<or>  ?inr n sig = Some (\<sigma> sig)"
-      using disj by auto }
-  moreover
-  { assume "\<not> is_stable_raw dly \<tau> now sig (\<sigma> sig)"
-    hence "inr_post_raw sig val (\<sigma> sig) \<tau> now dly = trans_post_raw sig val (\<sigma> sig) (purge_raw \<tau> now dly sig) now dly"
-      (is "?inr = ?trans") unfolding inr_post_raw_def by auto
-    hence " ?inr n sig =  ?trans n sig"
-      by auto
-    also have "... =  (purge_raw \<tau> now dly sig) n sig" (is "_ =  ?purge_raw n sig")
-      using `n < now + dly`  unfolding trans_post_raw_def post_raw_def preempt_raw_def by auto
+    also have "... =  (purge_raw \<tau> now dly sig (\<sigma> sig) val) n sig" (is "_ =  ?purge_raw n sig")
+      using `n < now + dly`  by (metis to_trans_raw_sig_def trans_post_less) 
     finally have " ?inr n sig =  ?purge_raw n sig"
       by auto
-    moreover have " ?purge_raw n sig = None \<or>  ?purge_raw n sig = Some (\<sigma> sig)"
-      using purge_raw_correctness'[where \<tau>'="?purge_raw"] `now \<le> n` `n < now + dly` assms
-    proof -
-      have f1: "\<forall>z b. ((Some b = z \<or> z = None) \<or> \<not> the z) \<or> \<not> b"
-        by force
-      moreover
-      { assume "\<tau> now sig \<noteq> Some (now \<le> now)"
-      moreover
-      { assume "(Some (now \<le> n) \<noteq> purge_raw \<tau> now dly sig n sig \<and> Some (now \<le> n) \<noteq> \<tau> now sig) \<and> \<tau> now sig \<noteq> None"
-      moreover
-      { assume "(\<not> the (purge_raw \<tau> now dly sig n sig) \<and> \<not> the (\<tau> now sig)) \<and> sig \<in> dom (\<tau> now)"
-        then have "(purge_raw \<tau> now dly sig n sig = None \<or> purge_raw \<tau> now dly sig n sig = Some (\<sigma> sig)) \<or> (\<exists>b. (\<not> \<sigma> sig \<and> \<not> b) \<and> Some b = purge_raw \<tau> now dly sig n sig)"
-          by (metis (no_types) \<open>\<forall>s. s \<in> dom (\<tau> now) \<longrightarrow> \<sigma> s = the (\<tau> now s)\<close> option.exhaust_sel)
-        then have ?thesis by fastforce }
-        ultimately have ?thesis
-          using f1 by (metis \<open>now \<le> n\<close> domIff) }
-        ultimately have "n = now \<longrightarrow> (\<exists>a n f. purge_raw f now n (a::'a) now \<noteq> f now) \<or> \<tau> now sig = None \<or> purge_raw \<tau> now dly sig n sig = None \<or> purge_raw \<tau> now dly sig n sig = Some (\<sigma> sig)"
-          by force }
-      ultimately show ?thesis
-        by (metis \<open>\<forall>s. s \<in> dom (\<tau> now) \<longrightarrow> \<sigma> s = the (\<tau> now s)\<close> \<open>n < now + dly\<close> \<open>now \<le> n\<close> domIff option.exhaust_sel option.simps(1) order.strict_iff_order purge_raw_before_now_unchanged purge_raw_correctness')
-    qed
-    ultimately have " ?inr n sig = None \<or>  ?inr n sig = Some (\<sigma> sig)"
-      by auto }
-  ultimately show " (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some (\<sigma> sig) \<or>
-                    (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = None"
-    by linarith
+    moreover have " ?purge_raw n sig = None \<or>  ?purge_raw n sig = Some val"
+      using purge_raw_correctness[of "\<tau>" "now" "dly" "sig" "\<sigma> sig" "val" "purge_raw \<tau> now dly sig (\<sigma>
+      sig) val"] `now < n` `n < now + dly` using case_optionE by fastforce
+    ultimately have " ?inr n sig = None \<or>  ?inr n sig = Some val"
+      by auto
+    hence " inr_post_raw sig val (\<sigma> sig) \<tau> now dly n sig = Some val  \<or> inr_post_raw sig val (\<sigma> sig) \<tau> now dly n sig = None"
+      by linarith }
+  moreover
+  { assume "n = now + dly"
+    hence " inr_post_raw sig val (\<sigma> sig) \<tau> now dly n sig = Some val  \<or> inr_post_raw sig val (\<sigma> sig) \<tau> now dly n sig = None"
+      unfolding inr_post_raw_def trans_post_raw_def post_raw_def preempt_raw_def by auto }
+  ultimately show "inr_post_raw sig val (\<sigma> sig) \<tau> now dly n sig = Some val  \<or> inr_post_raw sig val (\<sigma> sig) \<tau> now dly n sig = None"
+    by auto
 qed
 
 lemma inr_post_purged': 
   assumes "\<tau> now = 0"
-  shows "\<And>n. now \<le> n \<Longrightarrow> n < now + dly \<Longrightarrow>
-                                     (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some (\<sigma> sig)
+  shows "\<And>n. now \<le> n \<Longrightarrow> n \<le> now + dly \<Longrightarrow>
+                                     (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some val
                                   \<or>  (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = None"
 proof -
-  have "(\<forall>s. s \<in> dom (\<tau> now) \<longrightarrow> \<sigma> s = the (\<tau> now s))"
-    using assms by (auto simp add: zero_fun_def zero_option_def)
-  thus "\<And>n. now \<le> n \<Longrightarrow> n < now + dly \<Longrightarrow>
-                                     (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some (\<sigma> sig)
-                                  \<or>  (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = None"
-    using inr_post_purged by metis
+  fix n
+  assume "now \<le> n"
+  assume "n \<le> now + dly"
+  hence "n < now + dly \<or> n = now + dly"
+    by auto
+  moreover
+  { assume "n < now + dly"
+  
+    have "now = n \<or> now < n"
+      using `now \<le> n` by auto
+    moreover
+    { assume "now < n"
+      hence "(inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some val
+                                    \<or>   (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = None"
+        using inr_post_purged[OF `now < n` less_imp_le[OF `n < now + dly`]] by metis }
+    moreover
+    { assume "now = n"
+      hence "(inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n = \<tau> n"
+        unfolding inr_post_raw_def 
+        by (metis \<open>n < now + dly\<close> \<open>now \<le> n\<close> leD order.asym post_raw_def preempt_raw_def
+        purge_raw_before_now_unchanged trans_post_raw_def)
+      hence "(inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some val
+                                    \<or>  (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = None"
+        using assms  by (simp add: \<open>now = n\<close> zero_fun_def zero_option_def) }
+    ultimately have "(inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some val
+                                    \<or>  (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = None"
+      by auto }
+  moreover
+  { assume "n = now + dly"
+    hence " inr_post_raw sig val (\<sigma> sig) \<tau> now dly n sig = Some val  \<or> inr_post_raw sig val (\<sigma> sig) \<tau> now dly n sig = None"
+      unfolding inr_post_raw_def trans_post_raw_def post_raw_def preempt_raw_def by auto }
+  ultimately show "(inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = Some val
+                                    \<or>  (inr_post_raw sig val (\<sigma> sig) \<tau> now dly) n sig = None"
+    by auto
 qed
 
 lemma signal_of_inr_post:
@@ -1041,179 +1243,55 @@ lemma signal_of_inr_post:
   assumes "\<forall>i < now. \<tau> i = 0"
   assumes "0 < dly"
   shows "signal_of c (inr_post_raw s v c \<tau> now dly) s t = v"
-proof (cases "is_stable_raw dly \<tau> now s c")
-  case True
-  have "post_necessary_raw (dly-1) ( \<tau>) now s v c \<or> \<not> post_necessary_raw (dly-1) ( \<tau>) now s v c"
-    by auto
-  moreover
-  { assume "post_necessary_raw (dly-1) ( \<tau>) now s v c"
-    have "inf_time (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly)) s t = Some (now + dly)"
-    proof (rule inf_time_someI)
-      show " now + dly \<in> dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s))"
-        using True `post_necessary_raw (dly-1) ( \<tau>) now s v c`
-        unfolding inr_post_raw_def  unfolding trans_post_raw_def post_raw_def to_trans_raw_sig_def
-        by auto
-    next
-      show "now + dly \<le> t" using assms by auto
-    next
-      { fix ta
-        assume *: "ta \<in> dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s))"
-        assume "ta \<le> t"
-        have "ta \<le> now + dly"
-        proof (rule ccontr)
-          assume "\<not> ta \<le> now + dly"
-          hence "now + dly < ta" by auto
-          hence " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) ta = None"
-            unfolding inr_post_raw_def  unfolding trans_post_raw_def to_trans_raw_sig_def
-            post_raw_def preempt_raw_def by auto
-          with * show "False" by auto
-        qed }
-      thus " \<forall>ta\<in>dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)). ta \<le> t \<longrightarrow> ta \<le> now + dly"
-        by auto
-    qed
-    moreover have " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) (now + dly) = Some v"
-      using True `post_necessary_raw (dly-1) ( \<tau>) now s v c`
-      unfolding inr_post_raw_def  unfolding to_trans_raw_sig_def trans_post_raw_def post_raw_def 
-      by auto
-    ultimately have ?thesis
-      unfolding to_signal_def comp_def by auto }
-  moreover
-  { assume not_nec: "\<not> post_necessary_raw (dly-1) ( \<tau>) now s v c"
-    then obtain i where "now \<le> i \<and> i \<le> now + (dly-1) \<and>  \<tau> i s = Some v \<and> (\<forall>j>i. j \<le> now + (dly-1) \<longrightarrow>  \<tau> j s = None) \<or>
-                        (\<forall>i\<ge>now. i \<le> now + (dly-1) \<longrightarrow>  \<tau> i s = None) \<and> v = c"
-      using post_necessary_raw_correctness[of "dly-1" " \<tau>" "now" "s" "v" "c"] by metis
-    moreover
-    { assume "now \<le> i \<and> i \<le> now + (dly-1) \<and>  \<tau> i s = Some v \<and> (\<forall>j>i. j \<le> now + (dly-1) \<longrightarrow>  \<tau> j s = None)"
-      hence "now \<le> i" and "i \<le> now + (dly-1)" and " \<tau> i s = Some v" and **: "(\<forall>j>i. j \<le> now + (dly-1) \<longrightarrow>  \<tau> j s = None)"
-        by auto
-      have "inf_time (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly)) s t = Some i"
-      proof (rule inf_time_someI)
-        show "i \<in> dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s))"
-          using True ` \<tau> i s = Some v` `\<not> post_necessary_raw (dly-1) ( \<tau>) now s v c` `i \<le> now + (dly-1)` `0 < dly`
-          unfolding inr_post_raw_def  unfolding trans_post_raw_def to_trans_raw_sig_def preempt_raw_def
-          by auto
-      next
-        show "i \<le> t"
-          using `i  \<le> now + (dly-1)` assms by auto
-      next
-        { fix ta
-          assume *: "ta \<in> dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s))"
-          assume "ta \<le> t"
-          have "ta \<le> i"
-          proof (rule ccontr)
-            assume "\<not> ta \<le> i"
-            hence "i < ta" by auto
-            hence " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) ta = None"
-              using True `\<not> post_necessary_raw (dly-1) ( \<tau>) now s v c` **
-              unfolding inr_post_raw_def  unfolding trans_post_raw_def to_trans_raw_sig_def
-              preempt_raw_def by auto
-            with * show "False" by auto
-          qed }
-        thus "\<forall>ta\<in>dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)). ta \<le> t \<longrightarrow> ta \<le> i"
-          by auto
-      qed
-      moreover have " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) i = Some v"
-        using True `\<not> post_necessary_raw (dly-1) ( \<tau>) now s v c` ` \<tau> i s = Some v` `i \<le> now + (dly-1)` `0 < dly`
-        unfolding inr_post_raw_def  unfolding to_trans_raw_sig_def trans_post_raw_def preempt_raw_def
-        by auto
-      ultimately have ?thesis
-        unfolding to_signal_def comp_def by auto }
-    moreover
-    { assume "(\<forall>i\<ge>now. i \<le> now + (dly-1) \<longrightarrow>  \<tau> i s = None) \<and> v = c"
-      have " \<forall>ta\<in>dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)). t < ta"
-      proof (rule ccontr)
-        assume "\<not> (\<forall>ta\<in>dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)). t < ta)"
-        then obtain ta where "ta\<in>dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s))"
-          and "ta \<le> t" using leI by blast
-        hence absurd: " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) ta \<noteq> 0"
-          by (simp add: domIff zero_option_def)
-        have "ta < now \<or> now \<le> ta \<and> ta \<le> now + dly \<or> now + dly < ta"
-          by auto
-        moreover
-        { assume "ta < now"
-          hence " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) ta = 0"
-            by (metis True add_diff_cancel_left' assms(2) assms(3) inr_post_raw_def le_less_trans
-            order.strict_iff_order to_trans_raw_sig_def trans_post_less zero_fun_def zero_less_diff)
-          hence "False"
-            using absurd by auto }
-        moreover
-        { assume "now \<le> ta \<and> ta \<le> now + dly"
-          hence "inr_post_raw s v c \<tau> now dly = trans_post_raw s v c \<tau> now dly"
-            using True unfolding inr_post_raw_def by auto
-          hence " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) ta =
-                  (to_trans_raw_sig (trans_post_raw s v c \<tau> now dly) s) ta"
-            by auto
-          also have "... = 0"
-            using not_nec `now \<le> ta \<and> ta \<le> now + dly` `(\<forall>i\<ge>now. i \<le> now + (dly-1) \<longrightarrow>  \<tau> i s = None) \<and> v = c`
-            by ( auto simp add :to_trans_raw_sig_def trans_post_raw_def preempt_raw_def zero_option_def)
-          finally have " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) ta = 0"
-            by auto
-          with absurd have False by auto }
-        moreover
-        { assume "now + dly < ta"
-          hence " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) ta = 0"
-            using True not_nec unfolding inr_post_raw_def
-            by ( auto simp add: to_trans_raw_sig_def trans_post_raw_def preempt_raw_def zero_option_def)
-          with absurd have False by auto }
-        ultimately show False by auto
-      qed
-      hence "inf_time (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly)) s t = None"
-        by (simp add: inf_time_none_iff) 
-      hence ?thesis
-        by (simp add: \<open>(\<forall>i\<ge>now. i \<le> now + (dly-1) \<longrightarrow> \<tau> i s = None) \<and> v = c\<close> to_signal_def) }
-    ultimately have ?thesis by auto }
-  ultimately show ?thesis by auto
-next
-  case False
-  let ?\<tau>' = "purge_raw \<tau> now dly s"
+proof -
+  let ?\<tau>' = "purge_raw \<tau> now dly s c v"
   have "post_necessary_raw (dly - 1) ( ?\<tau>') now s v c \<or> \<not> post_necessary_raw (dly - 1) ( ?\<tau>') now s v c"
     by auto
   moreover
   { assume "post_necessary_raw (dly-1) ( ?\<tau>') now s v c"
     have "inf_time (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly)) s t = Some (now + dly)"
     proof (rule inf_time_someI)
-      show " now + dly \<in> dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s))"
-        using False `post_necessary_raw (dly-1) ( ?\<tau>') now s v c`
-        unfolding inr_post_raw_def  unfolding trans_post_raw_def post_raw_def to_trans_raw_sig_def
-        by auto
+      show " now + dly \<in> dom (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)"
+        using `post_necessary_raw (dly-1) ( ?\<tau>') now s v c`
+        by (simp add: domIff inr_post_raw_def post_raw_def to_trans_raw_sig_def trans_post_raw_def)
     next
       show "now + dly \<le> t" using assms by auto
     next
       { fix ta
-        assume *: "ta \<in> dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s))"
+        assume *: "ta \<in> dom (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)"
         assume "ta \<le> t"
         have "ta \<le> now + dly"
         proof (rule ccontr)
           assume "\<not> ta \<le> now + dly"
           hence "now + dly < ta" by auto
           hence " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) ta = None"
-            unfolding inr_post_raw_def  unfolding trans_post_raw_def post_raw_def to_trans_raw_sig_def
-            preempt_raw_def by auto
+            using \<open>0 < dly\<close> `post_necessary_raw (dly-1) ( ?\<tau>') now s v c`
+            unfolding inr_post_raw_def trans_post_raw_def post_raw_def to_trans_raw_sig_def comp_def 
+            purge_raw_def Let_def by auto
           with * show "False" by auto
         qed }
-      thus " \<forall>ta\<in>dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)). ta \<le> t \<longrightarrow> ta \<le> now + dly"
+      thus " \<forall>ta\<in>dom (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s). ta \<le> t \<longrightarrow> ta \<le> now + dly"
         by auto
     qed
     moreover have " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) (now + dly) = Some v"
-      using False `post_necessary_raw (dly-1) ( ?\<tau>') now s v c`
-      unfolding inr_post_raw_def  unfolding to_trans_raw_sig_def post_raw_def trans_post_raw_def 
-      by auto
+      using `post_necessary_raw (dly-1) (?\<tau>') now s v c`
+      unfolding inr_post_raw_def   by (simp add: post_raw_def to_trans_raw_sig_def trans_post_raw_def)
     ultimately have ?thesis
       unfolding to_signal_def comp_def by auto }
   moreover
   { assume not_nec: "\<not> post_necessary_raw (dly-1) ( ?\<tau>') now s v c"
-    then obtain i where "now \<le> i \<and> i \<le> now + (dly-1) \<and>  (purge_raw \<tau> now dly s) i s = Some v \<and> (\<forall>j>i. j \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s) j s = None) \<or>
-                        (\<forall>i\<ge>now. i \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s) i s = None) \<and> v = c"
-      using post_necessary_raw_correctness[of "dly-1" "(purge_raw \<tau> now dly s)" "now" "s" "v" "c"]
+    then obtain i where "i \<le> now + (dly-1) \<and>  (purge_raw \<tau> now dly s c v) i s = Some v \<and> (\<forall>j>i. j \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s c v) j s = None) \<or>
+                        (\<forall>i. i \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s c v) i s = None) \<and> v = c"
+      using post_necessary_raw_correctness[of "c" "purge_raw \<tau> now dly s c v" "s" "now" "dly - 1" "v"]
       by metis
     moreover
-    { assume "now \<le> i \<and> i \<le> now + (dly-1) \<and>  ?\<tau>' i s = Some v \<and> (\<forall>j>i. j \<le> now + (dly-1) \<longrightarrow>  ?\<tau>' j s = None)"
-      hence "now \<le> i" and "i \<le> now + (dly-1)" and " ?\<tau>' i s = Some v" and **: "\<forall>j>i. j \<le> now + (dly-1) \<longrightarrow>  ?\<tau>' j s = None"
+    { assume "i \<le> now + (dly-1) \<and>  ?\<tau>' i s = Some v \<and> (\<forall>j>i. j \<le> now + (dly-1) \<longrightarrow>  ?\<tau>' j s = None)"
+      hence "i \<le> now + (dly-1)" and " ?\<tau>' i s = Some v" and **: "\<forall>j>i. j \<le> now + (dly-1) \<longrightarrow>  ?\<tau>' j s = None"
         by auto
       have "inf_time (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly)) s t = Some i"
       proof (rule inf_time_someI)
         show "i \<in> dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s))"
-          using False ` ?\<tau>' i s = Some v` not_nec `i \<le> now + (dly-1)` `0 < dly`
+          using ` ?\<tau>' i s = Some v` not_nec `i \<le> now + (dly-1)` `0 < dly`
           unfolding inr_post_raw_def  unfolding trans_post_raw_def to_trans_raw_sig_def preempt_raw_def
           by auto
       next
@@ -1228,7 +1306,7 @@ next
             assume "\<not> ta \<le> i"
             hence "i < ta" by auto
             hence " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) ta = None"
-              using False `\<not> post_necessary_raw (dly-1) ( ?\<tau>') now s v c` **
+              using `\<not> post_necessary_raw (dly-1) ( ?\<tau>') now s v c` **
               unfolding inr_post_raw_def  unfolding trans_post_raw_def to_trans_raw_sig_def
               preempt_raw_def by auto
             with * show "False" by auto
@@ -1237,13 +1315,13 @@ next
           by auto
       qed
       moreover have " (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s) i = Some v"
-        using False `\<not> post_necessary_raw (dly-1) ( ?\<tau>') now s v c` ` ?\<tau>' i s = Some v` `i \<le> now + (dly-1)` `0 < dly`
+        using `\<not> post_necessary_raw (dly-1) ( ?\<tau>') now s v c` ` ?\<tau>' i s = Some v` `i \<le> now + (dly-1)` `0 < dly`
         unfolding inr_post_raw_def  unfolding to_trans_raw_sig_def trans_post_raw_def preempt_raw_def
         by auto
       ultimately have ?thesis
         unfolding to_signal_def comp_def by auto }
     moreover
-    { assume "(\<forall>i\<ge>now. i \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s) i s = None) \<and> v = c"
+    { assume "(\<forall>i. i \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s c v) i s = None) \<and> v = c"
       have "\<forall>ta\<in>dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)). t < ta"
       proof (rule ccontr)
         assume "\<not> (\<forall>ta\<in>dom ( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)). t < ta)"
@@ -1251,8 +1329,8 @@ next
           using leI by auto
         hence "( (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly) s)) ta \<noteq> 0"
           by (metis domD option.distinct(1) zero_option_def)
-        moreover have "inr_post_raw s v c \<tau> now dly = trans_post_raw s v c (purge_raw \<tau> now dly s) now dly"
-          using False unfolding inr_post_raw_def by auto
+        moreover have "inr_post_raw s v c \<tau> now dly = trans_post_raw s v c (purge_raw \<tau> now dly s c v) now dly"
+          unfolding inr_post_raw_def by auto
         ultimately have absurd: " (to_trans_raw_sig (trans_post_raw s v c ?\<tau>' now dly) s) ta \<noteq> 0"
           by auto
         have "ta < now \<or> now \<le> ta \<and> ta \<le> now + dly \<or> now + dly < ta"
@@ -1268,7 +1346,7 @@ next
         moreover
         { assume "now \<le> ta \<and> ta \<le> now + dly"
           hence " (to_trans_raw_sig (trans_post_raw s v c ?\<tau>' now dly) s) ta = 0"
-            using not_nec `(\<forall>i\<ge>now. i \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s) i s = None) \<and> v = c`
+            using not_nec `(\<forall>i. i \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s c v) i s = None) \<and> v = c`
             by ( auto simp add: zero_option_def to_trans_raw_sig_def trans_post_raw_def preempt_raw_def)
           with absurd have False by auto }
         moreover
@@ -1282,7 +1360,7 @@ next
       hence "inf_time (to_trans_raw_sig (inr_post_raw s v c \<tau> now dly)) s t = None"
         by (auto simp add: inf_time_none_iff)
       hence ?thesis
-        unfolding to_signal_def comp_def using `(\<forall>i\<ge>now. i \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s) i s = None) \<and> v = c`
+        unfolding to_signal_def comp_def using `(\<forall>i. i \<le> now + (dly-1) \<longrightarrow>  (purge_raw \<tau> now dly s c v) i s = None) \<and> v = c`
         by auto }
     ultimately have ?thesis by auto }
   ultimately show ?thesis by auto
@@ -1387,7 +1465,7 @@ lemma dom_map_diff_trans_post:
   by (simp add: dom_map_diff_preempt_raw dom_map_diff_trans_post_raw trans_post_raw_def)
 
 lemma dom_map_diff_purge:
-  "\<And>n. dom (map_diff_trans_raw (purge_raw \<tau> t dly sig) \<tau> n) \<subseteq> {sig}"
+  "\<And>n. dom (map_diff_trans_raw (purge_raw \<tau> t dly sig def val) \<tau> n) \<subseteq> {sig}"
   by (smt domIff insertCI map_diff_def purge_raw_does_not_affect_other_sig subsetI)
 
 lemma dom_map_diff_inr_post:
@@ -1496,13 +1574,14 @@ lemma trans_post_preserve_trans_removal_nonstrict:
 
 lemma purge_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
-  shows "\<And>n. n < t \<Longrightarrow> (purge_raw \<tau> t dly sig) n = 0"
-  using assms by (auto simp add: purge_raw_def)
+  shows "\<And>n. n < t \<Longrightarrow> (purge_raw \<tau> t dly sig def val) n = 0"
+  using assms 
+  by (metis less_or_eq_imp_le purge_raw_before_now_unchanged)
 
 lemma purge_preserve_trans_removal_nonstrict:
   assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
-  shows "\<And>n. n \<le> t \<Longrightarrow> (purge_raw \<tau> t dly sig) n = 0"
-  using assms by (auto simp add: purge_raw_def)
+  shows "\<And>n. n \<le> t \<Longrightarrow> (purge_raw \<tau> t dly sig def val) n = 0"
+  using assms  by (metis purge_raw_before_now_unchanged)
 
 lemma inr_post_preserve_trans_removal:
   assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
@@ -1517,22 +1596,161 @@ lemma inr_post_preserve_trans_removal_nonstrict:
   using assms  unfolding inr_post_raw_def 
   by (auto simp add: trans_post_preserve_trans_removal_nonstrict purge_preserve_trans_removal_nonstrict)
 
-lemma signal_of_inr_post2:
-  assumes "now \<le> t" and "t < now + dly"
+lemma switch_signal_ex_mapping:
+  assumes "signal_of (\<sigma> s) \<tau> s now \<noteq> v" and "signal_of (\<sigma> s) \<tau> s (now + dly) \<noteq> (\<not> v)"
+  assumes "\<And>n. n \<le> now \<Longrightarrow> \<tau> n s = 0"
+  shows "\<exists>n. now < n \<and> n \<le> now + dly \<and> \<tau> n s = Some v"
+proof (rule ccontr)
+  assume "\<not> (\<exists>n. now < n \<and> n \<le> now + dly \<and> \<tau> n s = Some v)"
+  hence 0: "\<forall>n. now < n \<and> n \<le> now + dly \<longrightarrow> \<tau> n s = None \<or> \<tau> n s = Some (\<not> v)"
+    by fastforce
+  hence "signal_of (\<sigma> s) \<tau> s (now + dly) = (\<not> v)"
+  proof (cases "inf_time (to_trans_raw_sig \<tau>) s (now + dly) = None")
+    case True
+    have "inf_time (to_trans_raw_sig \<tau>) s now = None"
+      unfolding sym[OF inf_time_none_iff] using assms 
+      by (metis True domIff dual_order.trans inf_time_noneE2 le_add1 not_le_imp_less zero_option_def)
+    hence "\<sigma> s \<noteq> v"
+      using assms(1) 
+      unfolding to_signal_def comp_def by auto
+    then show ?thesis 
+      unfolding to_signal_def comp_def using True by auto
+  next
+    case False
+    then obtain time where inf: "inf_time (to_trans_raw_sig \<tau>) s (now + dly) = Some time"
+      by auto
+    hence "time \<in> keys (to_trans_raw_sig \<tau> s) \<and> time \<le> now + dly"
+      using inf_time_some_exists by fastforce
+    hence "\<tau> time s \<noteq> None" and "time \<le> now + dly"
+      unfolding keys_def to_trans_raw_sig_def  by (simp add: zero_option_def)+
+    hence "now < time"
+      using assms(3)  by (metis leI zero_fun_def zero_option_def)
+    with \<open>time \<le> now + dly\<close> have "\<tau> time s = Some (\<not> v)"
+      using 0 \<open>\<tau> time s \<noteq> None\<close> by auto
+    then show ?thesis 
+      unfolding to_signal_def comp_def using inf  by (simp add: to_trans_raw_sig_def)
+  qed
+  with assms(2) show False
+    by auto
+qed  
+
+lemma earlier_post_time:
+  assumes "signal_of (\<sigma> s) \<tau> s now \<noteq> v" and "signal_of (\<sigma> s) \<tau> s (now + dly) \<noteq> (\<not> v)"
   assumes "\<And>n. n \<le> now \<Longrightarrow> \<tau> n = 0"
+  shows "inf_time (to_trans_raw_sig \<tau>) s (now + dly) = Some (GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v)"
+proof -
+  let ?time = "GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v"
+  let ?k2 = "inf_time (to_trans_raw_sig \<tau>) s (now + dly)"
+  have *: "\<exists>n. now < n \<and> n \<le> now + dly \<and> \<tau> n s = Some v"
+    using switch_signal_ex_mapping[of "\<sigma>", OF `signal_of (\<sigma> s) \<tau> s now \<noteq> v` `signal_of (\<sigma> s) \<tau> s (now + dly) \<noteq> (\<not> v)`] assms(3)
+    by (simp add: zero_fun_def)
+  hence "?time \<in> keys (to_trans_raw_sig \<tau> s) \<and> ?time \<le> now + dly"
+    using GreatestI_ex_nat[where P="\<lambda>x. x \<le> now + dly \<and> \<tau> x s = Some v" and b="now + dly"]
+    unfolding keys_def to_trans_raw_sig_def 
+    by (metis (mono_tags, lifting) CollectI option.simps(3) zero_option_def)
+  have "\<tau> ?time s = Some v"
+    by (smt "*" GreatestI_nat)
+  have assms4: "signal_of (\<sigma> s) \<tau> s (now + dly) = v"
+    using assms(2) by auto
+  have **: "\<exists>m\<le>now + dly. to_trans_raw_sig \<tau> s m = Some v \<and> (\<forall>j>m. j \<le> now + dly \<longrightarrow> to_trans_raw_sig \<tau> s j = None)"
+    using signal_of_elim[OF assms4] *  by auto
+  have "\<forall>j > ?time. j \<le> now + dly \<longrightarrow> to_trans_raw_sig \<tau> s j = None"
+  proof (rule ccontr)
+    assume "\<not> (\<forall>j > ?time. j \<le> now + dly \<longrightarrow> to_trans_raw_sig \<tau> s j = None)"
+    then obtain j where "j > ?time" and "j \<le> now + dly" and "to_trans_raw_sig \<tau> s j \<noteq> None"
+      by blast
+    hence "to_trans_raw_sig \<tau> s j = Some (\<not> v)"
+      using Greatest_le_nat[where P="\<lambda>x. x \<le> now + dly \<and> \<tau> x s = Some v" and b="now + dly"]
+    proof -
+      obtain nn :: nat and nna :: nat where
+        f1: "\<And>n na. nn \<le> now + dly \<and> nna \<le> now + dly \<and> to_trans_raw_sig \<tau> s nna = Some v \<and> (\<not> nna < n \<or> \<not> n \<le> now + dly \<or> to_trans_raw_sig \<tau> s n = None) \<and> (\<not> nn \<le> now + dly \<or> \<not> na \<le> now + dly \<or> \<tau> na s \<noteq> Some v \<or> na \<le> (GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v))"
+        using "**" \<open>\<And>k. \<lbrakk>k \<le> now + dly \<and> \<tau> k s = Some v; \<forall>y. y \<le> now + dly \<and> \<tau> y s = Some v \<longrightarrow> y \<le> now + dly\<rbrakk> \<Longrightarrow> k \<le> (GREATEST x. x \<le> now + dly \<and> \<tau> x s = Some v)\<close> by auto
+      then have "\<tau> nna s = Some v"
+        by (simp add: to_trans_raw_sig_def)
+      then have False
+        using f1 \<open>(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) < j\<close> \<open>j \<le> now + dly\<close> \<open>to_trans_raw_sig \<tau> s j \<noteq> None\<close> by fastforce
+      then show ?thesis
+        by meson
+    qed
+    have "\<forall>m \<le> now + dly. to_trans_raw_sig \<tau> s m = Some v \<longrightarrow> \<not> (\<forall>j > m. j \<le> now + dly \<longrightarrow> to_trans_raw_sig \<tau> s j = None)"
+    proof (rule, rule, rule)
+      fix m
+      assume "m \<le> now + dly"
+      assume "to_trans_raw_sig \<tau> s m = Some v"
+      hence "\<tau> m s = Some v"
+        by (simp add: to_trans_raw_sig_def)
+      hence "m \<le> ?time"
+        using Greatest_le_nat[where P="\<lambda>x. x \<le> now + dly \<and> \<tau> x s = Some v" and b="now + dly"]
+        \<open>m \<le> now + dly\<close> by auto
+      have "j > m \<and> j \<le> now + dly \<and> to_trans_raw_sig \<tau> s j \<noteq> None"
+        using \<open>j > ?time\<close> \<open>?time \<ge> m\<close> \<open>j \<le> now + dly\<close> \<open>to_trans_raw_sig \<tau> s j = Some (\<not> v)\<close>
+        using le_less_trans by blast
+      thus " \<not> (\<forall>j>m. j \<le> now + dly \<longrightarrow> to_trans_raw_sig \<tau> s j = None)"
+        by auto
+    qed
+    with ** show False
+      by auto
+  qed
+  hence "\<forall>t\<in>dom (to_trans_raw_sig \<tau> s). t \<le> now + dly \<longrightarrow> t \<le> ?time"
+    by (meson domIff not_le_imp_less)
+  show "?k2 = Some ?time"
+  proof (intro inf_time_someI)
+    show "(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) \<in> dom (to_trans_raw_sig \<tau> s)"
+      by (metis (full_types) \<open>(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) \<in> keys (to_trans_raw_sig
+      \<tau> s) \<and> (GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) \<le> now + dly\<close> dom_def keys_def
+      zero_option_def)
+  next
+    show "(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) \<le> now + dly"
+      using \<open>(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) \<in> keys (to_trans_raw_sig \<tau> s) \<and> (GREATEST
+      n. n \<le> now + dly \<and> \<tau> n s = Some v) \<le> now + dly\<close> by blast
+  next
+    show " \<forall>t\<in>dom (to_trans_raw_sig \<tau> s). t \<le> now + dly \<longrightarrow> t \<le> (GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v)"
+      using \<open>\<forall>t\<in>dom (to_trans_raw_sig \<tau> s). t \<le> now + dly \<longrightarrow> t \<le> (GREATEST n. n \<le> now + dly \<and> \<tau> n s =
+      Some v)\<close> by blast
+  qed
+qed
+
+lemma signal_of_inr_post2:
+  assumes "now \<le> t"
+  assumes "\<And>n. n \<le> now \<Longrightarrow> \<tau> n = 0"
+  assumes "\<sigma> s \<longleftrightarrow> \<not> v" and "signal_of (\<sigma> s) \<tau> s (now + dly) = v"
+  assumes "t < (GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v)"
   shows "signal_of (\<sigma> s) (inr_post_raw s v (\<sigma> s) \<tau> now dly) s t = (\<sigma> s)"
   using assms 
 proof (cases "inf_time (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly)) s t = None")
   case True
   then show ?thesis  unfolding to_signal_def comp_def by auto
 next
+  let ?time = "GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v"
+  let ?k2 = "inf_time (to_trans_raw_sig \<tau>) s (now + dly)"
+  have 0: "signal_of (\<sigma> s) \<tau> s now \<noteq> v"
+    using assms(2-3)  by (metis signal_of_val_eq zero_fun_def zero_option_def) 
+  have 1: "signal_of (\<sigma> s) \<tau> s (now + dly) \<noteq> (\<not> v)"
+    using assms(4)  by auto
+  have "?k2 = Some ?time"
+    using earlier_post_time[of "\<sigma>", OF 0 1 assms(2)] by auto
+  have "\<exists>n. now < n \<and> n \<le> now + dly \<and> \<tau> n s = Some v"
+    using switch_signal_ex_mapping[of "\<sigma>", OF 0 1] assms(2)
+    by (simp add: zero_fun_def)
+  hence "?time \<in> keys (to_trans_raw_sig \<tau> s) \<and> ?time \<le> now + dly"
+    using GreatestI_ex_nat[where P="\<lambda>x. x \<le> now + dly \<and> \<tau> x s = Some v" and b="now + dly"]
+    unfolding keys_def to_trans_raw_sig_def
+    by (metis (mono_tags, lifting) CollectI option.simps(3) zero_option_def)
   case False
   then obtain t' where inf: "inf_time (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly)) s t = Some t'"
     by auto
-  hence "t' \<le> t" and "t' < now + dly"
+  hence "t' \<le> t" 
     using assms(2) by (auto dest!: inf_time_at_most)
+  hence "purge_raw \<tau> now dly s (\<sigma> s) v = override_on \<tau> (\<lambda>n. (\<tau> n)(s := None)) ({now<..<the ?k2} \<union> {the ?k2<..now + dly})"
+    using assms(3-4) unfolding purge_raw_def Let_def 
+    by (metis (mono_tags, hide_lams) assms(2) option.distinct(1) signal_of_elim to_trans_raw_sig_def
+    zero_fun_def zero_option_def)
+  also have "... = override_on \<tau> (\<lambda>n. (\<tau> n)(s := None)) ({now<..<?time} \<union> {?time<..now + dly})"
+    using `?k2 = Some ?time` by auto
+  finally have purge_raw_alt_def: "purge_raw \<tau> now dly s (\<sigma> s) v = override_on \<tau> (\<lambda>n. (\<tau> n)(s := None)) ({now<..<?time} \<union> {?time<..now + dly})"
+    by auto
   have *: "\<And>n. n < now \<Longrightarrow>  \<tau> n = 0"
-    using assms(3) by auto
+    using assms(2) by auto
   have **: "\<And>n. n < now \<Longrightarrow>  (inr_post_raw s v (\<sigma> s) \<tau> now dly) n = 0"
     by (simp add: "*" inr_post_preserve_trans_removal)
   have "now \<le> t'"
@@ -1547,14 +1765,253 @@ next
       by (metis domIff zero_fun_def zero_option_def)
     with ` (inr_post_raw s v (\<sigma> s) \<tau> now dly) t' = 0` show False by auto
   qed
-  have ***: "t' \<in> dom ( (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s))"
-    using inf_time_some_exists[OF inf] unfolding dom_is_keys by auto
   have asm4: "\<tau> now = 0"
-    using assms(3) by (auto simp add: zero_fun_def zero_option_def)
-  from inr_post_purged'[of "\<tau>", OF asm4 `now \<le> t'` `t' < now + dly`]
-  have "the ( (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s) t') = (\<sigma> s)"
-    using *** by (metis domIff option.sel to_trans_raw_sig_def)
-  with inf show ?thesis unfolding to_signal_def comp_def by auto
+    using assms(2) by (auto simp add: zero_fun_def zero_option_def)
+  have "t' < ?time"
+    using \<open>t' \<le> t\<close> assms(5) le_less_trans by blast
+  have "inr_post_raw s v (\<sigma> s) \<tau> now dly t' s = trans_post_raw s v (\<sigma> s) (purge_raw \<tau> now dly s (\<sigma> s) v) now dly t' s"
+    unfolding inr_post_raw_def by auto 
+  also have "...  = purge_raw \<tau> now dly s (\<sigma> s) v t' s"
+    using `now \<le> t'` `t' < ?time` `?time \<in> keys (to_trans_raw_sig \<tau> s) \<and> ?time \<le> now + dly`
+    unfolding trans_post_raw_def post_raw_def preempt_raw_def by auto
+  also have "... = None"
+    unfolding purge_raw_alt_def using `now \<le> t'` `\<tau> now = 0` `t' < ?time` 
+    by (metis (mono_tags, lifting) Un_iff fun_upd_same greaterThanLessThan_iff le_neq_implies_less
+    override_on_apply_in purge_raw_alt_def purge_raw_before_now_unchanged zero_fun_def
+    zero_option_def)
+  finally have "inr_post_raw s v (\<sigma> s) \<tau> now dly t' s = None"
+    by auto
+  moreover have "t' \<in> dom ( (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s))"
+    using inf_time_some_exists[OF inf] unfolding dom_is_keys by auto
+  ultimately have False
+    by (metis (full_types) domD option.distinct(1) to_trans_raw_sig_def)
+  thus ?thesis
+    by auto
+qed
+
+lemma signal_of_inr_post3:
+  assumes "now \<le> t" and "t < now + dly"
+  assumes "\<And>n. n \<le> now \<Longrightarrow> \<tau> n = 0"
+  assumes "signal_of (\<sigma> s) \<tau> s now = v \<or> signal_of (\<sigma> s) \<tau> s (now + dly) = (\<not> v)"
+  shows "signal_of (\<sigma> s) (inr_post_raw s v (\<sigma> s) \<tau> now dly) s t = (\<sigma> s)" (is "signal_of _ ?inr_post _ _ = _")
+proof -                   
+  have "?inr_post = trans_post_raw s v (\<sigma> s) (purge_raw \<tau> now dly s (\<sigma> s) v) now dly" (is "_ = ?trans_post")
+    unfolding inr_post_raw_def by auto
+  moreover have "purge_raw \<tau> now dly s (\<sigma> s) v = override_on \<tau> (\<lambda>n. (\<tau> n)(s := None)) {now<..now + dly}"
+    unfolding purge_raw_def using assms(4) by auto  
+  ultimately have  "\<And>n. now < n \<Longrightarrow> n < now + dly \<Longrightarrow> ?inr_post n s = 0"
+    unfolding trans_post_raw_def 
+    by (cases "post_necessary_raw (dly - 1) (purge_raw \<tau> now dly s (\<sigma> s) v) now s v (\<sigma> s)")
+       (auto simp add: preempt_raw_def post_raw_def zero_option_def)
+  with assms(3) have *: "\<And>n. n < now + dly \<Longrightarrow> ?inr_post n s = 0"
+    by (metis (full_types) inr_post_raw_def leI purge_raw_before_now_unchanged to_trans_raw_sig_def
+    trans_post_less zero_fun_def)
+  have "inf_time (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly)) s t = None"
+    unfolding sym[OF inf_time_none_iff]
+  proof 
+    fix x
+    assume "x \<in> dom (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s)"
+    hence "?inr_post x s \<noteq> None"
+      by (simp add: domIff to_trans_raw_sig_def)
+    with * have "now + dly \<le> x"
+      by (metis leI zero_option_def)
+    thus "t < x"
+      using assms(2) by linarith
+  qed
+  thus ?thesis
+    unfolding to_signal_def comp_def by auto
+qed
+
+lemma signal_of_inr_post4:
+  assumes "signal_of (\<sigma> s) \<tau> s now \<noteq> v" and "signal_of (\<sigma> s) \<tau> s (now + dly) \<noteq> (\<not> v)"
+  assumes "(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) \<le> t"
+  assumes "\<And>n. n \<le> now \<Longrightarrow> \<tau> n = 0"
+  shows "signal_of (\<sigma> s) (inr_post_raw s v (\<sigma> s) \<tau> now dly) s t = v" (is "signal_of _ ?inr_post _ _ = _")
+proof -
+  have *: "\<exists>n. now < n \<and> n \<le> now + dly \<and> \<tau> n s = Some v"
+  proof (rule ccontr)
+    assume "\<not> (\<exists>n. now < n \<and> n \<le> now + dly \<and> \<tau> n s = Some v)"
+    hence 0: "\<forall>n. now < n \<and> n \<le> now + dly \<longrightarrow> \<tau> n s = None \<or> \<tau> n s = Some (\<not> v)"
+      by fastforce
+    hence "signal_of (\<sigma> s) \<tau> s (now + dly) = (\<not> v)"
+    proof (cases "inf_time (to_trans_raw_sig \<tau>) s (now + dly) = None")
+      case True
+      have "inf_time (to_trans_raw_sig \<tau>) s now = None"
+        unfolding sym[OF inf_time_none_iff] using assms(4) 
+        by (metis True domIff dual_order.trans inf_time_noneE2 le_add1 not_le_imp_less zero_option_def)
+      hence "\<sigma> s \<noteq> v"
+        using assms(1) 
+        unfolding to_signal_def comp_def by auto
+      then show ?thesis 
+        unfolding to_signal_def comp_def using True by auto
+    next
+      case False
+      then obtain time where inf: "inf_time (to_trans_raw_sig \<tau>) s (now + dly) = Some time"
+        by auto
+      hence "time \<in> keys (to_trans_raw_sig \<tau> s) \<and> time \<le> now + dly"
+        using inf_time_some_exists by fastforce
+      hence "\<tau> time s \<noteq> None" and "time \<le> now + dly"
+        unfolding keys_def to_trans_raw_sig_def  by (simp add: zero_option_def)+
+      hence "now < time"
+        using assms(4)  by (metis leI zero_fun_def zero_option_def)
+      with \<open>time \<le> now + dly\<close> have "\<tau> time s = Some (\<not> v)"
+        using 0 \<open>\<tau> time s \<noteq> None\<close> by auto
+      then show ?thesis 
+        unfolding to_signal_def comp_def using inf  by (simp add: to_trans_raw_sig_def)
+    qed
+    with assms(2) show False
+      by auto
+  qed  
+  have inr_post_alt_def: "?inr_post = trans_post_raw s v (\<sigma> s) (purge_raw \<tau> now dly s (\<sigma> s) v) now dly" (is "_ = ?trans_post")
+    unfolding inr_post_raw_def by auto
+  let ?purge_raw = "purge_raw \<tau> now dly s (\<sigma> s) v"
+  let ?time = "GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v"
+  let ?k2 = "inf_time (to_trans_raw_sig \<tau>) s (now + dly)"
+  have purge_raw_alt_def: "?purge_raw = override_on \<tau> (\<lambda>n. (\<tau> n)(s := None)) ({now<..<the ?k2} \<union> {the ?k2<..now + dly})"
+    unfolding purge_raw_def Let_def using assms(1-2) by auto
+  have "?time \<in> keys (to_trans_raw_sig \<tau> s) \<and> ?time \<le> now + dly"
+    using * GreatestI_ex_nat[where P="\<lambda>x. x \<le> now + dly \<and> \<tau> x s = Some v" and b="now + dly"]
+    unfolding keys_def to_trans_raw_sig_def 
+    by (metis (mono_tags, lifting) CollectI option.simps(3) zero_option_def)
+  hence "\<tau> ?time s = Some v"
+    by (smt "*" GreatestI_nat)
+  hence "now < ?time"
+    using assms(4)
+    by (metis (no_types, lifting) leI option.simps(3) zero_fun_def zero_option_def)
+  have "?k2 = Some ?time"
+    using earlier_post_time[of "\<sigma>", OF assms(1) assms(2) assms(4)] by auto
+  hence "\<forall>j > ?time. j \<le> now + dly \<longrightarrow> to_trans_raw_sig \<tau> s j = None"
+    by (meson domIff inf_time_someE leD)
+  have "?purge_raw ?time s = Some v"
+    using `\<tau> ?time s = Some v` unfolding purge_raw_alt_def `?k2 = Some ?time`
+    by auto
+  have "\<forall>j > ?time. j \<le> now + dly \<longrightarrow> ?purge_raw j s = None"
+    unfolding purge_raw_alt_def `?k2 = Some ?time` by simp
+  have "?time < now + dly \<or> ?time  = now + dly"
+    using \<open>?time \<in> keys (to_trans_raw_sig \<tau> s) \<and> ?time \<le> now + dly\<close> by auto
+  moreover
+  { assume "?time < now + dly"
+    hence not_nec:  "\<not> post_necessary_raw (dly - 1) (purge_raw \<tau> now dly s (\<sigma> s) v) now s v (\<sigma> s) "
+      using `now < ?time` `?time < now + dly` `?purge_raw ?time s = Some v`
+      `\<forall>j > ?time. j \<le> now + dly \<longrightarrow> ?purge_raw j s = None`
+      unfolding post_necessary_raw_correctness  by (intro disjI1, intro exI[where x="?time"]) auto
+    hence "trans_post_raw s v (\<sigma> s) ?purge_raw now dly ?time s = preempt_raw s (purge_raw \<tau> now dly s (\<sigma> s) v) (now + dly) ?time s"
+      unfolding trans_post_raw_def by auto
+    also have "... = ?purge_raw ?time s"
+      using `?time < now + dly` unfolding preempt_raw_def by auto
+    also have "... = Some v"
+      using \<open>?purge_raw ?time s = Some v\<close> by auto
+    finally have "trans_post_raw s v (\<sigma> s) ?purge_raw now dly ?time s = Some v"
+      by auto
+    hence "?inr_post ?time s = Some v"
+      unfolding inr_post_alt_def by auto
+    have "inf_time (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly)) s t = Some ?time"
+    proof (rule inf_time_someI)
+      show "(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) \<in> dom (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s)"
+        using `?inr_post ?time s = Some v`  by (simp add: domIff to_trans_raw_sig_def)
+    next
+      show "(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) \<le> t"
+        using assms(3) by blast
+    next
+      { fix ta 
+        assume "ta\<in> dom (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s)"
+        hence "?inr_post ta s \<noteq> None"
+          by (simp add: domIff to_trans_raw_sig_def)    
+        assume "ta \<le> t"
+        have "ta \<le> ?time"
+        proof (rule ccontr)
+          assume "\<not> ta \<le> ?time"
+          hence "?time < ta"
+            by auto
+          hence "?inr_post ta s = preempt_raw s (purge_raw \<tau> now dly s (\<sigma> s) v) (now + dly) ta s"
+            using not_nec unfolding inr_post_alt_def trans_post_raw_def by auto
+          also have "... = None"
+            unfolding preempt_raw_def
+            by (simp add: \<open>(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) < ta\<close> \<open>\<forall>j>GREATEST n. n \<le>
+            now + dly \<and> \<tau> n s = Some v. j \<le> now + dly \<longrightarrow> purge_raw \<tau> now dly s (\<sigma> s) v j s = None\<close>)
+          finally have "?inr_post ta s = None"
+            by auto
+          with \<open>?inr_post ta s \<noteq> None\<close> show False by auto
+        qed }
+      thus "\<forall>ta\<in>dom (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s). ta \<le> t \<longrightarrow> ta \<le> (GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v)"
+        by auto
+    qed
+    hence ?thesis
+      unfolding to_signal_def comp_def using \<open>?inr_post ?time s = Some v\<close>
+      by (simp add: to_trans_raw_sig_def) }
+  moreover
+  { assume "?time = now + dly"
+    have nec:  "post_necessary_raw (dly - 1) (purge_raw \<tau> now dly s (\<sigma> s) v) now s v (\<sigma> s) "
+    proof -
+      from assms(1) have "signal_of (\<sigma> s) \<tau> s now = (\<not> v)"
+        by auto
+      from signal_of_elim[OF this] obtain m where "m \<le> now" and 
+        "\<tau> m s = Some (\<not> v) \<and> (\<forall>j>m. j \<le> now \<longrightarrow> \<tau> j s = None) \<or> (\<forall>i\<le>now. \<tau> i s = None) \<and> (\<not> v) = \<sigma> s "
+        unfolding to_trans_raw_sig_def by auto
+      with assms(4) have "\<tau> now s = Some (\<not> v) \<or> (\<not> v) = \<sigma> s"
+        by auto
+      hence "?purge_raw now s = Some (\<not> v) \<or> (\<not> v) = \<sigma> s"
+        unfolding purge_raw_alt_def 
+        by (simp add: assms(4) zero_fun_def zero_option_def)
+      moreover
+      { assume "?purge_raw now s = Some (\<not> v)"
+        hence ?thesis
+          using purge_raw_alt_def unfolding post_necessary_raw_correctness2
+          by (intro HOL.disjI1, intro exI[where x="now"])
+             (metis assms(4) option.distinct(1) order_refl purge_raw_before_now_unchanged
+             zero_fun_def zero_option_def) }
+      moreover
+      { assume "(\<not> v) = \<sigma> s"
+        hence ?thesis
+          using purge_raw_alt_def unfolding post_necessary_raw_correctness2
+          by (intro HOL.disjI2) (metis (mono_tags, lifting) Suc_diff_1 Un_iff \<open>(GREATEST n. n \<le> now + dly \<and> \<tau> n s =
+          Some v) = now + dly\<close> \<open>inf_time (to_trans_raw_sig \<tau>) s (now + dly) = Some (GREATEST n. n \<le>
+          now + dly \<and> \<tau> n s = Some v)\<close> \<open>now < (GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v)\<close>
+          add_Suc_right add_diff_cancel_left' assms(4) fun_upd_same greaterThanLessThan_iff
+          le_imp_less_Suc not_less option.sel override_on_apply_in override_on_apply_notin
+          zero_fun_def zero_less_diff zero_option_def) }
+      ultimately show ?thesis
+        by auto
+    qed
+    hence "trans_post_raw s v (\<sigma> s) ?purge_raw now dly (now + dly) s = 
+           post_raw s v (purge_raw \<tau> now dly s (\<sigma> s) v) (now + dly) (now + dly) s"
+      unfolding trans_post_raw_def by auto
+    also have "... = Some v"
+      unfolding post_raw_def by auto
+    finally have "trans_post_raw s v (\<sigma> s) ?purge_raw now dly (now + dly) s = Some v"
+      by auto
+    hence "?inr_post ?time s = Some v"
+      unfolding inr_post_alt_def \<open>?time = now + dly\<close> by auto 
+    have "inf_time (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly)) s t = Some ?time"
+    proof (rule inf_time_someI)
+      show "?time \<in> dom (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s)"
+        using `?inr_post ?time s = Some v`  by (simp add: domIff to_trans_raw_sig_def)
+    next
+      show "(GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v) \<le> t"
+        by (simp add: assms(3))
+    next
+      { fix ta 
+        assume "ta\<in>dom (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s)"
+        assume "ta \<le> t"
+        have "ta \<le> now + dly"
+        proof (rule ccontr)
+          assume "\<not> (ta \<le> now + dly)"
+          hence "now + dly < ta"
+            by auto
+          hence "inr_post_raw s v (\<sigma> s) \<tau> now dly ta s = None"
+            unfolding inr_post_alt_def trans_post_raw_def post_raw_def 
+            using nec by auto
+          with \<open>ta\<in>dom (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s)\<close> show False
+            by (metis domD option.distinct(1) to_trans_raw_sig_def)
+        qed }
+      thus " \<forall>ta\<in>dom (to_trans_raw_sig (inr_post_raw s v (\<sigma> s) \<tau> now dly) s). ta \<le> t \<longrightarrow> ta \<le> (GREATEST n. n \<le> now + dly \<and> \<tau> n s = Some v)"
+        unfolding `?time = now + dly` by auto
+    qed
+    hence ?thesis
+      unfolding to_signal_def comp_def using \<open>?inr_post ?time s = Some v\<close> 
+      by (simp add: to_trans_raw_sig_def) }
+  ultimately show ?thesis
+    by auto
 qed
 
 lemma b_seq_exec_preserve_trans_removal:
@@ -1600,23 +2057,11 @@ next
   hence "s \<noteq> sig" by auto
   have inr_post: "inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly = \<tau>'"
     using Bassign_inert by auto
-  have "is_stable_raw dly \<tau> t sig (\<sigma> sig) \<or> \<not> is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-    by auto
-  moreover
-  { assume "is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-    hence "\<tau>' = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly"
-      using inr_post unfolding inr_post_raw_def by auto
-    hence ?case
-      using `s \<noteq> sig` by (metis to_trans_raw_sig_def trans_post_raw_diff_sig) }
-  moreover
-  { assume "\<not> is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-    hence "\<tau>' = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau> t dly sig) t dly"
-      using inr_post unfolding inr_post_raw_def by auto
-    hence ?case using `s \<noteq> sig`
-      using purge_raw_does_not_affect_other_sig[of "\<tau>" "t" "dly" "sig" "purge_raw \<tau> t dly sig"]
-      by (metis to_trans_raw_sig_def trans_post_raw_diff_sig) }
-  ultimately show ?case
-    by auto
+  hence "\<tau>' = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau> t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> e)) t dly"
+    using inr_post unfolding inr_post_raw_def by auto
+  thus ?case using `s \<noteq> sig`
+    using purge_raw_does_not_affect_other_sig[of "\<tau>" "t" "dly" "sig" "\<sigma> sig" "beval_raw t \<sigma> \<gamma> \<theta> e"]
+    by (metis to_trans_raw_sig_def trans_post_raw_diff_sig)
 next
   case Bnull
   then show ?case by auto
@@ -1652,23 +2097,11 @@ next
   hence "s \<noteq> sig" by auto
   have inr_post_raw: "inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly = \<tau>'"
     using Bassign_inert by auto
-  have "is_stable_raw dly \<tau> t sig (\<sigma> sig) \<or> \<not> is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-    by auto
-  moreover
-  { assume "is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-    hence "\<tau>' = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly"
-      using inr_post_raw unfolding inr_post_raw_def by auto
-    hence ?case
-      using `s \<noteq> sig` by (metis to_trans_raw_sig_def trans_post_raw_diff_sig) }
-  moreover
-  { assume "\<not> is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-    hence "\<tau>' = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau> t dly sig) t dly"
-      using inr_post_raw unfolding inr_post_raw_def by auto
-    hence ?case using `s \<noteq> sig`
-      using purge_raw_does_not_affect_other_sig[of "\<tau>" "t" "dly" "sig" "purge_raw \<tau> t dly sig"]
-      by (metis to_trans_raw_sig_def trans_post_raw_diff_sig) }
-  ultimately show ?case
-    by auto
+  hence "\<tau>' = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau> t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> e)) t dly"
+    using inr_post_raw unfolding inr_post_raw_def by auto
+  thus ?case using `s \<noteq> sig`
+    using purge_raw_does_not_affect_other_sig[of "\<tau>" "t" "dly" "sig" "\<sigma> sig" "beval_raw t \<sigma> \<gamma> \<theta> e"]
+    by (metis to_trans_raw_sig_def trans_post_raw_diff_sig)
 next
   case Bnull
   then show ?case by auto
@@ -2384,17 +2817,60 @@ proof (induction ss)
   also have "... =  (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly) k s"
   proof -
     have "post_necessary_raw (dly-1) \<tau>1 t sig (beval_raw t \<sigma> \<gamma> \<theta> e) = post_necessary_raw (dly-1) \<tau> t sig (beval_raw t \<sigma> \<gamma> \<theta> e)"
-      using Bassign_trans(2) by(auto intro!: post_necessary_raw_same)
+      using Bassign_trans(2) sledgehammer
+      by (metis (mono_tags, hide_lams) Bassign_trans.hyps \<open>s = sig\<close> signal_of_equal_when_trans_sig_equal_upto to_trans_raw_sig_def)      
     moreover have "preempt_raw sig \<tau>1 (t + dly) k s = preempt_raw sig \<tau> (t + dly) k s"
       using Bassign_trans(2) unfolding preempt_raw_def using `s = sig` by auto
     moreover have "post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) \<tau>1 (t + dly) k s = post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) \<tau> (t + dly) k s"
       using Bassign_trans(2) unfolding post_raw_def using `s = sig` by auto
     ultimately show ?thesis 
-      unfolding trans_post_raw_def by auto
+      unfolding trans_post_raw_def  by smt
   qed
   also have "... =  (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_trans sig e dly) \<tau>) k s"
     by auto
   finally show ?case by auto
+qed
+
+lemma purge_raw_equal_signal:
+  fixes \<tau>1 \<tau>2 :: "'a trans_raw"
+  assumes "\<And>k. \<tau>1 k s = \<tau>2 k s"
+  shows "\<And>k. purge_raw \<tau>1 t dly s def val k s = purge_raw \<tau>2 t dly s def val k s"
+proof -
+  fix k
+  let ?k  = "inf_time (to_trans_raw_sig \<tau>1) s (t + dly)"
+  let ?k' = "inf_time (to_trans_raw_sig \<tau>2) s (t + dly)"
+  have "?k = ?k'"
+  proof -
+    have " (\<exists>k\<in>keys (to_trans_raw_sig \<tau>1 s). k \<le> t + dly) \<longleftrightarrow> 
+           (\<exists>k\<in>keys (to_trans_raw_sig \<tau>2 s). k \<le> t + dly)"
+      using assms unfolding to_trans_raw_sig_def keys_def by simp
+    moreover hence "(GREATEST k. k \<in> keys (to_trans_raw_sig \<tau>1 s) \<and> k \<le> t + dly) = 
+           (GREATEST k. k \<in> keys (to_trans_raw_sig \<tau>2 s) \<and> k \<le> t + dly)"
+      by (simp add: assms to_trans_raw_sig_def)
+    ultimately show ?thesis
+      unfolding inf_time_def by auto
+  qed
+  let ?s1 = "signal_of def \<tau>1 s t"
+  let ?s2 = "signal_of def \<tau>1 s (t + dly)"
+  let ?s1' = "signal_of def \<tau>2 s t"
+  let ?s2' = "signal_of def \<tau>2 s (t + dly)"
+  have "?s1 = ?s1'"
+    using assms
+    by (intro signal_of_equal_when_trans_sig_equal_upto) (auto simp add: to_trans_raw_sig_def)
+  have "?s2 = ?s2'"
+    using assms
+    by (intro signal_of_equal_when_trans_sig_equal_upto) (auto simp add: to_trans_raw_sig_def)
+  have "override_on \<tau>1 (\<lambda>n. (\<tau>1 n)(s := None)) {t <.. t + dly} k s = 
+        override_on \<tau>2 (\<lambda>n. (\<tau>2 n)(s := None)) {t <.. t + dly} k s"
+    using assms
+    by (metis (mono_tags, lifting) fun_upd_same override_on_apply_in override_on_apply_notin)
+  moreover
+  have " override_on \<tau>1 (\<lambda>n. (\<tau>1 n)(s := None)) ({t <..< the ?k} \<union> {the ?k <.. t + dly}) k s =
+         override_on \<tau>2 (\<lambda>n. (\<tau>2 n)(s := None)) ({t <..< the ?k'} \<union> {the ?k' <.. t + dly}) k s"
+    unfolding `?k = ?k'` using assms 
+    by (smt fun_upd_apply override_on_apply_in override_on_apply_notin)
+  ultimately show "purge_raw \<tau>1 t dly s def val k s = purge_raw \<tau>2 t dly s def val k s"
+    using `?s1 = ?s1'` `?s2 = ?s2'` unfolding purge_raw_def Let_def by auto
 qed
 
 lemma b_seq_exec_inr_post_same:
@@ -2411,67 +2887,42 @@ proof -
     using assms(2) unfolding ss_def by auto
   have 3: "b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1 = inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly"
     by auto
-  have "is_stable_raw dly \<tau>1 t sig (\<sigma> sig) \<or> \<not> is_stable_raw dly \<tau>1 t sig (\<sigma> sig)"
+  have in_tr: "inr_post_raw  sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly =
+        trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau>1 t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> e)) t dly "
+    unfolding inr_post_raw_def by auto
+  have *: "\<And>k. (purge_raw \<tau>1 t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> e)) k s = (purge_raw \<tau> t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> e)) k s"
+    using 2 `s = sig` purge_raw_equal_signal by metis
+  define purge_rawd1 where "purge_rawd1 = purge_raw \<tau>1 t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> e)"
+  define purge_rawd  where "purge_rawd  = purge_raw \<tau>  t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> e)"
+  hence "\<And>k.  purge_rawd1 k s =  purge_rawd k s"
+    using * unfolding purge_rawd1_def by auto
+  hence tr_tr: " (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) purge_rawd1 t dly) k s =
+         (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) purge_rawd t dly) k s "
+    using `s = sig`
+  proof -
+    have "post_necessary_raw (dly-1) purge_rawd1 t sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) =
+          post_necessary_raw (dly-1) purge_rawd t sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig)"
+      using post_necessary_raw_same[of "purge_rawd1" "s" "purge_rawd"] *
+      by (simp add: \<open>s = sig\<close> purge_rawd1_def purge_rawd_def)
+    thus ?thesis 
+      by (smt "*" \<open>s = sig\<close> fun_upd_same preempt_raw_def purge_rawd1_def purge_rawd_def
+      post_raw_def trans_post_raw_def)
+  qed
+  have " (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1) k s =
+         (inr_post_raw  sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly) k s"
     by auto
-  moreover
-  { assume "is_stable_raw dly \<tau>1 t sig (\<sigma> sig)"
-    hence "is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-      by (metis "2" \<open>s = sig\<close> same_trans_means_is_stable_eq)
-    have "inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly"
-      using `is_stable_raw dly \<tau>1 t sig (\<sigma> sig)` unfolding inr_post_raw_def by auto
-    hence " (inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly) k s =
-            (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly) k s"
-      by auto
-    also have "... =  (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly) k s"
-      using `s = sig` 2 unfolding trans_post_raw_def
-      by (smt fun_upd_same post_necessary_raw_same preempt_raw_def post_raw_def)
-    also have "... =  (inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly) k s"
-      using `is_stable_raw dly \<tau> t sig (\<sigma> sig)` unfolding inr_post_raw_def by auto
-    also have "... =  (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
-      by auto
-    finally have " (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1) k s =
-                   (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
-      using 3 by auto }
-  moreover
-  { assume "\<not> is_stable_raw dly \<tau>1 t sig (\<sigma> sig)"
-    hence "\<not> is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-      by (metis "2" \<open>s = sig\<close> same_trans_means_is_stable_eq)
-    have in_tr: "inr_post_raw  sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly =
-          trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau>1 t dly sig) t dly "
-      using `\<not> is_stable_raw dly \<tau>1 t sig (\<sigma> sig)` unfolding inr_post_raw_def by auto
-    have *: "\<And>k. (purge_raw \<tau>1 t dly sig) k s = (purge_raw \<tau> t dly sig) k s"
-      using 2 `s = sig` unfolding purge_raw_def by (simp add: override_on_def)
-    define purge_rawd1 where "purge_rawd1 = purge_raw \<tau>1 t dly sig"
-    define purge_rawd  where "purge_rawd  = purge_raw \<tau>  t dly sig"
-    hence "\<And>k.  purge_rawd1 k s =  purge_rawd k s"
-      using * unfolding purge_rawd1_def by auto
-    hence tr_tr: " (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) purge_rawd1 t dly) k s =
-           (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) purge_rawd t dly) k s "
-      using `s = sig`
-    proof -
-      have "post_necessary_raw (dly-1) purge_rawd1 t sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) =
-            post_necessary_raw (dly-1) purge_rawd t sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig)"
-        using post_necessary_raw_same[of "purge_rawd1" "s" "purge_rawd"] *
-        by (simp add: \<open>s = sig\<close> purge_rawd1_def purge_rawd_def)
-      thus ?thesis 
-        by (smt "*" \<open>s = sig\<close> fun_upd_same preempt_raw_def purge_rawd1_def purge_rawd_def
-        post_raw_def trans_post_raw_def)
-    qed
-    have " (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1) k s =
-           (inr_post_raw  sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau>1 t dly) k s"
-      by auto
-    also have "... =   (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau>1 t dly sig) t dly) k s"
-      using in_tr by auto
-    also have "... =   (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau> t dly sig) t dly) k s"
-      using tr_tr unfolding purge_rawd1_def purge_rawd_def by auto
-    also have "... =   (inr_post_raw  sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly) k s"
-      using `\<not> is_stable_raw dly \<tau> t sig (\<sigma> sig)` unfolding inr_post_raw_def by auto
-    also have "... =  (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
-      by auto
-    finally have " (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1) k s =
-                   (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
-      by auto }
-  ultimately show " (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1) k s =   (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>) k s"
+  also have "... =   (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau>1 t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> e)) t dly) k s"
+    using in_tr by auto
+  also have "... =   (trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) (purge_raw \<tau> t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> e)) t dly) k s"
+    using tr_tr unfolding purge_rawd1_def purge_rawd_def by auto
+  also have "... =   (inr_post_raw  sig (beval_raw t \<sigma> \<gamma> \<theta> e) (\<sigma> sig) \<tau> t dly) k s"
+    unfolding inr_post_raw_def by auto
+  also have "... =  (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
+    by auto
+  finally have " (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>1) k s =
+                 (b_seq_exec t \<sigma> \<gamma> \<theta> (Bassign_inert sig e dly) \<tau>) k s"
+    by auto
+  thus " (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>1) k s =   (b_seq_exec t \<sigma> \<gamma> \<theta> ss \<tau>) k s"
     unfolding ss_def by auto
 qed
 
@@ -3610,24 +4061,15 @@ next
     have " \<tau>' t =  (inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly) t"
       unfolding \<tau>'_def by auto
     also have "... = 0"
-    proof (cases "is_stable_raw dly \<tau> t sig (\<sigma> sig)")
-      case True
-      hence "inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly"
+    proof -      
+      have "inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly = 
+            trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) (purge_raw \<tau> t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> exp)) t dly"
         (is "?lhs = ?rhs") unfolding inr_post_raw_def by auto
       hence " ?lhs t =  ?rhs t"
         by auto
       also have "... = 0"
-        using Bassign_inert(3) `0 < dly`  by (auto simp add: trans_post_raw_def preempt_raw_def post_raw_def)
-      finally show ?thesis
-        by auto
-    next
-      case False
-      hence "inr_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) (purge_raw \<tau> t dly sig) t dly"
-        (is "?lhs = ?rhs") unfolding inr_post_raw_def by auto
-      hence " ?lhs t =  ?rhs t"
-        by auto
-      also have "... = 0"
-        using Bassign_inert(3) `0 < dly` using purge_raw_before_now_unchanged[of "\<tau>" "t" "dly" "sig" "purge_raw \<tau> t dly sig"]
+        using Bassign_inert(3) `0 < dly` using purge_raw_before_now_unchanged[of "\<tau>" "t" "dly" "sig" "\<sigma> sig" "beval_raw t \<sigma> \<gamma> \<theta> exp" 
+        "purge_raw \<tau> t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> exp)"]
          unfolding trans_post_raw_def post_raw_def
         by (smt add_cancel_right_right le_eq_less_or_eq not_add_less1 preempt_raw_def)
       finally show ?thesis
@@ -3869,27 +4311,16 @@ next
     by auto
   have "is_stable_raw dly \<tau> t sig (\<sigma> sig) \<or> \<not> is_stable_raw dly \<tau> t sig (\<sigma> sig)"
     by auto
-  moreover
-  { assume "is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-    hence \<tau>'_def': "\<tau>' = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) \<tau> t dly"
-      unfolding \<tau>'_def inr_post_raw_def by auto
-    have "t < t + dly"
-      using `0 < dly` by auto
-    hence ?case
-      unfolding \<tau>'_def' by (auto simp add: trans_post_raw_def post_raw_def preempt_raw_def) }
-  moreover
-  { assume "\<not> is_stable_raw dly \<tau> t sig (\<sigma> sig)"
-    hence \<tau>'_def': "\<tau>' = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) (purge_raw \<tau> t dly sig) t dly"
-      unfolding \<tau>'_def inr_post_raw_def by auto
-    have "t < t + dly"
-      using `0 < dly` by auto
-    hence " \<tau>' t =  (purge_raw \<tau> t dly sig) t"
-      unfolding \<tau>'_def' by (auto simp add: trans_post_raw_def post_raw_def preempt_raw_def)
-    also have "... =  \<tau> t"
-      using purge_raw_before_now_unchanged by (metis order_refl)
-    finally have " \<tau> t =  \<tau>' t"
-      by auto }
-  ultimately show ?case by auto
+  hence \<tau>'_def': "\<tau>' = trans_post_raw sig (beval_raw t \<sigma> \<gamma> \<theta> exp) (\<sigma> sig) (purge_raw \<tau> t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> exp)) t dly"
+    unfolding \<tau>'_def inr_post_raw_def by auto
+  have "t < t + dly"
+    using `0 < dly` by auto
+  hence " \<tau>' t =  (purge_raw \<tau> t dly sig (\<sigma> sig) (beval_raw t \<sigma> \<gamma> \<theta> exp)) t"
+    unfolding \<tau>'_def' by (auto simp add: trans_post_raw_def post_raw_def preempt_raw_def)
+  also have "... =  \<tau> t"
+    using purge_raw_before_now_unchanged by (metis order_refl)
+  finally show " \<tau> t =  \<tau>' t"
+    by auto
 next
   case Bnull
   then show ?case by auto

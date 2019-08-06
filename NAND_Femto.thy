@@ -32,7 +32,7 @@ proof transfer'
   moreover
   { assume not_nec: "\<not> post_necessary_raw (dly-1) (\<lambda>k. 0) t sig v def"
     hence "v = def"
-      by (simp add: post_necessary_raw_correctness zero_fun_def zero_option_def)
+      by (meson signal_of_def zero_fun_def)
     hence "(if post_necessary_raw (dly-1) (\<lambda>k. 0) t sig v def then post_raw sig v (\<lambda>k. 0) (t + dly) else preempt_raw sig (\<lambda>k. 0) (t + dly)) = 
       (if v \<noteq> def then (\<lambda>k. 0)(t + dly := [sig \<mapsto> v]) else (\<lambda>k. 0))"
       using not_nec by (auto simp add: preempt_raw_def zero_fun_def zero_option_def) }
@@ -58,7 +58,7 @@ code_thms simulate_fin
 code_thms functional_simulate_fin
 
 values  "{lookup (get_beh beh) 1 C | beh. simulate_fin_ind 10 0 def_state {A} 0 nand empty_trans beh}"
-
+                                                   
 value " ((lookup o get_beh) (functional_simulate_fin 10 0 def_state {A} 0 nand 0)) 1 C"
 
 theorem
@@ -83,11 +83,26 @@ theorem
   using assms
 proof (cases)
   case (1 \<tau>')
-  have base: "0 , def_state , {A} , 0 \<turnstile> <nand , 0> \<longrightarrow>\<^sub>c (0(1 := [C \<mapsto> True]))"
-    unfolding nand_def 
-    by (auto simp add: is_stable_empty_trans inr_post_raw_def trans_post_raw_def purge_raw_def
-                       zero_option_def zero_fun_def post_raw_def
-                split:option.splits)
+  have "trans_post_raw C True False (override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}) 0 (Suc 0) = 
+        0(Suc 0 := [C \<mapsto> True])"
+  proof -
+    let ?\<tau> = "override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}"
+    have "signal_of False ?\<tau> C 0 = False"
+      by (metis (no_types, lifting) greaterThanAtMost_iff less_irrefl_nat override_on_def
+      signal_of_zero zero_fun_def)
+    hence "post_necessary_raw (Suc 0 - 1) (override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}) 0 C True False"
+      by auto
+    hence "trans_post_raw C True False ?\<tau> 0 (Suc 0) = post_raw C True ?\<tau> (Suc 0)"
+      unfolding trans_post_raw_def by auto
+    also have "... = 0(Suc 0 := [C \<mapsto> True])"
+      unfolding post_raw_def by (auto simp add: zero_fun_def zero_option_def)
+    finally show ?thesis
+      by auto
+  qed
+  hence "0 , def_state , {A} , 0 \<turnstile> <get_seq nand , 0> \<longrightarrow>\<^sub>s (0(1 := [C \<mapsto> True]))"
+    unfolding nand_def  by (auto simp add: inr_post_raw_def purge_raw_def to_signal_def  split: option.splits)
+  hence base: "0 , def_state , {A} , 0 \<turnstile> <nand , 0> \<longrightarrow>\<^sub>c (0(1 := [C \<mapsto> True]))"
+    unfolding nand_def  by auto
   hence \<tau>'_def: "\<tau>' = (0(1:=[C \<mapsto> True]))"
     using 1 by auto
   have nt: "next_time 0 \<tau>' = 1"
@@ -624,7 +639,8 @@ proof (induction rule:b_simulate_fin.induct)
               unfolding to_trans_raw_sig_def    by auto
             thus ?thesis
               using post_necessary_raw_correctness `\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
-              `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` by simp
+              `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` 
+              by (metis \<open>to_trans_raw_sig \<tau> C = 0\<close> signal_of_def to_trans_raw_sig_def zero_fun_def)
           qed
           hence "\<tau>' \<noteq> 0"
             by (simp add: trans_post_raw_imply_neq_map_empty \<open>(\<not> \<sigma> C) = (\<not> (\<sigma> A \<and> \<sigma> B))\<close> \<tau>'_def)
@@ -697,7 +713,8 @@ proof (induction rule:b_simulate_fin.induct)
             using `\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
             by (transfer', auto simp add: to_trans_raw_sig_def zero_fun_def zero_option_def )
           ultimately have "\<not> post_necessary_raw 0 ( \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
-            using post_necessary_raw_correctness by auto
+            using post_necessary_raw_correctness 
+            by (metis "1.prems"(3) Nat.add_0_right le0 le_add_same_cancel1)
           hence "to_trans_raw_sig \<tau>' C = 0"
             using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
             unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def to_trans_raw_sig_def
@@ -723,7 +740,8 @@ proof (induction rule:b_simulate_fin.induct)
              unfolding to_trans_raw_sig_def  by (metis option.simps(3) zero_fun_def zero_option_def)
           thus ?thesis
             using post_necessary_raw_correctness `\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
-            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` by simp
+            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` sledgehammer
+            by (metis "1.prems"(3) add.commute add.right_neutral le_add2)
         qed
         hence "\<tau>' \<noteq> 0"
           by (simp add: trans_post_raw_imply_neq_map_empty \<open>(\<not> \<sigma> C) = (\<not> (\<sigma> A \<and> \<sigma> B))\<close> \<tau>'_def)
@@ -781,7 +799,8 @@ proof (induction rule:b_simulate_fin.induct)
           using `\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
           by (transfer', auto simp add: to_trans_raw_sig_def zero_fun_def zero_option_def )
         ultimately have "\<not> post_necessary_raw 0 ( \<tau>) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
-          using post_necessary_raw_correctness by auto        
+          using post_necessary_raw_correctness 
+          by (metis "1.prems"(3) Nat.add_0_right signal_of_def zero_map zero_option_def)
         hence "to_trans_raw_sig \<tau>' C = 0"
           using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
           unfolding \<tau>'_def trans_post_raw_def preempt_raw_def post_raw_def to_trans_raw_sig_def
@@ -804,7 +823,9 @@ proof (induction rule:b_simulate_fin.induct)
             by (metis option.simps(3) zero_fun_def zero_option_def)
           thus ?thesis
             using post_necessary_raw_correctness `\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
-            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` by simp
+            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` 
+            by (metis (full_types) \<open>to_trans_raw_sig \<tau> C = 0\<close> to_trans_raw_sig_def zero_fun_def
+            zero_option_def)
         qed        
         hence "\<tau>' \<noteq> 0"
           by (simp add: trans_post_raw_imply_neq_map_empty  \<open>(\<not> \<sigma> C) = (\<not> (\<sigma> A \<and> \<sigma> B))\<close> \<tau>'_def)
@@ -968,13 +989,16 @@ proof (induction rule:b_simulate_fin.induct)
           using `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
           by (auto simp add: to_trans_raw_sig_def zero_fun_def zero_option_def )
         ultimately have "\<not> post_necessary_raw 0 (\<tau>(t:=0)) t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
-          using post_necessary_raw_correctness `\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` by auto        
+          using post_necessary_raw_correctness `\<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
+          by (metis "1.prems"(3) Nat.add_0_right fun_upd_idem_iff le_add1 signal_of_def
+          zero_option_def)
+        hence "\<not> post_necessary_raw 0 \<tau> t C (\<not> (\<sigma> A \<and> \<sigma> B)) (\<sigma> C)"
+          by (metis "1.prems"(3) fun_upd_triv order_refl)
         hence "to_trans_raw_sig \<tau>' C = 0"
           using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  (\<tau>(t:=0)) i C = None)`
           `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
           unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def to_trans_raw_sig_def 
-                    zero_fun_def zero_option_def zero_map
-          by auto
+                    zero_fun_def zero_option_def zero_map comp_def by auto
         have "next_time t \<tau> = next_time t \<tau>'"
         proof (cases "\<tau> = 0")
           case True
@@ -1108,8 +1132,8 @@ proof (induction rule:b_simulate_fin.induct)
             unfolding to_trans_raw_sig_def  zero_fun_def zero_option_def
             by (metis option.simps(3))
           thus ?thesis
-            using post_necessary_raw_correctness `\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)` 
-            `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` by simp
+            using  `\<not> \<sigma> C \<longleftrightarrow> \<not> (\<sigma> A \<and> \<sigma> B)`  `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` 
+            by (metis "1.prems"(3) Nat.add_0_right le_add1 signal_of_def zero_option_def)
         qed        
         hence "\<tau>' \<noteq> 0"
           by (simp add: trans_post_raw_imply_neq_map_empty \<open>(\<not> \<sigma> C) = (\<not> (\<sigma> A \<and> \<sigma> B))\<close> \<tau>'_def)
@@ -1358,13 +1382,16 @@ proof (cases " \<tau> 0 = 0")
     proof (rule Least_equality)
       show "dom ( (trans_post_raw C True False \<tau> 0 1) 1) \<noteq> {}"
         using True
-        by (auto simp add: trans_post_raw_def post_raw_def zero_fun_def zero_option_def)
+        by (smt add.commute add_cancel_right_right cancel_comm_monoid_add_class.diff_cancel domIff
+        empty_iff fun_upd_apply option.simps(3) post_raw_def signal_of_zero trans_post_raw_def
+        zero_fun_def)
     next
       { fix y :: nat
         assume "y < 1"
         hence "dom ( (trans_post_raw C True False \<tau> 0 1) y) = {}"
-          using True by (simp add: trans_post_raw_def dom_def zero_map post_raw_def) }
-      thus "\<And>y. dom ( (trans_post_raw C True False \<tau> 0 1) y) \<noteq> {} \<Longrightarrow> 1 \<le> y "
+          using True by (metis dom_eq_empty_conv le_zero_eq less_one
+          trans_post_preserve_trans_removal_nonstrict zero_fun_def zero_option_def) }
+      thus "\<And>y. dom (trans_post_raw C True False \<tau> 0 1 y) \<noteq> {} \<Longrightarrow> 1 \<le> y"
         using le_less_linear by auto
     qed
     finally show "next_time 0 ?\<tau>' = 1"
@@ -1384,8 +1411,10 @@ proof (cases " \<tau> 0 = 0")
   have ind3: "\<And>n. next_time 0 ?\<tau>' \<le> n \<Longrightarrow>  (add_to_beh def_state 0 0 (next_time 0 ?\<tau>')) n = 0"
     unfolding ntime add_to_beh_def by (auto simp add: zero_map zero_option_def zero_fun_def)
   have Cin: "C \<in> dom ( ?\<tau>' (next_time 0 ?\<tau>'))"
-    using True unfolding `next_time 0 ?\<tau>' = 1`  
-    by (auto split:option.split simp add: trans_post_raw_def post_raw_def zero_fun_def zero_option_def)
+    using True unfolding `next_time 0 ?\<tau>' = 1` 
+    by (metis (no_types, lifting) add.commute add.right_neutral
+    cancel_comm_monoid_add_class.diff_cancel domIff fun_upd_same option.simps(3) post_raw_def
+    signal_of_zero trans_post_raw_def zero_fun_def)
   { assume "A \<notin> next_event 0 ?\<tau>' def_state \<and> B \<notin> next_event 0 ?\<tau>' def_state"
     hence "A \<notin> dom ( ?\<tau>' (next_time 0 ?\<tau>')) \<or> the ( ?\<tau>' (next_time 0 ?\<tau>') A) = False"
       and "B \<notin> dom ( ?\<tau>' (next_time 0 ?\<tau>')) \<or> the ( ?\<tau>' (next_time 0 ?\<tau>') B) = False"
@@ -1506,7 +1535,9 @@ proof (cases " \<tau> 0 = 0")
     by (meson trans_some_signal_of)
   also have "... = True"
     using True unfolding next_state_def ntime Let_def 
-    by (auto split:option.split simp add: trans_post_raw_def post_raw_def override_on_def zero_option_def zero_fun_def)
+    by (smt Cin One_nat_def \<open>1 \<le> next_time 0 (trans_post_raw C True False \<tau> 0 1)\<close> add.commute
+    comp_apply domD not_less_zero ntime option.sel override_on_def plus_1_eq_Suc
+    signal_of_trans_post3 trans_some_signal_of' zero_less_one)
   also have "... \<longleftrightarrow> \<not> (signal_of False ?\<tau>' A 0 \<and> signal_of False ?\<tau>' B 0)"
     unfolding `signal_of False ?\<tau>' A 0 = False` `signal_of False ?\<tau>' B 0 = False` by auto
   finally have IR0: "signal_of def (get_beh res) C 1 \<longleftrightarrow> \<not> (signal_of False ?\<tau>' A 0 \<and> signal_of False ?\<tau>' B 0)"
@@ -1528,7 +1559,7 @@ next
       using assms(2)  unfolding to_trans_raw_sig_def
       by (metis option.distinct(1) zero_map)
     ultimately show ?thesis
-      using post_necessary_raw_correctness by auto
+      using post_necessary_raw_correctness  by (metis add.right_neutral)
   qed
   hence " ?\<tau>' 1 C = Some True"
     by (auto simp add: trans_post_raw_def post_raw_def)
@@ -1563,9 +1594,8 @@ next
   hence "\<sigma>' C = False"
     using assms(2)  unfolding next_state_def `next_time 0 ?\<tau>' = 0` 
     unfolding to_trans_raw_sig_def Let_def trans_post_raw_def preempt_raw_def post_raw_def
-    by (smt \<open>post_necessary_raw 0 \<tau> 0 C True False\<close> add.right_neutral comp_apply diff_is_0_eq'
-            domIff le_antisym le_diff_conv le_numeral_extra(3) le_numeral_extra(4) not_less_zero
-            not_one_le_zero option.sel override_on_def post_necessary_raw_correctness2)
+    by (smt One_nat_def add.right_neutral discrete domIff next_time_def not_add_less2
+    override_on_def plus_1_eq_Suc t'_def t'_def' zero_fun_def zero_less_one zero_option_def)
   define \<gamma>' where "\<gamma>' = next_event 0 ?\<tau>' def_state"
   define \<theta>' where "\<theta>' = add_to_beh def_state (0 :: sig trans_raw) 0 t'"
   hence "\<theta>' = 0"
@@ -1646,8 +1676,8 @@ next
       proof -
         have " (?\<tau>' (0:=0)) 0 C = None" 
           by  (auto simp add:zero_map)
-        thus ?thesis using post_necessary_raw_correctness `\<not> \<sigma>' C \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B)`
-          by auto
+        thus ?thesis using  `\<not> \<sigma>' C \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B)`
+          by (metis add.right_neutral signal_of_zero zero_option_def)
       qed 
       hence "\<tau>'' \<noteq> 0"
         using ` ?\<tau>' 1 C = Some True`
@@ -1684,7 +1714,8 @@ next
           unfolding `next_time 0 \<tau>'' = 1` by auto
         also have "... \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B)"
           unfolding \<tau>''_def   unfolding trans_post_raw_def preempt_raw_def Let_def post_raw_def
-          by (auto split:option.split simp add:zero_fun_def zero_option_def override_on_def)
+          by (smt add.left_neutral cancel_comm_monoid_add_class.diff_cancel comp_apply domIff
+          fun_upd_same nec option.sel option.simps(3) override_on_def signal_of_zero zero_fun_def)
         finally have "next_state 0 \<tau>'' \<sigma>' C \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B)"
           by auto
         hence "next_state 0 \<tau>'' \<sigma>' C \<longleftrightarrow> \<not> (next_state 0 \<tau>'' \<sigma>' A \<and> next_state 0 \<tau>'' \<sigma>' B)"
@@ -1791,7 +1822,9 @@ next
         unfolding \<sigma>''_def next_state_def `next_time 0 \<tau>'' = 1` by auto
       also have "... \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B)"
         unfolding \<tau>''_def Let_def trans_post_raw_def post_raw_def preempt_raw_def
-        by (auto split:option.split simp add: zero_fun_def zero_option_def override_on_def)
+        by (smt Nat.add_0_right One_nat_def Suc_eq_plus1 cancel_comm_monoid_add_class.diff_cancel
+        comp_apply domIff fun_upd_same nec option.sel option.simps(3) override_on_def signal_of_zero
+        zero_fun_def)
       also have "... \<longleftrightarrow> \<not> (signal_of (\<sigma>' A) \<tau>'' A 0 \<and> signal_of (\<sigma>' B) \<tau>'' B 0)"
         using sA sB by auto
       finally have IR0: "signal_of def (get_beh res) C 1 \<longleftrightarrow> \<not> (signal_of (\<sigma>' A) \<tau>'' A 0 \<and> signal_of (\<sigma>' B) \<tau>'' B 0)"
@@ -1859,7 +1892,7 @@ next
         have " (?\<tau>'(0:=0)) 0 C = None" 
           by  (auto simp add:zero_map)
         thus ?thesis using post_necessary_raw_correctness `\<sigma>' C \<longleftrightarrow> \<not> (\<sigma>' A \<and> \<sigma>' B)`
-          by auto
+          by (metis plus_nat.add_0 signal_of_zero zero_option_def)
       qed
       hence lookup: " \<tau>'' = preempt_raw C (?\<tau>'(0:=0)) 1"
         unfolding \<tau>''_def trans_post_raw_def by auto

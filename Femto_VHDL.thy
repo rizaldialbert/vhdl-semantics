@@ -334,9 +334,9 @@ lift_definition is_stable :: "nat \<Rightarrow> 'signal transaction \<Rightarrow
 
 (* TODO move the code equation for is_stable here *)
 
-lift_definition purge :: "'signal transaction \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> 'signal transaction" is
+lift_definition purge :: "'signal transaction \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow> 'signal transaction" is
   purge_raw unfolding purge_raw_def sym[OF eventually_cofinite]
-  by (smt MOST_mono fun_upd_idem override_on_apply_in override_on_apply_notin zero_map)
+  by (metis purge_raw_almost_all_zero purge_raw_def)
 
 (* TODO move the code equation for purge here *)
 
@@ -347,11 +347,8 @@ lift_definition inr_post ::
   by metis
 
 lemma [code]:
-  "inr_post sig val cur_val \<tau> now dly = 
-   (if is_stable dly \<tau> now sig cur_val then 
-      trans_post sig val cur_val \<tau> now dly
-    else
-      trans_post sig val cur_val (purge \<tau> now dly sig) now dly)"
+  "inr_post sig val def \<tau> now dly = 
+      trans_post sig val def (purge \<tau> now dly sig def val) now dly"
   by (transfer', auto simp add: Femto_VHDL_raw.inr_post_raw_def)
   
 lift_definition seq_exec :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal transaction \<Rightarrow>
@@ -387,7 +384,7 @@ lemma dom_map_diff_trans_post:
   by (transfer', simp add: dom_map_diff_trans_post)
 
 lemma dom_map_diff_purge:
-  "\<And>n. dom (lookup (map_diff_trans (purge \<tau> t dly sig) \<tau>) n) \<subseteq> {sig}"
+  "\<And>n. dom (lookup (map_diff_trans (purge \<tau> t dly sig def val) \<tau>) n) \<subseteq> {sig}"
   by (transfer', simp add: dom_map_diff_purge)
 
 lift_definition clean_zip ::

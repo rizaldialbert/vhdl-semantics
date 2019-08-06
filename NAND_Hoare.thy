@@ -351,9 +351,58 @@ proof -
     { assume "i < fst tw"
       hence "snd tw C (i + 1) \<longleftrightarrow> \<not> (snd tw A i \<and> snd tw B i)"
         using assms(1) unfolding nand_inv_def by auto
-      hence "snd tw' C (i + 1) \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
-        unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def
-        by (metis (no_types, lifting) One_nat_def Suc_lessI \<open>i < get_time tw\<close> add.right_neutral add_Suc_right add_mono1 snd_conv) }
+      have "snd tw' C (i + 1) \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
+      proof (cases "i + 1 < fst tw")
+        case True
+        hence "snd tw' C (i + 1) \<longleftrightarrow> snd tw C (i + 1)"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def 
+          by auto
+        also have "... \<longleftrightarrow> \<not> (snd tw A i \<and> snd tw B i)"
+          using `snd tw C (i + 1) \<longleftrightarrow> \<not> (snd tw A i \<and> snd tw B i)` by auto
+        also have "... \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
+          by auto
+        finally show ?thesis
+          by auto 
+      next
+        case False
+        hence "i + 1 = fst tw"
+          using \<open>i < get_time tw\<close> by linarith
+        show "snd tw' C (i + 1) \<longleftrightarrow>  \<not> (snd tw' A i \<and> snd tw' B i)"
+        proof (cases "snd tw C (get_time tw) = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) \<or> snd tw C (get_time tw + 1) \<noteq> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))")
+          case True
+          hence "snd tw' C (i + 1) \<longleftrightarrow> snd tw C (fst tw)"
+            using `i + 1 = fst tw`
+            unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+          also have "... \<longleftrightarrow> \<not> (snd tw A i \<and> snd tw B i)"
+            using `snd tw C (i + 1) \<longleftrightarrow> \<not> (snd tw A i \<and> snd tw B i)` `i + 1 = fst tw` by auto
+          also have "... \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
+            unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def 
+            using `i + 1 = fst tw` by auto
+          finally show ?thesis
+            by auto
+        next
+          case False
+          hence "snd tw C (fst tw) \<noteq> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))" and 
+                "snd tw C (fst tw + 1) = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+            by blast+
+          let ?time = "GREATEST n. n \<le> fst tw + 1 
+                                 \<and> snd tw C (n - 1) = (\<not> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))) 
+                                 \<and> snd tw C n = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+          have "?time = fst tw + 1"
+            using False by (intro Greatest_equality) auto
+          hence "snd tw' C (i + 1) \<longleftrightarrow> snd tw C (fst tw)"
+            using False unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
+            using \<open>i + 1 = get_time tw\<close> by auto
+          also have "... \<longleftrightarrow> \<not> (snd tw A i \<and> snd tw B i)"
+            using `snd tw C (i + 1) \<longleftrightarrow> \<not> (snd tw A i \<and> snd tw B i)` `i + 1 = fst tw` by auto
+          also have "... \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
+            unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def 
+            using `i + 1 = fst tw` by auto
+          finally show ?thesis
+            by auto
+        qed
+      qed }
     moreover
     { assume " fst tw \<le> i \<and> i < next_time_world tw' - 1"
       hence "snd tw' C (i + 1) \<longleftrightarrow> snd tw' C (fst tw + 1)"
@@ -364,8 +413,37 @@ proof -
         using unchanged_until_next_time_world \<open>fst tw \<le> i \<and> i < next_time_world tw' - 1\<close>
         by (simp add: unchanged_until_next_time_world \<open>get_time tw = get_time tw'\<close> \<open>i < next_time_world tw'\<close>)+
       moreover have "snd tw' C (fst tw + 1) \<longleftrightarrow> \<not> (snd tw' A (fst tw) \<and> snd tw' B (fst tw))"
-        unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def beval_world_raw2_def beval_world_raw_def
-        state_of_world_def beh_of_world_raw_def by auto
+      proof (cases " snd tw C (get_time tw) = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) \<or> snd tw C (get_time tw + 1) \<noteq> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))")
+        case True
+        hence "snd tw' C (fst tw + 1) \<longleftrightarrow> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+        also have "... \<longleftrightarrow> \<not> (snd tw A (fst tw) \<and> snd tw B (fst tw))"
+          unfolding beval_world_raw2_def  by (simp add: beval_world_raw_def state_of_world_def)
+        also have "... \<longleftrightarrow> \<not> (snd tw' A (fst tw) \<and> snd tw' B (fst tw))"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+        finally show ?thesis
+          by auto
+      next
+        case False
+        hence "snd tw C (get_time tw) \<noteq> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))" and 
+              "snd tw C (get_time tw + 1) = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+          by blast+
+        let ?time = "GREATEST n. n \<le> get_time tw + 1 
+                               \<and> snd tw C (n - 1) = (\<not> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))) 
+                               \<and> snd tw C n = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+        have "?time = fst tw + 1"
+          using False
+          by (intro Greatest_equality) auto
+        hence "snd tw' C (fst tw + 1) \<longleftrightarrow> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+          using False unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
+          by auto
+        also have "... \<longleftrightarrow> \<not> (snd tw A (fst tw) \<and> snd tw B (fst tw))"
+          unfolding beval_world_raw2_def  by (simp add: beval_world_raw_def state_of_world_def)
+        also have "... \<longleftrightarrow> \<not> (snd tw' A (fst tw) \<and> snd tw' B (fst tw))"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+        finally show ?thesis
+          by auto
+      qed
       ultimately have "snd tw' C (i + 1) \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
         by auto }
     moreover
@@ -373,17 +451,68 @@ proof -
       hence "snd tw' C (i + 1) = snd tw' C (next_time_world tw')"
         using \<open>i < next_time_world tw'\<close> by auto
       also have "... = snd tw' C (fst tw + 1)"
-        using \<open>fst tw < next_time_world tw'\<close> unfolding tw'_def worldline_inert_upd2_def 
-        worldline_inert_upd_def by auto
+      proof (cases "snd tw C (get_time tw) = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) \<or> snd tw C (get_time tw + 1) \<noteq> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))")
+        case True
+        hence "snd tw' C (next_time_world tw') \<longleftrightarrow> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+          using `fst tw < next_time_world tw'` 
+          by (smt add.commute fst_conv less_SucE less_imp_le_nat next_time_world_at_least not_le
+          plus_1_eq_Suc snd_conv)
+        also have "... \<longleftrightarrow> snd tw' C (fst tw + 1)"
+          by (smt True dual_order.strict_iff_order not_add_less1 snd_conv tw'_def worldline_inert_upd2_def worldline_inert_upd_def)
+        finally show ?thesis
+          by auto
+      next
+        case False
+        let ?time = "GREATEST n. n \<le> get_time tw + 1 
+                               \<and> snd tw C (n - 1) = (\<not> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))) 
+                               \<and> snd tw C n = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+        have "?time = fst tw + 1"
+          using False by (intro Greatest_equality) auto
+        hence "snd tw' C (next_time_world tw') \<longleftrightarrow> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+          by (smt add.commute fst_conv less_SucE less_imp_le_nat next_time_world_at_least not_le plus_1_eq_Suc snd_conv)
+        also have "... \<longleftrightarrow> snd tw' C (fst tw + 1)"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def
+          using `fst tw < next_time_world tw'` `?time = fst tw + 1` by simp
+        finally show ?thesis
+          by auto
+      qed
       finally have "snd tw' C (i + 1) \<longleftrightarrow> snd tw' C (fst tw + 1)"
         by auto
       also have "... \<longleftrightarrow> \<not> (snd tw' A (fst tw) \<and> snd tw' B (fst tw))"
-        unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def beval_world_raw2_def beval_world_raw_def
-        state_of_world_def beh_of_world_raw_def by auto
+      proof (cases "snd tw C (get_time tw) = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) \<or> snd tw C (get_time tw + 1) \<noteq> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))")
+        case True
+        hence "snd tw' C (fst tw + 1) \<longleftrightarrow> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by simp
+        also have "... \<longleftrightarrow> \<not> (snd tw A (fst tw) \<and> snd tw B (fst tw))"
+          unfolding beval_world_raw2_def beval_world_raw_def state_of_world_def
+          by auto
+        also have "... \<longleftrightarrow> \<not> (snd tw' A (fst tw) \<and> snd tw' B (fst tw))"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+        finally show ?thesis
+          by auto
+      next
+        case False
+        let ?time = "GREATEST n. n \<le> get_time tw + 1 
+                               \<and> snd tw C (n - 1) = (\<not> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))) 
+                               \<and> snd tw C n = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+        have "?time = fst tw + 1"
+          using False by (intro Greatest_equality) auto
+        hence "snd tw' C (fst tw + 1) \<longleftrightarrow> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by simp
+        also have "... \<longleftrightarrow> \<not> (snd tw A (fst tw) \<and> snd tw B (fst tw))"
+          unfolding beval_world_raw2_def beval_world_raw_def state_of_world_def
+          by auto
+        also have "... \<longleftrightarrow> \<not> (snd tw' A (fst tw) \<and> snd tw' B (fst tw))"
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+        finally show ?thesis
+          by auto
+      qed
       also have "... \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
-        by (metis \<open>get_time tw = get_time tw'\<close> 
-                  \<open>i < get_time tw \<Longrightarrow> snd tw' C (i + 1) = (\<not> (snd tw' A i \<and> snd tw' B i))\<close> 
-                  \<open>i < next_time_world tw'\<close> calculation not_le unchanged_until_next_time_world)
+        by (metis \<open>get_time tw = get_time tw'\<close> \<open>i < get_time tw \<Longrightarrow> snd tw' C (i + 1) = (\<not> (snd tw' A
+        i \<and> snd tw' B i))\<close> \<open>i < next_time_world tw'\<close> calculation not_le
+        unchanged_until_next_time_world)
       finally have "snd tw' C (i + 1) \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
         by auto }
     ultimately show "snd tw' C (i + 1) \<longleftrightarrow> \<not> (snd tw' A i \<and> snd tw' B i)"
@@ -473,8 +602,22 @@ proof (rule impI)
   { fix i 
     assume "?t' \<le> i"
     hence "snd tw' C (i + 1) \<longleftrightarrow> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
-      using `fst tw < ?t'`
-      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+    proof (cases "snd tw C (get_time tw) = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) \<or> snd tw C (get_time tw + 1) \<noteq> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))")
+      case True
+      thus "snd tw' C (i + 1) \<longleftrightarrow> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+        unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+        using `fst tw < ?t'`  using \<open>next_time_world tw' \<le> i\<close> by auto
+    next
+      case False
+      let ?time = "GREATEST n. n \<le> get_time tw + 1 
+                             \<and> snd tw C (n - 1) = (\<not> beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))) 
+                             \<and> snd tw C n = beval_world_raw2 tw (Bnand (Bsig A) (Bsig B))"
+      have "?time = fst tw + 1"
+        using False by (auto intro!:Greatest_equality)
+      thus ?thesis        
+        unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+        using `fst tw < ?t'`  using \<open>next_time_world tw' \<le> i\<close> by auto
+    qed
     also have "... \<longleftrightarrow> \<not> (snd tw A (fst tw) \<and> snd tw B (fst tw))"
       unfolding beval_world_raw2_def beval_world_raw_def 
       by (simp add: state_of_world_def)

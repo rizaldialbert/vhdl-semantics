@@ -88,26 +88,44 @@ next
     by auto
 qed
 
-lemma[code]:
-  "purge (Pm_fmap xs) t dly sig = (let 
-                                      chopped = fmmap_keys (\<lambda>t'. if t < t' \<and> t' \<le> t + dly then map_drop sig else id)
-                                   in 
-                                      Pm_fmap (chopped xs))"
-  by transfer' (rule ext, auto simp add: override_on_def purge_raw_def fmlookup_default_def zero_map 
-                                         map_drop_def map_filter_def 
-                                  split:option.splits)
+lemma
+  "override_on (lookup0 xs) (\<lambda>n. (lookup0 xs n)(sig := None)) {t<..t + dly} = lookup0 (fmmap_keys (\<lambda>t'. if t < t' \<and> t' \<le> t + dly then map_drop sig else id) xs)"
+  by (rule ext) (auto simp add: override_on_def fmlookup_default_def zero_map map_drop_def map_filter_def split:option.splits)
   
-value "lookup (purge (0 :: sig transaction) 1 1 C) 1 C"
+lemma[code]:
+  "purge (Pm_fmap xs) t dly sig def val = (let 
+                                              chopped = fmmap_keys (\<lambda>t'. if t < t' \<and> t' \<le> t + dly then map_drop sig else id);
+                                              s1 = signal_of2 def (Pm_fmap xs) sig t;
+                                              s2 = signal_of2 def (Pm_fmap xs) sig (t + dly);
+                                              k2 = inf_time (to_transaction_sig (Pm_fmap xs)) sig (t + dly);
+                                              chopped2 = fmmap_keys (\<lambda>t'. if t < t' \<and> t' < the k2 \<or> the k2 < t' \<and> t' \<le> t + dly then map_drop sig else id)
+                                           in 
+                                              if s1 = val \<or> s2 = (\<not> val) then
+                                                  Pm_fmap (chopped xs)
+                                              else 
+                                                  Pm_fmap (chopped2 xs))"
+  by (transfer', rule ext)(auto simp add: Let_def override_on_def purge_raw_def fmlookup_default_def zero_map 
+                                         map_drop_def map_filter_def 
+                                        split:option.splits)
+
+
+value "lookup (purge (0 :: sig transaction) 1 1 C False True) 1 C"
 
 term "post_necessary_raw"
 
+(*
 fun post_necessary_code :: "nat \<Rightarrow> (nat, 'a \<rightharpoonup> bool) fmap \<Rightarrow> nat \<Rightarrow> 'a \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> bool" where
   "post_necessary_code 0 fm t s val def \<longleftrightarrow> (case lookup0 fm t s of None \<Rightarrow> val \<noteq> def | Some v \<Rightarrow> v \<noteq> val)"
 | "post_necessary_code (Suc n) fm t s val def \<longleftrightarrow> (case lookup0 fm (t + Suc n) s of None \<Rightarrow> post_necessary_code n fm t s val def | Some v \<Rightarrow> v \<noteq> val)"
 
 lemma post_necessary_raw_code[code]:
   "post_necessary_raw dly (lookup0 xs) t sig v def =  post_necessary_code dly xs t sig v def"
-  by (induction dly) (auto split: option.split)
+  by (induction dly) (auto split: option.split) *)
+
+lemma [code]:
+  "post_necessary dly (Pm_fmap xs) t sig v def = (signal_of2 def (Pm_fmap xs) sig (t + dly) \<noteq> v)"
+  by transfer' auto
+
 
 lemma [code]: 
   "post sig v (Pm_fmap xs) t = 
@@ -131,22 +149,24 @@ lemma [code]:
      (rule ext, auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def
                         split: option.splits)
 
-(* lemma [code]:
+
+lemma [code]:
   "trans_post sig v def (Pm_fmap xs) t dly = (let
                                                 current  = lookup0 xs (t + dly);
                                                 chopped1 = fmmap_keys (\<lambda>t'. if t + dly < t' then map_drop sig else id);
                                                 chopped2 = fmmap_keys (\<lambda>t'. if t + dly \<le> t' then map_drop sig else id);
                                                 updated  = fmupd (t + dly) (current(sig \<mapsto> v)) xs
                                               in
-                                                if post_necessary_code (dly-1) xs t sig v def then Pm_fmap (chopped1 updated) else Pm_fmap (chopped2 xs))"
-  by (transfer', unfold Let_def post_necessary_raw_code trans_post_raw_def preempt_raw_def 
+                                                if signal_of2 def (Pm_fmap xs) sig (t + (dly - 1)) \<noteq> v then Pm_fmap (chopped1 updated) else Pm_fmap (chopped2 xs))"
+  by (transfer', unfold Let_def  trans_post_raw_def preempt_raw_def 
                         post_raw_def)
      (rule ext, auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def 
-                        split: option.splits) *)
+                        split: option.splits)
 
 value [code] "beval 2 def_state {} test_beh (Bsig_delayed A 1)"
 value [code] "beval 2 def_state {} test_beh (Bsig_delayed B 1)"
 value [code] "beval 2 def_state {} test_beh (Bsig_delayed C 1)"
+
 value [code] "seq_exec 0 def_state {} 0 (Bnull :: sig seq_stmt) empty_trans"
 
 definition
@@ -814,12 +834,16 @@ lemma [code_abbrev]:
   "beval now \<sigma> \<gamma> hist exp = beval_raw now \<sigma> \<gamma> (lookup hist) exp"
   by transfer' auto
 
+lemma [code_abbrev]:
+  "lookup (purge \<tau> t dly sig def val) = purge_raw (lookup \<tau>) t dly sig def val"
+  by transfer' auto
+ 
 lemma evaluate_beval_raw:
   "beval_raw 0 def_state {} (lookup (Pm_fmap (fmap_of_list []))) (Bsig A) = False"
   by eval
 
 lemma evaluate_purge_raw:
-  "(purge_raw (lookup (Pm_fmap (fmap_of_list []))) 1 1 C) 1 C = None"
+  "(purge_raw (lookup (Pm_fmap (fmap_of_list []))) 1 1 C True False) 1 C = None"
   by eval
 
 lemma evaluate_post_raw:
