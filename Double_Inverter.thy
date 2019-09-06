@@ -16,13 +16,36 @@ text \<open>datatypes for all signals\<close>
 
 datatype sig = IN | TEMP | OUT
 
-fun \<Gamma> :: "sig tyenv" where
-  "\<Gamma> IN = Bty" | "\<Gamma> TEMP = Bty" | "\<Gamma> OUT = Bty"
-
 \<comment> \<open>VHDL program for double inverter\<close>
 definition two_inverter :: "sig conc_stmt" where
   "two_inverter \<equiv>  (process {IN} : Bassign_trans TEMP (Bsig IN) 1)
                 || (process {TEMP} : Bassign_trans OUT (Bsig TEMP) 1)"
+
+lemma potential_tyenv:
+  assumes "conc_wt \<Gamma> two_inverter"
+  shows "\<exists>len. \<Gamma> IN = Bty \<and> \<Gamma> TEMP = Bty \<and> \<Gamma> OUT = Bty
+            \<or> \<Gamma> IN = Lty len \<and> \<Gamma> TEMP = Lty len \<and> \<Gamma> OUT = Lty len"
+  using assms unfolding two_inverter_def
+proof (rule conc_wt_cases(2))
+  assume "conc_wt \<Gamma> ( process {IN} : Bassign_trans TEMP (Bsig IN) 1)"
+  hence "seq_wt \<Gamma> (Bassign_trans TEMP (Bsig IN) 1)"
+    by blast
+  hence "bexp_wt \<Gamma> (Bsig IN) (\<Gamma> TEMP)"
+    by blast
+  hence "\<Gamma> TEMP = \<Gamma> IN"
+    by (rule bexp_wt_cases_all) auto
+  assume "conc_wt \<Gamma> ( process {TEMP} : Bassign_trans OUT (Bsig TEMP) 1)"
+  hence "seq_wt \<Gamma> (Bassign_trans OUT (Bsig TEMP) 1)"
+    by blast
+  hence "bexp_wt \<Gamma> (Bsig TEMP) (\<Gamma> OUT)"
+    by blast
+  hence "\<Gamma> OUT = \<Gamma> TEMP"
+    by (rule bexp_wt_cases_all) auto
+  obtain len where "\<Gamma> TEMP = Bty \<or> \<Gamma> TEMP = Lty len"
+    using ty.exhaust by auto
+  thus ?thesis
+    using \<open>\<Gamma> OUT = \<Gamma> TEMP\<close> \<open>\<Gamma> TEMP = \<Gamma> IN\<close> by auto
+qed
 
 \<comment> \<open>the first invariant for double inverter\<close>
 definition inv_first :: "sig assn2" where

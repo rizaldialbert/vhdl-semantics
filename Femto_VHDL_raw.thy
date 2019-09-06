@@ -165,7 +165,7 @@ lemma [elim]:
 
 subsection \<open>Operational Semantics\<close>
 
-datatype val = Bv (bval_of : bool) | Lv "bool list"
+datatype val = Bv (bval_of : bool) | Lv (lval_of : "bool list")
 
 type_synonym 'signal event = "'signal set"
 type_synonym 'signal state = "'signal \<Rightarrow> val"
@@ -3506,7 +3506,15 @@ inductive bexp_wt :: "'s tyenv \<Rightarrow> 's bexp \<Rightarrow> ty \<Rightarr
 | "bexp_wt \<Gamma> exp1 type \<Longrightarrow> bexp_wt \<Gamma> exp2 type \<Longrightarrow> bexp_wt \<Gamma> (Bxor exp1 exp2) type"
 | "bexp_wt \<Gamma> exp1 type \<Longrightarrow> bexp_wt \<Gamma> exp2 type \<Longrightarrow> bexp_wt \<Gamma> (Bxnor exp1 exp2) type"
 
-inductive_cases bexp_wt_cases : "bexp_wt \<Gamma> (Bnand exp1 exp2) type"
+inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
+                                  "bexp_wt \<Gamma> (Band  exp1 exp2) type"
+                                  "bexp_wt \<Gamma> (Bor   exp1 exp2) type"
+                                  "bexp_wt \<Gamma> (Bnand exp1 exp2) type"
+                                  "bexp_wt \<Gamma> (Bnor  exp1 exp2) type"
+                                  "bexp_wt \<Gamma> (Bxor  exp1 exp2) type"
+                                  "bexp_wt \<Gamma> (Bxnor exp1 exp2) type"
+
+inductive_cases bexp_wt_cases_all : "bexp_wt \<Gamma> exp type"
 
 inductive seq_wt :: "'s tyenv \<Rightarrow> 's seq_stmt \<Rightarrow> bool" where
   "seq_wt \<Gamma> Bnull"
@@ -3515,15 +3523,18 @@ inductive seq_wt :: "'s tyenv \<Rightarrow> 's seq_stmt \<Rightarrow> bool" wher
 | "bexp_wt \<Gamma> exp (\<Gamma> sig) \<Longrightarrow> seq_wt \<Gamma> (Bassign_trans sig exp dly)"
 | "bexp_wt \<Gamma> exp (\<Gamma> sig) \<Longrightarrow> seq_wt \<Gamma> (Bassign_inert sig exp dly)"
 
-inductive_cases seq_wt_cases : "seq_wt \<Gamma> Bnull"
-                               "seq_wt \<Gamma> (Bcomp s1 s2)"
-                               "seq_wt \<Gamma> (Bguarded g s1 s2)"
-                               "seq_wt \<Gamma> (Bassign_trans sig exp dly)"
-                               "seq_wt \<Gamma> (Bassign_inert sig exp dly)"
+inductive_cases seq_wt_cases [elim!]: "seq_wt \<Gamma> Bnull"
+                                      "seq_wt \<Gamma> (Bcomp s1 s2)"
+                                      "seq_wt \<Gamma> (Bguarded g s1 s2)"
+                                      "seq_wt \<Gamma> (Bassign_trans sig exp dly)"
+                                      "seq_wt \<Gamma> (Bassign_inert sig exp dly)"
 
 inductive conc_wt :: "'s tyenv \<Rightarrow> 's conc_stmt \<Rightarrow> bool" where
   "seq_wt \<Gamma> ss \<Longrightarrow> conc_wt \<Gamma> (process sl : ss)"
 | "conc_wt \<Gamma> cs1 \<Longrightarrow> conc_wt \<Gamma> cs2 \<Longrightarrow> conc_wt \<Gamma> (cs1 || cs2)"
+
+inductive_cases conc_wt_cases [elim!] : "conc_wt \<Gamma> (process sl : ss)"
+                                        "conc_wt \<Gamma> (cs1 || cs2)"
 
 fun type_of :: "val \<Rightarrow> ty" where
   "type_of (Bv b)  = Bty"

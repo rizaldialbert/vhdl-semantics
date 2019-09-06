@@ -82,6 +82,10 @@ lemma strengthen_precondition2:
   "\<turnstile> [P'] ss [Q] \<Longrightarrow> \<turnstile> [\<lambda>tw. P tw \<and> P' tw] ss [Q]"
   by (rule Conseq2[where Q="Q" and P="P'"]) auto
 
+lemma weaken_postcondition:
+  "\<turnstile> [P] ss [\<lambda>tw. Q1 tw \<and> Q2 tw] \<Longrightarrow> \<turnstile> [P] ss [Q1]"
+  by (rule Conseq2) auto
+
 lemma compositional_conj:
   assumes "\<turnstile> [P1] ss [Q1]" and "\<turnstile> [P2] ss [Q2]"
   shows "\<turnstile> [\<lambda>tw. P1 tw \<and> P2 tw] ss [\<lambda>tw. Q1 tw \<and> Q2 tw]"
@@ -2400,6 +2404,11 @@ Single:  "\<turnstile> [\<lambda>tw. P tw \<and> \<not> disjnt sl (event_of tw)]
 lemma strengthen_pre_conc_hoare:
   assumes "\<forall>w. P' w \<longrightarrow> P w" and "\<turnstile> \<lbrace>P\<rbrace> s \<lbrace>Q\<rbrace>"
   shows "\<turnstile> \<lbrace>P'\<rbrace> s \<lbrace>Q\<rbrace>"
+  using assms by (blast intro: Conseq')
+
+lemma weaken_post_conc_hoare:
+  assumes "\<forall>w. Q w \<longrightarrow> Q' w" and "\<turnstile> \<lbrace>P\<rbrace> s \<lbrace>Q\<rbrace>"
+  shows   "\<turnstile> \<lbrace>P\<rbrace> s \<lbrace>Q'\<rbrace>"
   using assms by (blast intro: Conseq')
 
 inductive world_conc_exec :: "nat \<times> 'signal worldline_init \<Rightarrow> 'signal conc_stmt \<Rightarrow> nat \<times> 'signal worldline_init \<Rightarrow> bool"
@@ -5405,12 +5414,28 @@ next
 qed
 
 lemma single_conc_stmt_preserve_wityping_hoare:
-  assumes "conc_wt \<Gamma> (process sl : ss)"
+  assumes "seq_wt \<Gamma> ss"
   shows " \<turnstile> \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw) \<rbrace> process sl : ss \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>"
   apply (intro Single)
    apply (rule strengthen_precondition)
    apply (rule seq_stmt_preserve_wityping_hoare)
   using assms conc_wt.cases apply fastforce
   by blast
+
+lemma single_conc_stmt_preserve_wityping_init_hoare:
+  assumes "seq_wt \<Gamma> ss"
+  shows "\<turnstile>\<^sub>I \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>  process sl : ss \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>"
+  apply (intro SingleI)
+  apply (rule seq_stmt_preserve_wityping_hoare)
+  using assms conc_wt.cases apply fastforce
+  done
+
+lemma single_conc_stmt_preserve_wityping_init_sim_hoare:
+  assumes "seq_wt \<Gamma> ss"
+  shows "init_sim_hoare (\<lambda>tw. wityping \<Gamma> (snd tw)) (process sl : ss) (\<lambda>tw. wityping \<Gamma> (snd tw))"
+  apply (intro AssignI)
+  unfolding snd_conv apply (rule single_conc_stmt_preserve_wityping_init_hoare)
+  apply (rule assms)
+  done
 
 end
