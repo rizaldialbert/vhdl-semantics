@@ -89,6 +89,8 @@ datatype 'signal bexp =
   | Bxnor "'signal bexp" "'signal bexp"
   | Btrue
   | Bfalse
+  | Bslice 'signal nat nat
+  | Bindex 'signal nat
 
 text \<open>Sequential statements in VHDL are standard. They include skip statements @{term "Bnull"},
 sequential compositions @{term "Bcomp"}, branching statements @{term "Bguarded"}, and assignments.
@@ -574,6 +576,7 @@ text \<open>The semantics of expression is standard. A slightly more involved de
 "Bsig_delayed"}. Basically, it gets the value in the history @{term "snd \<theta> :: 'signal trans_raw"} at
 time @{term "now - t"} where @{term "t"} is the delay.\<close>
 
+
 inductive beval_raw :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal history \<Rightarrow> 'signal state \<Rightarrow> 'signal bexp \<Rightarrow> val \<Rightarrow> bool"
   ("_ , _ , _ , _, _  \<turnstile> _ \<longrightarrow>\<^sub>b _")
   where
@@ -609,6 +612,16 @@ inductive beval_raw :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal ev
 | "\<lbrakk>beval_raw now \<sigma> \<gamma> \<theta>  def e1  (Lv bs1); beval_raw now \<sigma> \<gamma> \<theta> def  e2  (Lv bs2); length bs1 = length bs2\<rbrakk>
                     \<Longrightarrow> beval_raw now \<sigma> \<gamma> \<theta> def  (Bxnor e1 e2)  (Lv (map2 (\<lambda>x y. \<not> xor x y) bs1 bs2))"
 
+\<comment> \<open>we assume big endian here; that is why we have the expression @{term "{r..l}"} instead of
+@{term "{l .. r}"}; the left index should be bigger than the right index, e.g. DATA[31 DOWNTO 0] or,
+in our concrete syntax, Bslice DATA 31 0.\<close>
+
+| "beval_raw now \<sigma> \<gamma> \<theta> def (Bsig sig) (Lv bs) \<Longrightarrow> length bs = len \<Longrightarrow>
+                beval_raw now \<sigma> \<gamma> \<theta> def (Bslice sig l r) (Lv (nths bs {len - l - 1 .. len - r - 1}))"
+
+| "beval_raw now \<sigma> \<gamma> \<theta> def (Bsig sig) (Lv bs) \<Longrightarrow>
+                                            beval_raw now \<sigma> \<gamma> \<theta> def (Bindex sig idx) (Bv (bs ! idx))"
+
 inductive_cases beval_cases[elim!]:
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bsig sig) \<longrightarrow>\<^sub>b res"
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Btrue) \<longrightarrow>\<^sub>b res"
@@ -622,6 +635,8 @@ inductive_cases beval_cases[elim!]:
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bnor e1 e2) \<longrightarrow>\<^sub>b res"
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bxor e1 e2) \<longrightarrow>\<^sub>b res"
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bxnor e1 e2) \<longrightarrow>\<^sub>b res"
+  "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bslice sig l r) \<longrightarrow>\<^sub>b res"
+  "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bindex sig idx) \<longrightarrow>\<^sub>b res"
 
 inductive_cases beval_cases2:
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b res"
@@ -635,8 +650,18 @@ lemma beval_raw_deterministic:
   assumes "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b res2"
   shows "res2 = res1"
   using assms
-  apply (induction arbitrary:res2 rule:beval_raw.induct)
-  by auto blast
+proof (induction arbitrary:res2 rule:beval_raw.induct)
+  case (21 now \<sigma> \<gamma> \<theta> def sig bs idx)
+  then show ?case
+    by (metis beval_cases(14) val.sel(2))
+next
+  case (17 now \<sigma> \<gamma> \<theta> def e1 bs1 e2 bs2)
+  then show ?case by auto blast
+next
+  case (20 now \<sigma> \<gamma> \<theta> def sig bs len l r)
+  then show ?case
+    by (metis Suc_eq_plus1 beval_cases(13) diff_diff_add val.sel(2))
+qed auto
 
 lemma
   assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bsig sig) \<longrightarrow>\<^sub>b res"
@@ -3505,6 +3530,9 @@ inductive bexp_wt :: "'s tyenv \<Rightarrow> 's bexp \<Rightarrow> ty \<Rightarr
 | "bexp_wt \<Gamma> exp1 type \<Longrightarrow> bexp_wt \<Gamma> exp2 type \<Longrightarrow> bexp_wt \<Gamma> (Bnor exp1 exp2) type"
 | "bexp_wt \<Gamma> exp1 type \<Longrightarrow> bexp_wt \<Gamma> exp2 type \<Longrightarrow> bexp_wt \<Gamma> (Bxor exp1 exp2) type"
 | "bexp_wt \<Gamma> exp1 type \<Longrightarrow> bexp_wt \<Gamma> exp2 type \<Longrightarrow> bexp_wt \<Gamma> (Bxnor exp1 exp2) type"
+| "bexp_wt \<Gamma> (Bsig sig) (Lty len) \<Longrightarrow> r \<le> l \<Longrightarrow> l - r + 1 \<le> len \<Longrightarrow> l < len
+                                                  \<Longrightarrow>  bexp_wt \<Gamma> (Bslice sig l r) (Lty (l - r + 1))"
+| "bexp_wt \<Gamma> (Bsig sig) (Lty len) \<Longrightarrow> idx < len \<Longrightarrow> bexp_wt \<Gamma> (Bindex sig idx) Bty"
 
 inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
                                   "bexp_wt \<Gamma> (Band  exp1 exp2) type"
@@ -3513,6 +3541,9 @@ inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
                                   "bexp_wt \<Gamma> (Bnor  exp1 exp2) type"
                                   "bexp_wt \<Gamma> (Bxor  exp1 exp2) type"
                                   "bexp_wt \<Gamma> (Bxnor exp1 exp2) type"
+                                  "bexp_wt \<Gamma> (Bslice sig l r)  type"
+                                  "bexp_wt \<Gamma> (Bsig sig) type"
+                                  "bexp_wt \<Gamma> (Bindex sig idx) type"
 
 inductive_cases bexp_wt_cases_all : "bexp_wt \<Gamma> exp type"
 
@@ -3609,8 +3640,42 @@ lemma beval_raw_preserve_well_typedness:
   assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b v"
   shows "type_of v = type"
   using assms
-  apply (induction arbitrary: v rule:bexp_wt.inducts)
-  using signal_of_preserve_well_typedness by fastforce+
+proof (induction arbitrary: v rule:bexp_wt.inducts)
+  case (5 \<Gamma> sig dly)
+  then show ?case
+    using signal_of_preserve_well_typedness by fastforce
+next
+  case (13 \<Gamma> sig len r l)
+  obtain v' where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig sig \<longrightarrow>\<^sub>b v'"
+    by (meson "13.prems"(4) beval_cases(13))
+  hence "type_of v' = Lty len"
+    using 13 by auto
+  hence "length (nths (lval_of v') {len - l - 1 .. len - r - 1}) = card {i. i < length (lval_of v') \<and> i \<in> {len - l - 1..len - r - 1}}"
+    unfolding length_nths by auto
+  also have "... = card {i. i < len \<and> i \<in> {len - l - 1..len - r - 1}}"
+    using \<open>type_of v' = Lty len\<close>
+    by (metis ty.distinct(1) ty.inject type_of.elims val.sel(2))
+  also have "... = card ({len - l - 1 .. len - r - 1} \<inter> {i. i < len})"
+    by (metis Collect_conj_eq Collect_mem_eq Int_commute)
+  also have "... = card ({len - l - 1 .. len - r - 1}) - card ({len - l - 1 .. len - r - 1} - {i. i < len})"
+    by (metis Diff_Diff_Int Diff_subset card_Diff_subset finite_Diff finite_atLeastAtMost)
+  also have "... = card ({len - l - 1 .. len - r - 1}) "
+  proof -
+    have "{len - l - 1 .. len - r - 1} - {i. i < len} = {}"
+      using 13(2-4) le_less_trans by auto
+    show ?thesis
+      by (metis \<open>{len - l - 1..len - r - 1} - {i. i < len} = {}\<close> card_empty diff_zero)
+  qed
+  also have "... = l - r + 1"
+    using 13(2-4)  by auto
+  finally have "length (nths (lval_of v') {len - l - 1 .. len - r - 1}) = l - r + 1"
+    by auto
+  thus ?case
+    by (smt "13.prems"(4) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> Bsig sig \<longrightarrow>\<^sub>b v'\<close> \<open>type_of v' = Lty len\<close>
+    beval_cases(1) beval_cases(13) diff_commute diff_diff_left plus_1_eq_Suc ty.inject type_of.elims
+    val.distinct(1) val.sel(2))
+qed (fastforce)+
+
 
 lemma post_raw_preserve_type_correctness:
   fixes sig x t dly
@@ -3814,6 +3879,10 @@ lemma beval_raw_progress:
   shows "\<exists>v. t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b v "
   using assms
 proof (induction rule:bexp_wt.inducts)
+  case (14 \<Gamma> sig len idx)
+  then show ?case
+    by (metis beval_raw.intros(21) beval_raw_preserve_well_typedness ty.simps(3) type_of.elims)
+next
   case (6 \<Gamma> exp type)
   then show ?case
     by (metis beval_raw.intros(6) beval_raw.intros(7) type_of.elims)
@@ -3928,6 +3997,10 @@ next
     then show ?thesis
       by (metis beval_raw.intros v1 v2)
   qed
+next
+  case (13 \<Gamma> sig len r l)
+  then show ?case
+    by (metis beval_raw.intros(20) beval_raw_preserve_well_typedness ty.simps(3) type_of.elims)
 qed (auto intro!: beval_raw.intros)
 
 lemma bexp_wt_bty_cases:
@@ -3937,6 +4010,11 @@ lemma bexp_wt_bty_cases:
   shows "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b (Bv True) \<or> t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b (Bv False)"
   using assms
 proof (induction rule:bexp_wt.inducts)
+  case (14 \<Gamma> sig len idx)
+  then show ?case
+    by (metis (full_types) beval_raw.intros(1) beval_raw.intros(21)
+    beval_raw_preserve_well_typedness ty.distinct(1) type_of.elims)
+next
   case (1 \<Gamma>)
   then show ?case by (auto intro!: beval_raw.intros)
 next
@@ -3984,6 +4062,9 @@ next
 next
   case (12 \<Gamma> exp1 type exp2)
   then show ?case by (metis beval_raw.intros(18) val.inject(1))
+next
+  case (13 \<Gamma> sig len r l)
+  then show ?case  by blast
 qed
 
 lemma seq_stmts_progress:

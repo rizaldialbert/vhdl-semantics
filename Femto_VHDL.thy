@@ -324,6 +324,9 @@ inductive beval_ind :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal ev
                                        beval_ind now \<sigma> \<gamma> \<theta> def (Bxnor e1 e2)  (Bv (\<not> xor val1 val2))"
 | "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Lv bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Lv bs2); length bs1 = length bs2\<rbrakk>
                     \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bxnor e1 e2)  (Lv (map2 (\<lambda>x y. \<not> xor x y) bs1 bs2))"
+| "beval_ind now \<sigma> \<gamma> \<theta> def (Bsig sig) (Lv bs) \<Longrightarrow>  length bs = len \<Longrightarrow>
+                                    beval_ind now \<sigma> \<gamma> \<theta> def (Bslice sig l r) (Lv (nths bs {len - l - 1 .. len - r - 1}))"
+| "beval_ind now \<sigma> \<gamma> \<theta> def (Bsig sig) (Lv bs) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bindex sig idx) (Bv (bs ! idx))"
 
 lemma beval_eq_beval_ind:
   "beval t \<sigma> \<gamma> \<theta> def exp res = beval_ind t \<sigma> \<gamma> \<theta> def exp res"

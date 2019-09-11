@@ -64,6 +64,9 @@ value [code] "functional_beval_ind 0 (\<lambda>x. Bv False) {} 0 (\<lambda>x. Bv
 values "{x. beval_ind 0 (\<lambda>x. Bv False) {} 0 (\<lambda>x. Bv False) (Band (Bsig A) (Bsig B)) x}"
 value [code] "functional_beval_ind 0 (\<lambda>x. Bv False) {} 0 (\<lambda>x. Bv False) (Band (Bsig A) (Bsig B))"
 
+values "{x. beval_ind 0 (\<lambda>x. Lv (replicate 4 False)) {} 0 (\<lambda>x. Lv (replicate 4 False)) (Bslice C 3 2) x}"
+value [code] "functional_beval_ind 0 (\<lambda>x. Lv (replicate 4 False)) {} 0 (\<lambda>x. Lv (replicate 4 False)) (Bslice C 3 2)"
+
 theorem functional_beval_ind_completeness:
   assumes "beval_ind t \<sigma> \<gamma> \<theta> def exp v"
   shows "functional_beval_ind t \<sigma> \<gamma> \<theta> def exp = v"
