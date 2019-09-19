@@ -905,8 +905,9 @@ subsection \<open>vector type of NAND\<close>
 
 locale vector_type_nand3 =
   fixes len :: "nat"
+  fixes ki :: signedness
   fixes \<Gamma> :: "sig tyenv"
-  assumes "\<Gamma> A = Lty len" and "\<Gamma> B = Lty len" and "\<Gamma> C = Lty len"
+  assumes "\<Gamma> A = Lty ki len" and "\<Gamma> B = Lty ki len" and "\<Gamma> C = Lty ki len"
 begin
 
 definition nand_inv :: "sig assn2" where
@@ -919,7 +920,7 @@ definition nand_inv2 :: "sig assn2" where
 
 lemma nand_inv_next_time:
   assumes "nand_inv tw"
-  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty len"
+  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty ki len"
   defines "tw' \<equiv> tw[C, 1 :=\<^sub>2 v]"
   shows   "nand_inv (next_time_world tw', snd tw')"
 proof -
@@ -956,12 +957,12 @@ proof -
           using assms(2) unfolding beval_world_raw2_def by auto
         have "wline_of tw' C (fst tw + 1) = v"
           unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-        also have "... = Lv (map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw)))"
+        also have "... = Lv ki (map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw)))"
           apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-          prefer 2
-          apply (metis beval_cases(1) comp_def val.sel(2) state_of_world_def)
+           prefer 2
+           apply (metis assms(3) beval_cases(1) comp_apply state_of_world_def ty.inject type_of.simps(2) val.sel(3))
           using assms by auto
-        also have "... = Lv (map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw)))"
+        also have "... = Lv ki (map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw)))"
           unfolding tw'_def worldline_upd2_def worldline_upd_def by simp
         finally show ?thesis
           by simp
@@ -983,12 +984,12 @@ proof -
           using assms(2) unfolding beval_world_raw2_def by auto
         have "wline_of tw' C (fst tw + 1) = v"
           unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-        also have "... = Lv (map2 (\<lambda>x y. x \<longrightarrow> \<not> y)  (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw)))"
+        also have "... = Lv ki (map2 (\<lambda>x y. x \<longrightarrow> \<not> y)  (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw)))"
           apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-          prefer 2
-          apply (metis beval_cases(1) comp_def val.sel(2) state_of_world_def)
+           prefer 2
+          apply (metis assms(3) beval_cases(1) comp_apply state_of_world_def ty.inject type_of.simps(2) val.sel(3))
           using assms by auto
-        also have "... = Lv (map2 (\<lambda>x y. x \<longrightarrow> \<not> y)  (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw)))"
+        also have "... = Lv ki (map2 (\<lambda>x y. x \<longrightarrow> \<not> y)  (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw)))"
           unfolding tw'_def worldline_upd2_def worldline_upd_def by simp
         finally show ?thesis
           by simp
@@ -1096,7 +1097,7 @@ qed
 
 lemma nand_inv2_next_time:
   fixes tw
-  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty len"
+  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty ki len"
   defines "tw' \<equiv> tw[C, 1 :=\<^sub>2 v]"
   shows   "nand_inv2 (next_time_world tw', snd tw')"
 proof -
@@ -1148,7 +1149,7 @@ proof -
       also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
         apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
         prefer 2
-        apply (metis beval_cases(1) comp_def state_of_world_def val.sel(2))
+        apply (metis beval_cases(1) comp_apply state_of_world_def val.sel(3))
         using assms(2) by auto
       also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A ?t') (lof_wline tw' B ?t')"
         using * by auto
@@ -1281,7 +1282,7 @@ qed
 
 lemma nand_inv_next_time_inert:
   assumes "nand_inv tw"
-  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty len"
+  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty ki len"
   defines "tw' \<equiv> tw\<lbrakk>C, 1 :=\<^sub>2 v\<rbrakk>"
   shows   "nand_inv (next_time_world tw', snd tw')"
 proof -
@@ -1375,7 +1376,7 @@ proof -
         have "lval_of v = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
           apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
           prefer 2
-          apply (metis beval_cases(1) comp_def state_of_world_def val.sel(2))
+          apply (metis beval_cases(1) comp_apply state_of_world_def val.sel(3))
           using assms(3) by auto
         also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
@@ -1400,7 +1401,7 @@ proof -
           unfolding beval_world_raw2_def
           apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
           prefer 2
-          apply (metis beval_cases(1) comp_def state_of_world_def val.sel(2))
+          apply (metis beval_cases(1) comp_def state_of_world_def val.sel(3))
           using assms(3) by auto
         also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
@@ -1455,7 +1456,7 @@ proof -
         have "lval_of ... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
           apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
            prefer 2
-          apply (metis beval_cases(1) comp_def state_of_world_def val.sel(2))
+          apply (metis beval_cases(1) comp_def state_of_world_def val.sel(3))
           using assms(3) by auto
         also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
@@ -1474,7 +1475,7 @@ proof -
         have "lval_of ... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
           apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
           prefer 2
-          apply (metis beval_cases(1) comp_apply state_of_world_def val.sel(2))
+          apply (metis beval_cases(1) comp_def state_of_world_def val.sel(3))
           using assms(3) by auto
         also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
@@ -1498,7 +1499,7 @@ qed
 
 lemma nand_inv_next_time0_inert:
   assumes "fst tw = 0"
-  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty len"
+  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty ki len"
   defines "tw' \<equiv> tw\<lbrakk>C, 1 :=\<^sub>2 v\<rbrakk>"
   shows   "nand_inv (next_time_world tw', snd tw')"
 proof -
@@ -1544,7 +1545,7 @@ lemma nand_seq_hoare_wityping0:
 
 lemma nand_inv2_next_time_inert:
   fixes tw
-  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty len"
+  assumes "beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v" and "type_of v = Lty ki len"
   defines "tw' \<equiv> tw\<lbrakk>C, 1 :=\<^sub>2 v\<rbrakk>"
   shows   "nand_inv2 (next_time_world tw', snd tw')"
   unfolding nand_inv2_def
@@ -1621,8 +1622,8 @@ proof (rule impI)
       by auto
     have "lval_of v = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
       apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-      prefer 2
-      apply (metis beval_cases(1) comp_def state_of_world_def val.sel(2))
+       prefer 2
+      apply (metis beval_cases(1) comp_def state_of_world_def val.sel(3))
       using assms(2) by auto
     also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A ?t') (lof_wline tw' B ?t')"
       using 0 1 by auto
@@ -1752,7 +1753,7 @@ end
 
 lemma tyenv_possibilities_bexp_wt:
   assumes " bexp_wt \<Gamma>' (Bnand (Bsig A) (Bsig B)) (\<Gamma>' C) "
-  shows "\<exists>len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
+  shows "\<exists>ki len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
 proof (rule bexp_wt_cases(4)[OF assms])
   assume "bexp_wt \<Gamma>' (Bsig A) (\<Gamma>' C)"
   hence "\<Gamma>' C = \<Gamma>' A"
@@ -1760,36 +1761,34 @@ proof (rule bexp_wt_cases(4)[OF assms])
   assume "bexp_wt \<Gamma>' (Bsig B) (\<Gamma>' C)"
   hence "\<Gamma>' C = \<Gamma>' B"
     using bexp_wt.cases by auto
-  obtain len where "\<Gamma>' C = Bty \<or> \<Gamma>' C = Lty len"
-    using ty.exhaust by auto
+  obtain ki len where "\<Gamma>' C = Bty \<or> \<Gamma>' C = Lty ki len"
+    using ty.exhaust by meson
   moreover
   { assume "\<Gamma>' C = Bty"
     hence "\<Gamma>' A = Bty" and "\<Gamma>' B = Bty"
       using \<open>\<Gamma>' C = \<Gamma>' A\<close> \<open>\<Gamma>' C = \<Gamma>' B\<close> by auto
-    hence "\<exists>len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
-      apply (intro exI[where x="len"])
+    hence "\<exists>ki len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
       using \<open>\<Gamma>' C = Bty\<close> by auto }
   moreover
-  { assume "\<Gamma>' C = Lty len"
-    hence "\<Gamma>' A = Lty len" and "\<Gamma>' B = Lty len"
+  { assume "\<Gamma>' C = Lty ki len"
+    hence "\<Gamma>' A = Lty ki len" and "\<Gamma>' B = Lty ki len"
       using \<open>\<Gamma>' C = \<Gamma>' A\<close> \<open>\<Gamma>' C = \<Gamma>' B\<close> by auto
-    hence "\<exists>len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
-      apply (intro exI[where x="len"])
-      using \<open>\<Gamma>' C = Lty len\<close> by auto }
+    hence "\<exists>ki len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
+      using \<open>\<Gamma>' C = Lty ki len\<close> by auto }
   ultimately show ?thesis
     by auto
 qed
 
 lemma tyenv_possibilities_seq_wt:
   assumes "seq_wt \<Gamma>' (Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1)"
-  shows "\<exists>len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
+  shows "\<exists>ki len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
   apply (rule seq_wt_cases(4)[OF assms])
   apply (rule tyenv_possibilities_bexp_wt)
   by simp
 
 lemma tyenv_possibilities_conc_wt:
   assumes "conc_wt \<Gamma>' nand3"
-  shows "\<exists>len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
+  shows "\<exists>ki len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
   using assms unfolding nand3_def
   by (metis conc_stmt.sel(4) conc_stmt.simps(4) conc_wt.cases tyenv_possibilities_seq_wt)
 
@@ -1799,7 +1798,7 @@ theorem nand3_correctness:
   shows   " (\<Gamma>' A \<noteq> Bty \<longrightarrow> lof_wline tw' C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i)  (lof_wline tw' B i))
           \<or> (\<Gamma>' A = Bty \<longrightarrow> bval_of_wline tw' C (i + 1) \<longleftrightarrow> \<not> (bval_of_wline tw' A i \<and> bval_of_wline tw' B i))"
 proof -
-  obtain len where "\<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
+  obtain ki len where "\<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
     using tyenv_possibilities_conc_wt[OF assms(1)] by auto
   moreover
   { assume "\<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty"
@@ -1809,27 +1808,27 @@ proof -
     hence ?thesis
       using \<open>\<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty\<close> by auto }
   moreover
-  { assume "\<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
-    then interpret l2: vector_type_nand3 len \<Gamma>'
+  { assume "\<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
+    then interpret l2: vector_type_nand3 len ki \<Gamma>'
       by unfold_locales auto
     have "lof_wline tw' C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i)  (lof_wline tw' B i)"
       using l2.nand_correctness[OF assms(2-3)] by auto
     hence ?thesis
-      using \<open>\<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len\<close> by auto }
+      using \<open>\<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len\<close> by auto }
   ultimately show ?thesis
     by auto
 qed
 
 lemma tyenv_possibilities_seq_wt_inert:
   assumes "seq_wt \<Gamma>' (Bassign_inert C (Bnand (Bsig A) (Bsig B)) 1)"
-  shows "\<exists>len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
+  shows "\<exists>ki len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
   apply (rule seq_wt_cases(5)[OF assms])
   apply (rule tyenv_possibilities_bexp_wt)
   by simp
 
 lemma tyenv_possibilities_conc_wt_inert:
   assumes "conc_wt \<Gamma>' nand"
-  shows "\<exists>len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
+  shows "\<exists>ki len. \<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
   using assms unfolding nand_def
   by (metis conc_stmt.distinct(1) conc_stmt.sel(4) conc_wt.cases tyenv_possibilities_seq_wt_inert)
 
@@ -1839,7 +1838,7 @@ theorem nand_correctness:
   shows   " (\<Gamma>' A \<noteq> Bty \<longrightarrow> lof_wline tw' C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i)  (lof_wline tw' B i))
           \<or> (\<Gamma>' A = Bty \<longrightarrow> bval_of_wline tw' C (i + 1) \<longleftrightarrow> \<not> (bval_of_wline tw' A i \<and> bval_of_wline tw' B i))"
 proof -
-  obtain len where "\<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
+  obtain ki len where "\<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty \<or> \<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
     using tyenv_possibilities_conc_wt_inert[OF assms(1)] by auto
   moreover
   { assume "\<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty"
@@ -1849,13 +1848,13 @@ proof -
     hence ?thesis
       using \<open>\<Gamma>' A = Bty \<and> \<Gamma>' B = Bty \<and> \<Gamma>' C = Bty\<close> by auto }
   moreover
-  { assume "\<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len"
-    then interpret l2: vector_type_nand3 len \<Gamma>'
+  { assume "\<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len"
+    then interpret l2: vector_type_nand3 len ki \<Gamma>'
       by unfold_locales auto
     have "lof_wline tw' C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i)  (lof_wline tw' B i)"
       using l2.nand_correctness[OF assms(2-3)] by auto
     hence ?thesis
-      using \<open>\<Gamma>' A = Lty len \<and> \<Gamma>' B = Lty len \<and> \<Gamma>' C = Lty len\<close> by auto }
+      using \<open>\<Gamma>' A = Lty ki len \<and> \<Gamma>' B = Lty ki len \<and> \<Gamma>' C = Lty ki len\<close> by auto }
   ultimately show ?thesis
     by auto
 qed

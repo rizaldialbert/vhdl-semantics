@@ -27,8 +27,8 @@ lemma potential_tyenv:
   assumes "seq_wt \<Gamma> (Bguarded (Bsig SEL)
                                       (Bassign_trans OUT (Bsig IN1) 1)
                                       (Bassign_trans OUT (Bsig IN0) 1))"
-  shows "\<exists>len. \<Gamma> IN0 = Bty \<and> \<Gamma> IN1 = Bty \<and> \<Gamma> SEL = Bty \<and> \<Gamma> OUT = Bty
-             \<or> \<Gamma> IN0 = Lty len \<and> \<Gamma> IN1 = Lty len \<and> \<Gamma> SEL = Bty \<and> \<Gamma> OUT = Lty len"
+  shows "\<exists>ki len. \<Gamma> IN0 = Bty \<and> \<Gamma> IN1 = Bty \<and> \<Gamma> SEL = Bty \<and> \<Gamma> OUT = Bty
+             \<or> \<Gamma> IN0 = Lty ki len \<and> \<Gamma> IN1 = Lty ki len \<and> \<Gamma> SEL = Bty \<and> \<Gamma> OUT = Lty ki len"
 proof  (rule seq_wt_cases(3)[OF assms])
   assume "bexp_wt \<Gamma> (Bsig SEL) Bty"
   assume "seq_wt \<Gamma> (Bassign_trans OUT (Bsig IN1) 1)"
@@ -43,8 +43,8 @@ proof  (rule seq_wt_cases(3)[OF assms])
     using seq_wt_cases(4)[OF \<open>seq_wt \<Gamma> (Bassign_trans OUT (Bsig IN0) 1)\<close>] by auto
   hence "\<Gamma> IN0 = \<Gamma> OUT"
     by (rule bexp_wt_cases_all) auto
-  obtain len where "\<Gamma> OUT = Bty \<or> \<Gamma> OUT = Lty len"
-    using ty.exhaust by auto
+  obtain ki len where "\<Gamma> OUT = Bty \<or> \<Gamma> OUT = Lty ki len"
+    using ty.exhaust by meson
   moreover
   { assume "\<Gamma> OUT = Bty"
     hence "\<Gamma> IN0 = Bty"
@@ -54,8 +54,8 @@ proof  (rule seq_wt_cases(3)[OF assms])
     ultimately have ?thesis
       using \<open>\<Gamma> OUT = Bty\<close> \<open>\<Gamma> SEL = Bty\<close> by blast }
   moreover
-  { assume "\<Gamma> OUT = Lty len"
-    moreover hence "\<Gamma> IN0 = Lty len" and "\<Gamma> IN1 = Lty len"
+  { assume "\<Gamma> OUT = Lty ki len"
+    moreover hence "\<Gamma> IN0 = Lty ki len" and "\<Gamma> IN1 = Lty ki len"
       using \<open>\<Gamma> IN0 = \<Gamma> OUT\<close> \<open>\<Gamma> IN1 = \<Gamma> OUT\<close> by auto
     ultimately have ?thesis
       using \<open>\<Gamma> SEL = Bty\<close> by blast }
@@ -271,15 +271,6 @@ proof -
     unfolding mux2_inv_def by auto
 qed
 
-(* lemma beval_world_raw2_type:
-  assumes "wityping \<Gamma> (snd tw)"
-  assumes "beval_world_raw2 tw (Bsig (any :: sig)) v"
-  shows   "type_of v = Bty"
-  using assms
-  by (metis (full_types) beval_raw_preserve_well_typedness beval_world_raw2_def
-  beval_world_raw_cases bexp_wt.intros(3) scalar_type_mux_axioms scalar_type_mux_def sig.exhaust
-  wityping_def wityping_ensure_styping wityping_ensure_ttyping) *)
-
 lemma mux2_seq_hoare_next_time_if:
   "\<turnstile> [\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> beval_world_raw2 tw (Bsig SEL) (Bv True)] Bassign_trans OUT (Bsig IN1) 1 [\<lambda>tw. mux2_inv (next_time_world tw, snd tw)]"
   apply (rule Conseq2[where Q="\<lambda>tw. mux2_inv (next_time_world tw, snd tw)", rotated 1], rule Assign2)
@@ -299,10 +290,6 @@ theorem mux2_seq_hoare_next_time:
     apply (rule mux2_seq_hoare_next_time_else)
   apply simp+
   done
-
-(* lemma mux2_seq_wt:
-  "seq_wt \<Gamma> (Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1))"
-  by (metis bexp_wt.intros(3) scalar_type_mux_axioms scalar_type_mux_def seq_wt.intros(3) seq_wt.intros(4)) *)
 
 theorem mux2_seq_hoare_next_time_wityping:
   assumes "seq_wt \<Gamma> (Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1))"

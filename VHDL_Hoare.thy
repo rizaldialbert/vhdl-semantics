@@ -38,7 +38,7 @@ add a suffix ``line'' in the type @{typ "'signal worldline"}.
 
 What is the relationship between @{typ "'signal worldline"} with the context @{term "\<sigma> :: 'signal
 state"}, @{term "\<gamma> :: 'signal event"}, @{term "\<theta> :: 'signal trans_raw"}, @{term "\<tau>' \<tau> :: 'signal
-trans_raw"} in the semantics @{term "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"}? The answer is that the latter
+trans_raw"} in the semantics @{term "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"}? The answer is that the latter
 is the refined version of the former. We shall show the formal relationship later in this theory.
 \<close>
 
@@ -2034,7 +2034,7 @@ where "\<Turnstile>\<^sub>t {P} s {Q} \<longleftrightarrow>  (\<forall>\<sigma> 
                                             \<and> (\<forall>s. non_stuttering (to_trans_raw_sig \<theta>) def s)
                                             \<and>  w = worldline_raw t \<sigma> \<theta> def \<tau>
                                             \<and>  P w
-                                            \<and> (t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <s, \<tau>> \<longrightarrow>\<^sub>s \<tau>')
+                                            \<and> (t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < s, \<tau>> \<longrightarrow>\<^sub>s \<tau>')
                                             \<and>  w' = worldline_raw t \<sigma> \<theta> def \<tau>' \<longrightarrow> Q w')"
 
 text \<open>The definition @{term "seq_hoare_valid"} shall be the basis to define the soundness of the
@@ -2072,12 +2072,12 @@ proof (rule)+
     and "All (non_stuttering (to_trans_raw_sig \<theta>) def)"
     and "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <Bcomp s1 s2 , \<tau>> \<longrightarrow>\<^sub>s \<tau>' " and 2: "w' = worldline_raw t \<sigma> \<theta> def \<tau>'"
     by auto
-  then obtain \<tau>'' where 0: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <s1, \<tau>> \<longrightarrow>\<^sub>s \<tau>''" and 1: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <s2, \<tau>''> \<longrightarrow>\<^sub>s \<tau>'"
+  then obtain \<tau>'' where 0: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < s1, \<tau>> \<longrightarrow>\<^sub>s \<tau>''" and 1: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < s2, \<tau>''> \<longrightarrow>\<^sub>s \<tau>'"
     by auto
   define w'' where "w'' = worldline_raw t \<sigma> \<theta> def \<tau>''"
   hence "Q w''"
     using `\<Turnstile>\<^sub>t {P} s1 {Q}` unfolding seq_hoare_valid_def
-    using \<open>P w\<close> \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <s1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>''\<close> \<open>w = worldline_raw t \<sigma> \<theta> def \<tau>\<close>
+    using \<open>P w\<close> \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> < s1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>''\<close> \<open>w = worldline_raw t \<sigma> \<theta> def \<tau>\<close>
     \<open>All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)\<close> \<open>All (non_stuttering (to_trans_raw_sig \<theta>) def)\<close>
     by blast
   have "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>''"
@@ -2458,7 +2458,7 @@ proof (rule)+
     by auto
   moreover
   { assume "bval_of x "
-    hence \<tau>'_def: "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <s1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+    hence \<tau>'_def: "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> < s1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       using s \<open>is_Bv x\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b x\<close> beval_raw_deterministic val.collapse(1)
       by blast
     have "beval_world_raw w t g x"
@@ -2471,7 +2471,7 @@ proof (rule)+
       unfolding seq_hoare_valid_def  using \<open>bval_of x\<close>  by metis }
   moreover
   { assume "\<not> bval_of x"
-    hence \<tau>'_def: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+    hence \<tau>'_def: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       using s \<open>is_Bv x\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b x\<close> beval_raw_deterministic val.collapse(1)
       by blast
     have "beval_world_raw w t g x"

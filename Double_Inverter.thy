@@ -23,8 +23,8 @@ definition two_inverter :: "sig conc_stmt" where
 
 lemma potential_tyenv:
   assumes "conc_wt \<Gamma> two_inverter"
-  shows "\<exists>len. \<Gamma> IN = Bty \<and> \<Gamma> TEMP = Bty \<and> \<Gamma> OUT = Bty
-            \<or> \<Gamma> IN = Lty len \<and> \<Gamma> TEMP = Lty len \<and> \<Gamma> OUT = Lty len"
+  shows "\<exists>ki len. \<Gamma> IN = Bty \<and> \<Gamma> TEMP = Bty \<and> \<Gamma> OUT = Bty
+            \<or> \<Gamma> IN = Lty ki len \<and> \<Gamma> TEMP = Lty ki len \<and> \<Gamma> OUT = Lty ki len"
   using assms unfolding two_inverter_def
 proof (rule conc_wt_cases(2))
   assume "conc_wt \<Gamma> ( process {IN} : Bassign_trans TEMP (Bsig IN) 1)"
@@ -41,8 +41,8 @@ proof (rule conc_wt_cases(2))
     by blast
   hence "\<Gamma> OUT = \<Gamma> TEMP"
     by (rule bexp_wt_cases_all) auto
-  obtain len where "\<Gamma> TEMP = Bty \<or> \<Gamma> TEMP = Lty len"
-    using ty.exhaust by auto
+  obtain ki len where "\<Gamma> TEMP = Bty \<or> \<Gamma> TEMP = Lty ki len"
+    using ty.exhaust by meson
   thus ?thesis
     using \<open>\<Gamma> OUT = \<Gamma> TEMP\<close> \<open>\<Gamma> TEMP = \<Gamma> IN\<close> by auto
 qed

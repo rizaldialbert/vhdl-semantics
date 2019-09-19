@@ -28,12 +28,12 @@ definition inv' :: "sig assn2" where
 
 lemma potential_tyenv:
   assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bindex IN 3) 1)"
-  shows   "\<exists>len>3. \<Gamma> IN = Lty len \<and> \<Gamma> OUT = Bty"
+  shows   "\<exists>ki len. 3 < len \<and> \<Gamma> IN = Lty ki len \<and> \<Gamma> OUT = Bty"
 proof (rule seq_wt_cases(4)[OF assms])
   assume "bexp_wt \<Gamma> (Bindex IN 3) (\<Gamma> OUT)"
-  then obtain len where "bexp_wt \<Gamma> (Bsig IN) (Lty len) \<and> 3 < len \<and> \<Gamma> OUT = Bty"
+  then obtain ki len where "bexp_wt \<Gamma> (Bsig IN) (Lty ki len) \<and> 3 < len \<and> \<Gamma> OUT = Bty"
     by (meson bexp_wt_cases(10))
-  hence "\<Gamma> IN = Lty len" and "\<Gamma> OUT = Bty" and "3 < len"
+  hence "\<Gamma> IN = Lty ki len" and "\<Gamma> OUT = Bty" and "3 < len"
     by (metis bexp_wt_cases(9))+
   thus ?thesis
     by blast
@@ -87,12 +87,12 @@ proof (rule, rule)
       have "\<not> is_Bv (wline_of tw IN (fst tw))"
         apply (rule beval_world_raw_cases[OF assm2], erule beval_cases)
         by (metis beval_cases(1) comp_apply state_of_world_def val.disc(2))
-      hence "state_of_world (snd tw) (fst tw) IN = Lv (lof_wline tw IN (fst tw))"
-        unfolding state_of_world_def by simp
+      then obtain ki where "state_of_world (snd tw) (fst tw) IN = Lv ki (lof_wline tw IN (fst tw))"
+        unfolding state_of_world_def  by (metis comp_def val.collapse(2))
       show ?thesis
         apply (rule beval_world_raw_cases[OF assm2])
         apply (erule beval_cases)+
-        using \<open>state_of_world (snd tw) (fst tw) IN = Lv (lof_wline tw IN (fst tw))\<close> by simp
+        using \<open>state_of_world (snd tw) (fst tw) IN = Lv ki (lof_wline tw IN (fst tw))\<close> by simp
     qed
     also have "... = lof_wline (next_time_world tw', snd tw') IN i ! 3"
       by (metis \<open>get_time tw = get_time tw'\<close> \<open>get_time tw \<le> i \<and> i < next_time_world tw' - 1\<close> \<open>i <
@@ -119,12 +119,12 @@ proof (rule, rule)
       have "\<not> is_Bv (wline_of tw IN (fst tw))"
         apply (rule beval_world_raw_cases[OF assm2], erule beval_cases)
         by (metis beval_cases(1) comp_apply state_of_world_def val.disc(2))
-      hence "state_of_world (snd tw) (fst tw) IN = Lv (lof_wline tw IN (fst tw))"
-        unfolding state_of_world_def by simp
+      then obtain ki where "state_of_world (snd tw) (fst tw) IN = Lv ki (lof_wline tw IN (fst tw))"
+        unfolding state_of_world_def by (metis comp_def val.collapse(2))
       show ?thesis
         apply (rule beval_world_raw_cases[OF assm2])
         apply (erule beval_cases)+
-        using \<open>state_of_world (snd tw) (fst tw) IN = Lv (lof_wline tw IN (fst tw))\<close> by simp
+        using \<open>state_of_world (snd tw) (fst tw) IN = Lv ki (lof_wline tw IN (fst tw))\<close> by simp
     qed
     also have "... = lof_wline (next_time_world tw', snd tw') IN i ! 3"
       by (metis (mono_tags, lifting) \<open>get_time tw < next_time_world tw'\<close> \<open>get_time tw = get_time
@@ -144,14 +144,14 @@ lemma type_correctness_length:
   assumes "beval_world_raw2 tw (Bindex IN 3) x"
   shows   "type_of x = Bty"
 proof -
-  obtain len where "\<Gamma> IN = Lty len" and "3 < len"
+  obtain ki len where "\<Gamma> IN = Lty ki len" and "3 < len"
     using potential_tyenv[OF assms(1)] by auto
   have *: "beval_world_raw (snd tw) (fst tw) (Bindex IN 3) x"
     using assms(3) unfolding beval_world_raw2_def by auto
-  have "type_of (state_of_world (snd tw) (fst tw) IN) = Lty len"
+  have "type_of (state_of_world (snd tw) (fst tw) IN) = Lty ki len"
     using assms(2) unfolding wityping_def
-    by (simp add: \<open>\<Gamma> IN = Lty len\<close> state_of_world_def wtyping_def)
-  hence **: "\<And>bs. state_of_world (snd tw) (fst tw) IN = Lv bs \<Longrightarrow> length bs = len"
+    by (simp add: \<open>\<Gamma> IN = Lty ki len\<close> state_of_world_def wtyping_def)
+  hence **: "\<And>bs. state_of_world (snd tw) (fst tw) IN = Lv ki bs \<Longrightarrow> length bs = len"
     by simp
   show ?thesis
     apply (rule beval_world_raw_cases[OF *])
@@ -217,7 +217,7 @@ proof (rule, rule, rule)
     show ?thesis
       apply (rule beval_world_raw_cases[OF assm])
       apply (erule beval_cases)+
-      by (metis comp_apply state_of_world_def val.sel(1) val.sel(2))
+      by (metis comp_apply state_of_world_def val.sel(1) val.sel(3))
   qed
   also have "... = lof_wline tw IN (fst tw') ! 3"
     unfolding tw'_def worldline_upd2_def worldline_upd_def by auto

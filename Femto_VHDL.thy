@@ -299,34 +299,42 @@ inductive beval_ind :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal ev
 | "beval_ind now \<sigma> \<gamma> \<theta> def (Bsig_delayed sig t) (signal_of2 (def sig) \<theta> sig (now - t))"
 | "beval_ind now \<sigma> \<gamma> \<theta> def (Bsig_event sig) (Bv (sig \<in> \<gamma>))"
 | "beval_ind now \<sigma> \<gamma> \<theta> def e (Bv bool) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bnot e) (Bv (\<not> bool))"
-| "beval_ind now \<sigma> \<gamma> \<theta> def e (Lv bs) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bnot e) (Lv (map Not bs))"
+| "beval_ind now \<sigma> \<gamma> \<theta> def e (Lv ki bs) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bnot e) (Lv ki (map Not bs))"
 | "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1 (Bv val1); beval_ind now \<sigma> \<gamma> \<theta> def e2 (Bv val2)\<rbrakk> \<Longrightarrow>
                                            beval_ind now \<sigma> \<gamma> \<theta> def (Band e1 e2) (Bv ( val1 \<and> val2))"
-| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv bs2); length bs1 = length bs2\<rbrakk>
-                                  \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Band e1 e2) (Lv (map2 (\<and>) bs1 bs2))"
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv ki bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv ki bs2); length bs1 = length bs2\<rbrakk>
+                                  \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Band e1 e2) (Lv ki (map2 (\<and>) bs1 bs2))"
 | "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1 (Bv val1); beval_ind now \<sigma> \<gamma> \<theta> def e2 (Bv val2)\<rbrakk> \<Longrightarrow>
                                             beval_ind now \<sigma> \<gamma> \<theta> def (Bor e1 e2) (Bv ( val1 \<or> val2))"
-| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv bs2); length bs1 = length bs2\<rbrakk>
-                                   \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bor e1 e2) (Lv (map2 (\<or>) bs1 bs2))"
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv ki bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv ki bs2); length bs1 = length bs2\<rbrakk>
+                                   \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bor e1 e2) (Lv ki (map2 (\<or>) bs1 bs2))"
 | "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1 (Bv val1); beval_ind now \<sigma> \<gamma> \<theta> def e2 (Bv val2)\<rbrakk> \<Longrightarrow>
                                         beval_ind now \<sigma> \<gamma> \<theta> def (Bnand e1 e2) (Bv (\<not>(val1 \<and> val2)))"
-| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Lv bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Lv bs2); length bs1 = length bs2\<rbrakk>
-                    \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bnand e1 e2)  (Lv (map2 (\<lambda>x y. \<not> (x \<and> y)) bs1 bs2))"
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Lv ki bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Lv ki bs2); length bs1 = length bs2\<rbrakk>
+                    \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bnand e1 e2)  (Lv ki (map2 (\<lambda>x y. \<not> (x \<and> y)) bs1 bs2))"
 | "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Bv val1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Bv val2)\<rbrakk> \<Longrightarrow>
                                          beval_ind now \<sigma> \<gamma> \<theta> def (Bnor e1 e2)  (Bv (\<not>(val1 \<or> val2)))"
-| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Lv bs1); beval_ind now \<sigma> \<gamma> \<theta> def  e2  (Lv bs2); length bs1 = length bs2\<rbrakk>
-                     \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bnor e1 e2)  (Lv (map2 (\<lambda>x y. \<not> (x \<or> y)) bs1 bs2))"
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Lv ki bs1); beval_ind now \<sigma> \<gamma> \<theta> def  e2  (Lv ki bs2); length bs1 = length bs2\<rbrakk>
+                     \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bnor e1 e2)  (Lv ki (map2 (\<lambda>x y. \<not> (x \<or> y)) bs1 bs2))"
 | "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Bv val1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Bv val2)\<rbrakk> \<Longrightarrow>
                                           beval_ind now \<sigma> \<gamma> \<theta> def (Bxor e1 e2)  (Bv (xor val1 val2))"
-| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Lv bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Lv bs2); length bs1 = length bs2\<rbrakk>
-                                   \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bxor e1 e2)  (Lv (map2 xor bs1 bs2))"
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Lv ki bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Lv ki bs2); length bs1 = length bs2\<rbrakk>
+                                   \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bxor e1 e2)  (Lv ki (map2 xor bs1 bs2))"
 | "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Bv val1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Bv val2)\<rbrakk> \<Longrightarrow>
                                        beval_ind now \<sigma> \<gamma> \<theta> def (Bxnor e1 e2)  (Bv (\<not> xor val1 val2))"
-| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Lv bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Lv bs2); length bs1 = length bs2\<rbrakk>
-                    \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bxnor e1 e2)  (Lv (map2 (\<lambda>x y. \<not> xor x y) bs1 bs2))"
-| "beval_ind now \<sigma> \<gamma> \<theta> def (Bsig sig) (Lv bs) \<Longrightarrow>  length bs = len \<Longrightarrow>
-                                    beval_ind now \<sigma> \<gamma> \<theta> def (Bslice sig l r) (Lv (nths bs {len - l - 1 .. len - r - 1}))"
-| "beval_ind now \<sigma> \<gamma> \<theta> def (Bsig sig) (Lv bs) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bindex sig idx) (Bv (bs ! idx))"
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e1  (Lv ki bs1); beval_ind now \<sigma> \<gamma> \<theta> def e2  (Lv ki bs2); length bs1 = length bs2\<rbrakk>
+                    \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bxnor e1 e2)  (Lv ki (map2 (\<lambda>x y. \<not> xor x y) bs1 bs2))"
+| "beval_ind now \<sigma> \<gamma> \<theta> def (Bsig sig) (Lv ki bs) \<Longrightarrow>  length bs = len \<Longrightarrow>
+                                    beval_ind now \<sigma> \<gamma> \<theta> def (Bslice sig l r) (Lv ki (nths bs {len - l - 1 .. len - r - 1}))"
+| "beval_ind now \<sigma> \<gamma> \<theta> def (Bsig sig) (Lv ki bs) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def (Bindex sig idx) (Bv (bs ! idx))"
+
+| "beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv Uns bs1) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv Uns bs2) \<Longrightarrow>
+   len = max (length bs1) (length bs2) \<Longrightarrow> bs = bin_to_bl len (bl_to_bin bs1 + bl_to_bin bs2) \<Longrightarrow>
+   beval_ind now \<sigma> \<gamma> \<theta> def (Badd e1 e2) (Lv Uns bs)"
+
+| "beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv Sig bs2) \<Longrightarrow>
+   len = max (length bs1) (length bs2) \<Longrightarrow> bs = bin_to_bl len (sbl_to_bin bs1 + sbl_to_bin bs2) \<Longrightarrow>
+   beval_ind now \<sigma> \<gamma> \<theta> def (Badd e1 e2) (Lv Sig bs)"
 
 lemma beval_eq_beval_ind:
   "beval t \<sigma> \<gamma> \<theta> def exp res = beval_ind t \<sigma> \<gamma> \<theta> def exp res"
@@ -580,16 +588,16 @@ proof transfer
   assume "styping \<Gamma> def"
   assume "finite {x. \<tau> x \<noteq> 0}"
   assume "ttyping \<Gamma> \<tau>"
-  hence "\<exists>\<tau>'. t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  hence "\<exists>\<tau>'. t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     using seq_stmts_progress[OF `seq_wt \<Gamma> ss` `styping \<Gamma> \<sigma>` `ttyping \<Gamma> \<theta>` `styping \<Gamma> def` `ttyping \<Gamma> \<tau>`]
     by auto
-  then obtain \<tau>' where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  then obtain \<tau>' where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     by auto
   hence "finite {x. \<tau>' x \<noteq> 0}"
     using b_seq_exec_almost_all_zero
     by (metis (mono_tags) \<open>finite {x. \<tau> x \<noteq> 0}\<close> \<open>finite {x. \<theta> x \<noteq> 0}\<close> eventually_cofinite map_diff_fin_variability)
   thus "Bex {f. finite {x. f x \<noteq> 0}} (b_seq_exec t \<sigma> \<gamma> \<theta> def ss \<tau>)"
-    using \<open>t , \<sigma> , \<gamma> , \<theta> , def \<turnstile> <ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close> by blast
+    using \<open>t , \<sigma> , \<gamma> , \<theta> , def \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close> by blast
 qed
 
 lemma seq_exec_ind_unique_progress:
