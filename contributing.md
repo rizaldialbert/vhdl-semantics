@@ -12,7 +12,7 @@ Here is a list of potential topics to improve this project. For each topic, I wi
 1. Language features
     * _Formalise types available in VHDL but not in Isabelle such as `STD_LOGIC` or `STD_ULOGIC`, `NATURAL` and `POSITIVE`._
     * _Formalise arithmetic operators available in VHDL but not in Isabelle.  
-       For example, unary minus `(-)`, unary plus `(+)`, subtraction `(-)`, multiplication `(*)`, division `(/)`, remainder `(rem)`, modulus `mod`, exponentiation `(**)`, absolute value `abs`, with variants for arguments in signed, unsigned, or mixed._ 
+       For example, unary minus `(-)`, unary plus `(+)`, division `(/)`, remainder `(rem)`, modulus `mod`, exponentiation `(**)`, absolute value `abs`, with variants for arguments in signed, unsigned, or mixed._ 
     * _Formalise the concepts of `ENTITY` and `ARCHITECTURE`._
     * _Pretty printing the VHDL program just as shown in [IMP2](https://www.isa-afp.org/entries/IMP2.html) (see the construct `program_spec` in the example)._
 

@@ -336,6 +336,34 @@ inductive beval_ind :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal ev
    len = max (length bs1) (length bs2) \<Longrightarrow> bs = bin_to_bl len (sbl_to_bin bs1 + sbl_to_bin bs2) \<Longrightarrow>
    beval_ind now \<sigma> \<gamma> \<theta> def (Badd e1 e2) (Lv Sig bs)"
 
+| "beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv Uns bs1) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv Uns bs2) \<Longrightarrow>
+   len = (length bs1) + (length bs2) \<Longrightarrow> bs = bin_to_bl len (bl_to_bin bs1 * bl_to_bin bs2) \<Longrightarrow>
+   beval_ind now \<sigma> \<gamma> \<theta> def (Bmult e1 e2) (Lv Uns bs)"
+
+| "beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv Sig bs2) \<Longrightarrow>
+   len = (length bs1) + (length bs2) \<Longrightarrow> bs = bin_to_bl len (sbl_to_bin bs1 * sbl_to_bin bs2) \<Longrightarrow>
+   beval_ind now \<sigma> \<gamma> \<theta> def (Bmult e1 e2) (Lv Sig bs)"
+
+| "beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv Uns bs1) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv Uns bs2) \<Longrightarrow>
+   len = max (length bs1) (length bs2) \<Longrightarrow> bs = bin_to_bl len (bl_to_bin bs1 - bl_to_bin bs2) \<Longrightarrow>
+   beval_ind now \<sigma> \<gamma> \<theta> def (Bsub e1 e2) (Lv Uns bs)"
+
+| "beval_ind now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1) \<Longrightarrow> beval_ind now \<sigma> \<gamma> \<theta> def e2 (Lv Sig bs2) \<Longrightarrow>
+   len = max (length bs1) (length bs2) \<Longrightarrow> bs = bin_to_bl len (sbl_to_bin bs1 - sbl_to_bin bs2) \<Longrightarrow>
+   beval_ind now \<sigma> \<gamma> \<theta> def (Bsub e1 e2) (Lv Sig bs)"
+
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e (Lv Uns bs);  bs' = drop n (bs @ replicate n False)\<rbrakk>
+                                              \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bshiftl e n) (Lv Uns bs')"
+
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e (Lv Sig bs);  bs' = drop n (bs @ replicate n False)\<rbrakk>
+                                              \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bshiftl e n) (Lv Sig bs')"
+
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e (Lv Uns bs);  bs' = take (length bs) (replicate n False @ bs)\<rbrakk>
+                                              \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bshiftr e n) (Lv Uns bs')"
+
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e (Lv Sig bs);  bs' = take (length bs) (replicate n (hd bs) @ bs)\<rbrakk>
+                                              \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bshiftr e n) (Lv Sig bs')"
+
 lemma beval_eq_beval_ind:
   "beval t \<sigma> \<gamma> \<theta> def exp res = beval_ind t \<sigma> \<gamma> \<theta> def exp res"
 proof
