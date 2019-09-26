@@ -364,6 +364,12 @@ inductive beval_ind :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal ev
 | "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def e (Lv Sig bs);  bs' = take (length bs) (replicate n (hd bs) @ bs)\<rbrakk>
                                               \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bshiftr e n) (Lv Sig bs')"
 
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def g (Bv True);  beval_ind now \<sigma> \<gamma> \<theta> def th res\<rbrakk>
+                                              \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bwhen th g el) res"
+
+| "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def g (Bv False);  beval_ind now \<sigma> \<gamma> \<theta> def el res\<rbrakk>
+                                              \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bwhen th g el) res"
+
 lemma beval_eq_beval_ind:
   "beval t \<sigma> \<gamma> \<theta> def exp res = beval_ind t \<sigma> \<gamma> \<theta> def exp res"
 proof

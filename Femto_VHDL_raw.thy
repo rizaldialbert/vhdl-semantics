@@ -95,8 +95,9 @@ datatype 'signal bexp =
   | Badd  "'signal bexp" "'signal bexp"
   | Bmult "'signal bexp" "'signal bexp"
   | Bsub  "'signal bexp" "'signal bexp"
-  | Bshiftl  "'signal bexp" nat              (* corresponds to shift_left in numeric_std*)
-  | Bshiftr  "'signal bexp" nat              (* corresponds to shift_right in numeric_std*)
+  | Bshiftl  "'signal bexp" nat              (* corresponds to shift_left in numeric_std  *)
+  | Bshiftr  "'signal bexp" nat              (* corresponds to shift_right in numeric_std *)
+  | Bwhen "'signal bexp" "'signal bexp" "'signal bexp"
 
 text \<open>Sequential statements in VHDL are standard. They include skip statements @{term "Bnull"},
 sequential compositions @{term "Bcomp"}, branching statements @{term "Bguarded"}, and assignments.
@@ -677,6 +678,14 @@ in our concrete syntax, Bslice DATA 31 0.\<close>
 | "\<lbrakk>beval_raw now \<sigma> \<gamma> \<theta> def e (Lv Sig bs);  bs' = take (length bs) (replicate n (hd bs) @ bs)\<rbrakk>
                                               \<Longrightarrow>  beval_raw now \<sigma> \<gamma> \<theta> def (Bshiftr e n) (Lv Sig bs')"
 
+\<comment> \<open>conditional expression true\<close>
+| "beval_raw now \<sigma> \<gamma> \<theta> def guard (Bv True) \<Longrightarrow> beval_raw now \<sigma> \<gamma> \<theta> def th res \<Longrightarrow> 
+                                                    beval_raw now \<sigma> \<gamma> \<theta> def (Bwhen th guard el) res"
+
+\<comment> \<open>conditional expression false\<close>
+| "beval_raw now \<sigma> \<gamma> \<theta> def guard (Bv False) \<Longrightarrow> beval_raw now \<sigma> \<gamma> \<theta> def el res \<Longrightarrow> 
+                                                    beval_raw now \<sigma> \<gamma> \<theta> def (Bwhen th guard el) res"
+
 inductive_cases beval_cases[elim!]:
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bsig sig) \<longrightarrow>\<^sub>b res"
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Btrue) \<longrightarrow>\<^sub>b res"
@@ -697,6 +706,7 @@ inductive_cases beval_cases[elim!]:
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bsub e1 e2) \<longrightarrow>\<^sub>b res"
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bshiftl e n) \<longrightarrow>\<^sub>b res"
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bshiftr e n) \<longrightarrow>\<^sub>b res"
+  "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bwhen th g el) \<longrightarrow>\<^sub>b res"
   
 inductive_cases beval_cases2:
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b res"
@@ -807,6 +817,12 @@ lemma beval_raw_deterministic:
   shows "res2 = res1"
   using assms
 proof (induction arbitrary:res2 rule:beval_raw.induct)
+  case (32 now \<sigma> \<gamma> \<theta> def guard th res el)
+  then show ?case by blast
+next
+  case (33 now \<sigma> \<gamma> \<theta> def guard el res th)
+  then show ?case by blast
+next
   case (21 now \<sigma> \<gamma> \<theta> def sig ki bs idx)
   then show ?case
     by (metis beval_cases(14) val.sel(3))
@@ -3699,6 +3715,7 @@ inductive bexp_wt :: "'s tyenv \<Rightarrow> 's bexp \<Rightarrow> ty \<Rightarr
 | "bexp_wt \<Gamma> exp  (Lty Sig len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftl exp n)  (Lty Sig len)"
 | "bexp_wt \<Gamma> exp  (Lty Uns len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftr exp n)  (Lty Uns len)"
 | "bexp_wt \<Gamma> exp  (Lty Sig len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftr exp n)  (Lty Sig len)"
+| "bexp_wt \<Gamma> g Bty \<Longrightarrow> bexp_wt \<Gamma> th ty \<Longrightarrow> bexp_wt \<Gamma> el ty \<Longrightarrow> bexp_wt \<Gamma> (Bwhen th g el) ty"
 
 inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
                                   "bexp_wt \<Gamma> (Band  exp1 exp2) type"
@@ -3714,7 +3731,8 @@ inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
                                   "bexp_wt \<Gamma> (Bmult exp1 exp2) type"
                                   "bexp_wt \<Gamma> (Bsub exp1 exp2) type"
                                   "bexp_wt \<Gamma> (Bshiftl exp n) type"
-                                  "bexp_wt \<Gamma> (Bshiftr exp n) type"
+                                  "bexp_wt \<Gamma> (Bshiftr exp n) type" and
+              bexp_wt_cases_when: "bexp_wt \<Gamma> (Bwhen th g el) type"
 
 inductive_cases bexp_wt_cases_all : "bexp_wt \<Gamma> exp type"
 
@@ -4129,6 +4147,11 @@ lemma beval_raw_progress:
   shows "\<exists>v. t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b v "
   using assms
 proof (induction rule:bexp_wt.inducts)
+  case (25 \<Gamma> th ty el g)
+  then show ?case 
+    by (metis (full_types) beval_raw.intros(32) beval_raw.intros(33)
+    beval_raw_preserve_well_typedness ty.distinct(1) type_of.cases type_of.simps(2))
+next
   case (21 \<Gamma> exp len n)
   then show ?case 
     by (metis beval_raw.intros(28) beval_raw_preserve_well_typedness ty.distinct(1) ty.inject
@@ -4314,6 +4337,10 @@ lemma bexp_wt_bty_cases:
   shows "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b (Bv True) \<or> t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b (Bv False)"
   using assms
 proof (induction rule:bexp_wt.inducts)
+  case (25 \<Gamma> g th ty el)
+  then show ?case 
+    by (metis beval_raw.intros(32) beval_raw.intros(33))
+next
   case (14 \<Gamma> sig ki len idx)
   then show ?case
     by (smt beval_raw.intros(1) beval_raw.intros(21) bexp_wt_cases(9) styping_def ty.distinct(1)

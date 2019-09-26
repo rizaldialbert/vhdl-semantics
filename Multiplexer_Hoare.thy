@@ -671,7 +671,7 @@ lemma init_sat_nand_mux_inv_comb_wityping:
   apply blast
   done
 
-lemma nand_correctness_inert:
+lemma mux2_correctness:
   assumes "sim_fin w (i + 1) mux2 tw'" and "wityping \<Gamma> w"
   assumes "conc_wt \<Gamma> mux2"
   shows "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
