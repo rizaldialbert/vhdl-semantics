@@ -957,7 +957,7 @@ corollary correctness4:
   defines "repC \<equiv> - (int \<circ> of_bool) (hd bsC) * 2 ^ (length bsC - 1) + (\<Sum>i = 0..<length bsC - 1. (int \<circ> of_bool) (rev (tl bsC) ! i) * 2 ^ i)"
   shows   "repC mod 2 ^ len = (repA - repB) mod 2 ^ len"
 proof -
-  have "sbl_to_bin bsC mod 2 ^ len = 
+  have "sbl_to_bin bsC mod 2 ^ len =
        (sbl_to_bin bsA - sbl_to_bin bsB) mod 2 ^ len" and  "length bsC = len" and "0 < length bsB" and "length bsA = len1"
     using correctness3 assms by auto
   hence "0 < length bsC"
@@ -973,7 +973,7 @@ proof -
     and sB: "sbl_to_bin bsB = - (int \<circ> of_bool) (hd bsB) * 2 ^ (length bsB - 1) + (\<Sum>i = 0..<length bsB - 1. (int \<circ> of_bool) (rev (tl bsB) ! i) * 2 ^ i)"
     using sbl_to_bin_correctness by simp+
   show ?thesis
-    using \<open>sbl_to_bin bsC mod 2 ^ len = 
+    using \<open>sbl_to_bin bsC mod 2 ^ len =
        (sbl_to_bin bsA - sbl_to_bin bsB) mod 2 ^ len\<close> unfolding sA sB sC repA_def repB_def repC_def
-    by  metis 
+    by  metis
 qed

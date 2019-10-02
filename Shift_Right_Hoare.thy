@@ -22,7 +22,7 @@ lemma potential_tyenv:
   shows "\<exists>len>0. \<Gamma> IN = Lty Uns len \<and> \<Gamma> OUT = Lty Uns len \<or> \<Gamma> IN = Lty Sig len \<and> \<Gamma> OUT = Lty Sig len"
   by (rule seq_wt_cases(4)[OF assms])
      (metis bexp_wt_cases(14) bexp_wt_cases(9))
- 
+
 locale unsigned_shift_right =
   fixes \<Gamma> :: "sig tyenv"
   fixes len :: nat
@@ -92,7 +92,7 @@ proof (rule, rule)
       using unchanged_until_next_time_world
       by (metis (mono_tags, lifting) Suc_eq_plus1 \<open>get_time tw = get_time tw'\<close> le_Suc_eq le_add1
           le_less_trans less_diff_conv)
-    moreover have "lof_wline tw' IN i = lof_wline tw' IN (fst tw)" 
+    moreover have "lof_wline tw' IN i = lof_wline tw' IN (fst tw)"
       using unchanged_until_next_time_world
       by (metis \<open>get_time tw = get_time tw'\<close> \<open>get_time tw \<le> i\<close> \<open>i < next_time_world tw'\<close>)
     moreover have "property (fst tw + 1) (fst tw) tw'"
@@ -104,7 +104,7 @@ proof (rule, rule)
       also have "... =  Lv Uns (take len (replicate amount False @ lof_wline tw IN (fst tw)))"
         apply (rule beval_world_raw_cases[OF assm2])
         apply ( erule_tac[!] beval_cases)+
-        unfolding state_of_world_def 
+        unfolding state_of_world_def
         apply (metis assms(3) comp_eq_dest_lhs length_append length_replicate length_take min_minus
                min_pm take_append take_replicate ty.inject type_of.simps(2) val.sel(3))
         using assms(3) by auto
@@ -133,7 +133,7 @@ proof (rule, rule)
       also have "... =  Lv Uns (take len (replicate amount False @ lof_wline tw IN (fst tw)))"
         apply (rule beval_world_raw_cases[OF assm2])
         apply ( erule_tac[!] beval_cases)+
-        unfolding state_of_world_def 
+        unfolding state_of_world_def
         apply (metis assms(3) comp_eq_dest_lhs length_append length_replicate length_take min_minus
                min_pm take_append take_replicate ty.inject type_of.simps(2) val.sel(3))
         using assms(3) by auto
@@ -159,13 +159,13 @@ lemma type_correctness_length:
 proof -
   have "beval_world_raw (snd tw) (fst tw) (Bshiftr (Bsig IN) amount) v"
     using assms(2) unfolding beval_world_raw2_def by auto
-  have *: "type_of (state_of_world (snd tw) (fst tw) IN) = Lty Uns len"    
+  have *: "type_of (state_of_world (snd tw) (fst tw) IN) = Lty Uns len"
     using assms(1) unfolding wityping_def
     by (metis state_of_world_def unsigned_shift_right_axioms unsigned_shift_right_def wtyping_def)
   show ?thesis
     apply (rule beval_world_raw_cases[OF \<open>beval_world_raw (snd tw) (fst tw) (Bshiftr (Bsig IN) amount) v\<close>])
     apply (erule beval_cases)+
-    unfolding state_of_world_def 
+    unfolding state_of_world_def
     apply (metis "*" length_append length_replicate length_take min_minus min_pm state_of_world_def type_of.simps(2))
     apply (erule beval_cases)+
     apply (metis "*" signedness.distinct(5) state_of_world_def ty.inject type_of.simps(2))
@@ -438,7 +438,7 @@ proof -
     by auto
   moreover have "\<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> (shiftr amount) \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>"
     using conc_sim_soundness[OF conc_sim'] \<open>conc_stmt_wf (shiftr amount)\<close> \<open>nonneg_delay_conc (shiftr amount)\<close>
-    by (smt sim_hoare_valid_def)  
+    by (smt sim_hoare_valid_def)
   ultimately show "wityping \<Gamma> (snd tw')"
     using \<open>tw, i + 1, (shiftr amount) \<Rightarrow>\<^sub>S tw'\<close> unfolding sim_hoare_valid_def by blast
 qed
@@ -464,7 +464,7 @@ proof -
   hence "bl_to_bin bsOUT = bl_to_bin ?rhs"
     by auto
   also have "... = (bin_rest ^^ amount) (bl_to_bin (replicate amount False @ bsIN))"
-    using take_rest_bl2bin[where n="amount"] \<open>length bsIN = len\<close> 
+    using take_rest_bl2bin[where n="amount"] \<open>length bsIN = len\<close>
     by (metis add_diff_cancel_left' length_append length_replicate)
   also have "... = (bin_rest ^^ amount) (bl_to_bin bsIN)"
     using bl_to_bin_rep_F by auto
@@ -548,7 +548,7 @@ proof (rule, rule)
       using unchanged_until_next_time_world
       by (metis (mono_tags, lifting) Suc_eq_plus1 \<open>get_time tw = get_time tw'\<close> le_Suc_eq le_add1
           le_less_trans less_diff_conv)
-    moreover have "lof_wline tw' IN i = lof_wline tw' IN (fst tw)" 
+    moreover have "lof_wline tw' IN i = lof_wline tw' IN (fst tw)"
       using unchanged_until_next_time_world
       by (metis \<open>get_time tw = get_time tw'\<close> \<open>get_time tw \<le> i\<close> \<open>i < next_time_world tw'\<close>)
     moreover have "property (fst tw + 1) (fst tw) tw'"
@@ -561,7 +561,7 @@ proof (rule, rule)
         apply (rule beval_world_raw_cases[OF assm2])
         apply ( erule_tac[!] beval_cases)+
         prefer 2
-        unfolding state_of_world_def 
+        unfolding state_of_world_def
         apply (metis (no_types, lifting) assms(3) comp_eq_dest_lhs length_append length_replicate
                length_take min_minus min_pm take_append take_replicate ty.inject type_of.simps(2)
                val.sel(3))
@@ -592,7 +592,7 @@ proof (rule, rule)
         apply (rule beval_world_raw_cases[OF assm2])
         apply ( erule_tac[!] beval_cases)+
         prefer 2
-        unfolding state_of_world_def 
+        unfolding state_of_world_def
         apply (metis (no_types, lifting) assms(3) comp_eq_dest_lhs length_append length_replicate
                length_take min_minus min_pm take_append take_replicate ty.inject type_of.simps(2)
                val.sel(3))
@@ -619,13 +619,13 @@ lemma type_correctness_length:
 proof -
   have "beval_world_raw (snd tw) (fst tw) (Bshiftr (Bsig IN) amount) v"
     using assms(2) unfolding beval_world_raw2_def by auto
-  have *: "type_of (state_of_world (snd tw) (fst tw) IN) = Lty Sig len"    
+  have *: "type_of (state_of_world (snd tw) (fst tw) IN) = Lty Sig len"
     using assms(1) unfolding wityping_def
     by (metis state_of_world_def signed_shift_right_axioms signed_shift_right_def wtyping_def)
   show ?thesis
     apply (rule beval_world_raw_cases[OF \<open>beval_world_raw (snd tw) (fst tw) (Bshiftr (Bsig IN) amount) v\<close>])
     apply (erule beval_cases)+
-    unfolding state_of_world_def 
+    unfolding state_of_world_def
     apply (metis "*" length_append length_replicate length_take min_minus min_pm state_of_world_def type_of.simps(2))
     apply (erule beval_cases)+
     apply (metis "*" length_append length_replicate length_take min_minus min_pm state_of_world_def type_of.simps(2))
@@ -898,7 +898,7 @@ proof -
     by auto
   moreover have "\<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> (shiftr amount) \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>"
     using conc_sim_soundness[OF conc_sim'] \<open>conc_stmt_wf (shiftr amount)\<close> \<open>nonneg_delay_conc (shiftr amount)\<close>
-    by (smt sim_hoare_valid_def)  
+    by (smt sim_hoare_valid_def)
   ultimately show "wityping \<Gamma> (snd tw')"
     using \<open>tw, i + 1, (shiftr amount) \<Rightarrow>\<^sub>S tw'\<close> unfolding sim_hoare_valid_def by blast
 qed
@@ -923,7 +923,7 @@ proof -
   hence "sbl_to_bin bsOUT = sbl_to_bin ?rhs"
     by auto
   also have "... = (bin_rest ^^ amount) (sbl_to_bin (replicate amount (hd bsIN) @ bsIN))"
-    using take_rest_sbl2bin[where n="amount" and bl="replicate amount (hd bsIN) @ bsIN"] \<open>length bsIN = len\<close> 
+    using take_rest_sbl2bin[where n="amount" and bl="replicate amount (hd bsIN) @ bsIN"] \<open>length bsIN = len\<close>
     signed_shift_right_axioms signed_shift_right_def by simp
   also have "... = (bin_rest ^^ amount) (sbl_to_bin bsIN)"
     using sbl_to_bin_replicate_app \<open>length bsIN = len\<close> signed_shift_right_axioms
@@ -933,7 +933,7 @@ proof -
   finally show "sbl_to_bin bsOUT = sbl_to_bin bsIN div 2 ^ amount"
     by auto
   show "length bsOUT = len"
-    using \<open>bsOUT = take len (replicate amount (hd (bsIN)) @ bsIN)\<close> 
+    using \<open>bsOUT = take len (replicate amount (hd (bsIN)) @ bsIN)\<close>
     by (simp add: \<open>length bsIN = len\<close>)
 qed
 
@@ -951,10 +951,10 @@ proof -
   have 2: "bsOUT = hd bsOUT # tl bsOUT"
     using \<open>length bsOUT = len\<close> signed_shift_right_axioms signed_shift_right_def by auto
   hence 3: "sbl_to_bin bsOUT = - (int \<circ> of_bool) (hd bsOUT) * 2 ^ (len - 1) + (\<Sum>i = 0..<len - 1. (int \<circ> of_bool) (rev (tl bsOUT) ! i) * 2 ^ i)"
-    using sbl_to_bin_correctness 
+    using sbl_to_bin_correctness
     by (metis (no_types, lifting) \<open>length bsOUT = len\<close> length_tl sum.cong)
   have 4: "sbl_to_bin bsIN = - (int \<circ> of_bool) (hd bsIN ) * 2 ^ (len - 1) + (\<Sum>i = 0..<len-1. (int \<circ> of_bool) (rev (tl bsIN ) ! i) * 2 ^ i)"
-    using sbl_to_bin_correctness 
+    using sbl_to_bin_correctness
     by (metis (full_types) "1" \<open>length bsIN = len\<close> length_tl)
   show ?thesis
     using 0 unfolding 3 4 by auto

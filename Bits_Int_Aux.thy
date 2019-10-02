@@ -250,11 +250,11 @@ proof -
     have "2 dvd - (int \<circ> of_bool) (hd bs) * 2 ^ length bs"
       using assms by auto
     thus ?thesis
-      unfolding bin_rest_def  using div_plus_div_distrib_dvd_right  
+      unfolding bin_rest_def  using div_plus_div_distrib_dvd_right
       by (smt dvd_neg_div mult_minus_left)
   qed
   also have "... = bl_to_bin (butlast bs) - (int o of_bool) (hd bs) * 2 ^ (length bs - 1)"
-    unfolding bin_rest_bl_to_bin bin_rest_def 
+    unfolding bin_rest_bl_to_bin bin_rest_def
     by (smt BIT_special_simps(3) assms bin_rest_BIT bin_rest_bl_to_bin bin_rest_def
     mult_BIT_simps(1) mult_cancel_left2 mult_cancel_right2 not_less_zero o_apply of_bool_eq(1)
     of_bool_eq(2) of_nat_1 power_eq_if semiring_1_class.of_nat_0)
@@ -267,7 +267,7 @@ proof -
 qed
 
 lemma butlast_pow_rest_sbl2bin:
-  assumes "n < length bl" 
+  assumes "n < length bl"
   shows   "sbl_to_bin ((butlast ^^ n) bl) = (bin_rest ^^ n) (sbl_to_bin bl)"
 proof -
   let ?bs = "(butlast ^^ n) bl"
@@ -301,7 +301,7 @@ proof -
     have "2 ^ n dvd (- (int \<circ> of_bool) (hd bl) * 2 ^ length bl)"
       using assms  dvd_triv_right order_less_imp_le power_le_dvd by blast
     thus ?thesis
-      unfolding bin_rest_compow 
+      unfolding bin_rest_compow
       by (metis add.inverse_inverse diff_minus_eq_add div_plus_div_distrib_dvd_right
           mult_minus_left)
   qed
@@ -311,9 +311,9 @@ proof -
   finally show ?thesis
     by auto
 qed
-    
+
 lemma take_rest_sbl2bin:
-  assumes "n < length bl" 
+  assumes "n < length bl"
   shows   "sbl_to_bin (take (length bl - n) bl) = (bin_rest ^^ n) (sbl_to_bin bl)"
   using butlast_pow_rest_sbl2bin[OF assms] by (simp add: butlast_power)
 
@@ -328,7 +328,7 @@ proof -
     then show ?case by auto
   next
     case (Suc n)
-    have " (\<Sum>i = 0..<Suc n. (int \<circ> of_bool) (replicate (Suc n) True ! i) * 2 ^ i) = 
+    have " (\<Sum>i = 0..<Suc n. (int \<circ> of_bool) (replicate (Suc n) True ! i) * 2 ^ i) =
            (\<Sum>i = 0..<n. (int \<circ> of_bool) (replicate (Suc n) True ! i) * 2 ^ i) + 2 ^ n"
       by (metis (no_types, lifting) One_nat_def add_Suc add_diff_cancel_left' lessI nth_replicate
       o_apply of_bool_eq(2) of_nat_1 plus_1_eq_Suc power_0 power_add sum.atLeast0_lessThan_Suc)
@@ -353,17 +353,17 @@ proof (cases "hd bl")
   hence "sbl_to_bin (replicate n (hd bl) @ bl) = sbl_to_bin (replicate n False @ bl)"
     by auto
   also have "... = bl_to_bin (replicate n False @ bl)"
-    using sbl_to_bin.simps assms 
+    using sbl_to_bin.simps assms
     by (smt False append_is_Nil_conv comp_apply hd_append hd_replicate length_greater_0_conv
     mult_cancel_left of_bool_eq(1) power2_eq_square replicate_empty sbl_to_bin.elims
     semiring_1_class.of_nat_0 zero_power2)
   also have "... = bl_to_bin bl"
     by (simp add: bl_to_bin_rep_F)
   also have "... = sbl_to_bin bl"
-    using False sbl_to_bin.simps 
+    using False sbl_to_bin.simps
     by (smt assms comp_apply length_greater_0_conv mult_cancel_left of_bool_eq(1) power2_eq_square
         sbl_to_bin.elims semiring_1_class.of_nat_0 zero_power2)
-  finally show ?thesis 
+  finally show ?thesis
     by auto
 next
   case True
@@ -381,7 +381,7 @@ next
     unfolding bl_to_bin_aux_correctness by auto
   also have "... = (2 ^ (length bl + n) - 2 ^ length bl) + (\<Sum>i = 0..<length bl. (int \<circ> of_bool) (rev bl ! i) * 2 ^ i) - 2 ^ (length bl + n)"
     by (simp add: mult.commute power_add right_diff_distrib)
-  also have "... = (\<Sum>i = 0..<length bl. (int \<circ> of_bool) (rev bl ! i) * 2 ^ i) - 2 ^ length bl" 
+  also have "... = (\<Sum>i = 0..<length bl. (int \<circ> of_bool) (rev bl ! i) * 2 ^ i) - 2 ^ length bl"
     by auto
   also have "... = bl_to_bin bl - 2 ^ length bl"
     unfolding bl_to_bin_correctness by auto

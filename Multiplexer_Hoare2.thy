@@ -22,13 +22,13 @@ lemma only_if_disjnt:
   unfolding mux2_def
 proof (intro b_conc_exec.intros(2))
   have " t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig SEL \<longrightarrow>\<^sub>b Bv True \<or>  t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig SEL \<longrightarrow>\<^sub>b Bv False"
-    by (metis assms(1) assms(2) beval_cases(20) conc_cases(1) mux2'_def seq_cases(4))
+    by (metis assms(1) assms(2) beval_cases(20) conc_cases(1) mux2'_def seq_cases_trans)
   moreover
   { assume True: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig SEL \<longrightarrow>\<^sub>b Bv True"
     have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <(Bassign_trans OUT (Bsig IN1) 1), \<tau>> \<longrightarrow>\<^sub>s (trans_post_raw OUT (\<sigma> IN1) (\<sigma> OUT) \<tau> t 1)"
       by (meson b_seq_exec.intros(5) beval_raw.intros(1))
     also have "... = \<tau>'"
-      using assms(1-2) True unfolding mux2'_def 
+      using assms(1-2) True unfolding mux2'_def
       by (meson b_conc_exec.intros(2) b_conc_exec_deterministic b_seq_exec.intros(5)
       beval_raw.intros(1) beval_raw.intros(32))
     finally have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1) , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
@@ -39,14 +39,14 @@ proof (intro b_conc_exec.intros(2))
       by (meson b_seq_exec.intros(5) beval_raw.intros(1))
     also have "... = \<tau>'"
       using assms(1-2) False unfolding mux2'_def
-      by (metis beval_cases(1) beval_cases(20) conc_cases(1) seq_cases(4) val.inject(1))
+      by (metis beval_cases(1) beval_cases(20) conc_cases(1) seq_cases_trans val.inject(1))
     finally have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1) , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       using False  by (simp add: b_seq_exec.intros(4)) }
   ultimately show "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1) , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     by metis
   show "\<not> disjnt {IN0, IN1, SEL} \<gamma>"
     using assms by auto
-qed 
+qed
 
 lemma only_if:
   assumes "b_conc_exec t \<sigma> \<gamma> \<theta> def mux2' \<tau> \<tau>'"
@@ -61,14 +61,14 @@ lemma whenever_disjnt:
   unfolding mux2'_def
 proof (intro b_conc_exec.intros(2))
   have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig SEL \<longrightarrow>\<^sub>b Bv True \<or> t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig SEL \<longrightarrow>\<^sub>b Bv False"
-    by (metis assms(1) assms(2) conc_cases(1) mux2_def seq_cases(3))
+    by (metis assms(1) assms(2) conc_cases(1) mux2_def seq_cases_bguarded)
   moreover
   { assume True: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig SEL \<longrightarrow>\<^sub>b Bv True"
     hence "b_seq_exec t \<sigma> \<gamma> \<theta> def (Bassign_trans OUT (Bsig IN1) 1) \<tau> \<tau>'"
-      using assms(1) 
-      by (metis assms(2) beval_cases(1) conc_cases(1) mux2_def seq_cases(3) val.inject(1))
+      using assms(1)
+      by (metis assms(2) beval_cases(1) conc_cases(1) mux2_def seq_cases_bguarded val.inject(1))
     hence "... = trans_post_raw OUT (\<sigma> IN1) (\<sigma> OUT) \<tau> t 1"
-      by auto
+      by (meson b_seq_exec.intros(5) b_seq_exec_deterministic beval_raw.intros(1))
     have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bwhen (Bsig IN1) (Bsig SEL) (Bsig IN0) \<longrightarrow>\<^sub>b \<sigma> IN1"
       by (simp add: True beval_raw.intros(1) beval_raw.intros(32))
     hence "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <Bassign_trans OUT (Bwhen (Bsig IN1) (Bsig SEL) (Bsig IN0)) 1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
@@ -76,10 +76,10 @@ proof (intro b_conc_exec.intros(2))
   moreover
   { assume False: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig SEL \<longrightarrow>\<^sub>b Bv False"
     hence "b_seq_exec t \<sigma> \<gamma> \<theta> def (Bassign_trans OUT (Bsig IN0) 1) \<tau> \<tau>'"
-      using assms(1) 
-      by (metis assms(2) beval_cases(1) conc_cases(1) mux2_def seq_cases(3) val.inject(1))
+      using assms(1)
+      by (metis assms(2) beval_cases(1) conc_cases(1) mux2_def seq_cases_bguarded val.inject(1))
     hence "... = trans_post_raw OUT (\<sigma> IN0) (\<sigma> OUT) \<tau> t 1"
-      by auto
+      by (meson b_seq_exec.intros(5) b_seq_exec_deterministic beval_raw.intros(1))
     have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bwhen (Bsig IN1) (Bsig SEL) (Bsig IN0) \<longrightarrow>\<^sub>b \<sigma> IN0"
       by (simp add: False beval_raw.intros(1) beval_raw.intros(33))
     hence "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <Bassign_trans OUT (Bwhen (Bsig IN1) (Bsig SEL) (Bsig IN0)) 1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
@@ -93,7 +93,7 @@ qed
 lemma whenever:
   assumes "b_conc_exec t \<sigma> \<gamma> \<theta> def mux2  \<tau> \<tau>'"
   shows   "b_conc_exec t \<sigma> \<gamma> \<theta> def mux2' \<tau> \<tau>'"
-  using whenever_disjnt 
+  using whenever_disjnt
   by (metis assms b_conc_exec.intros(1) b_conc_exec_deterministic mux2'_def mux2_def)
 
 lemma b_conc_exec_mux2_eq_mux2':
@@ -110,23 +110,23 @@ proof (rule, rule)
                                       (Bassign_trans OUT (Bsig IN0) 1), \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     unfolding mux2_def by auto
   hence "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> (Bsig SEL) \<longrightarrow>\<^sub>b (Bv True) \<or> t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> (Bsig SEL) \<longrightarrow>\<^sub>b (Bv False)"
-    by auto
+    using seq_cases_bguarded by blast
   moreover
   { assume "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bsig SEL) \<longrightarrow>\<^sub>b (Bv True)"
     hence "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_trans OUT (Bsig IN1) 1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-      using *  by (metis beval_raw_deterministic seq_cases(3) val.inject(1))
+      using *  by (metis beval_raw_deterministic seq_cases_bguarded val.inject(1))
     hence "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_trans OUT (Bwhen (Bsig IN1) (Bsig SEL) (Bsig IN0)) 1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       by (metis \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> Bsig SEL \<longrightarrow>\<^sub>b Bv True\<close> b_seq_exec.intros(5)
-      beval_raw.intros(32) seq_cases(4))
+      beval_raw.intros(32) seq_cases_trans)
     hence "init' t \<sigma> \<gamma> \<theta> def mux2' \<tau> \<tau>'"
       by (simp add: init'.intros(1) mux2'_def) }
   moreover
   { assume "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bsig SEL) \<longrightarrow>\<^sub>b (Bv False)"
     hence "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_trans OUT (Bsig IN0) 1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-      using *  by (metis beval_raw_deterministic seq_cases(3) val.inject(1))
+      using *  by (metis beval_raw_deterministic seq_cases_bguarded val.inject(1))
     hence "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_trans OUT (Bwhen (Bsig IN1) (Bsig SEL) (Bsig IN0)) 1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       by (metis \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> Bsig SEL \<longrightarrow>\<^sub>b Bv False\<close> b_seq_exec.intros(5)
-      beval_raw.intros(33) seq_cases(4))
+      beval_raw.intros(33) seq_cases_trans)
     hence "init' t \<sigma> \<gamma> \<theta> def mux2' \<tau> \<tau>'"
       by (simp add: init'.intros(1) mux2'_def) }
   ultimately show "init' t \<sigma> \<gamma> \<theta> def mux2' \<tau> \<tau>'"
@@ -135,9 +135,9 @@ next
   fix \<tau>'
   assume "init' t \<sigma> \<gamma> \<theta> def mux2' \<tau> \<tau>'"
   hence *: "t, \<sigma>, \<gamma>, \<theta>, def  \<turnstile> < Bassign_trans OUT (Bwhen (Bsig IN1) (Bsig SEL) (Bsig IN0)) 1, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-    unfolding mux2'_def  by blast 
+    unfolding mux2'_def  by blast
   hence "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> (Bsig SEL) \<longrightarrow>\<^sub>b (Bv True) \<or> t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> (Bsig SEL) \<longrightarrow>\<^sub>b (Bv False)"
-    by auto
+    by (meson beval_cases(20) seq_cases_trans)
   moreover
   { assume "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bsig SEL) \<longrightarrow>\<^sub>b (Bv True)"
     hence **: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bwhen (Bsig IN1) (Bsig SEL) (Bsig IN0)) \<longrightarrow>\<^sub>b (\<sigma> IN1)"
@@ -165,15 +165,15 @@ lemma b_simulate_fin_only_if':
   using assms
 proof (induction rule:b_simulate_fin.inducts)
   case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
-  then show ?case 
+  then show ?case
     by (simp add: "1.IH" b_conc_exec_mux2_eq_mux2' b_simulate_fin.intros(1))
 next
   case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
-  then show ?case 
+  then show ?case
     using b_simulate_fin.intros(2) by blast
 next
   case (3 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
-  then show ?case 
+  then show ?case
     by (simp add: b_simulate_fin.intros(3))
 qed
 
@@ -203,13 +203,13 @@ lemma b_simulate_mux2_eq_mux2':
 lemma world_sim_fin_only_if:
   assumes "tw, T, mux2 \<Rightarrow>\<^sub>S tw'"
   shows   "tw, T, mux2' \<Rightarrow>\<^sub>S tw'"
-  using assms 
+  using assms
   by (simp add: b_simulate_mux2_eq_mux2' world_sim_fin.simps)
 
 lemma world_sim_fin_whenever:
   assumes "tw, T, mux2' \<Rightarrow>\<^sub>S tw'"
   shows   "tw, T, mux2 \<Rightarrow>\<^sub>S tw'"
-  using assms 
+  using assms
   by (simp add: b_simulate_mux2_eq_mux2' world_sim_fin.simps)
 
 lemma world_sim_fin_mux2_eq_mux2':
@@ -219,13 +219,13 @@ lemma world_sim_fin_mux2_eq_mux2':
 lemma init_sim_only_if:
   assumes "init_sim tw mux2  tw'"
   shows   "init_sim tw mux2' tw'"
-  using assms 
+  using assms
   by (simp add: init'_mux2_eq_mux2' init_sim.simps world_init_exec.simps)
 
 lemma init_sim_whenever:
   assumes "init_sim tw mux2' tw'"
   shows   "init_sim tw mux2  tw'"
-  using assms 
+  using assms
   by (simp add: init'_mux2_eq_mux2' init_sim.simps world_init_exec.simps)
 
 lemma init_sim_mux2_eq_mux2':

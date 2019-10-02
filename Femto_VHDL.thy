@@ -370,6 +370,8 @@ inductive beval_ind :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal ev
 | "\<lbrakk>beval_ind now \<sigma> \<gamma> \<theta> def g (Bv False);  beval_ind now \<sigma> \<gamma> \<theta> def el res\<rbrakk>
                                               \<Longrightarrow>  beval_ind now \<sigma> \<gamma> \<theta> def (Bwhen th g el) res"
 
+| "beval_ind now \<sigma> \<gamma> \<theta> def (Bliteral sign val) (Lv sign val)"
+
 lemma beval_eq_beval_ind:
   "beval t \<sigma> \<gamma> \<theta> def exp res = beval_ind t \<sigma> \<gamma> \<theta> def exp res"
 proof
@@ -486,6 +488,18 @@ inductive seq_exec_ind :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal
 | "beval_ind t \<sigma> \<gamma> \<theta> def e x \<Longrightarrow> inr_post sig x (\<sigma> sig) \<tau> t dly = \<tau>' \<Longrightarrow>
                                               seq_exec_ind t \<sigma> \<gamma> \<theta> def (Bassign_inert sig e dly) \<tau> \<tau>'"
 
+| "beval_ind t \<sigma> \<gamma> \<theta> def exp x \<Longrightarrow> beval_ind t \<sigma> \<gamma> \<theta> def exp' x \<Longrightarrow> seq_exec_ind t \<sigma> \<gamma> \<theta> def ss \<tau> \<tau>'
+   \<Longrightarrow> seq_exec_ind t \<sigma> \<gamma> \<theta> def (Bcase exp ((Explicit exp', ss) # choices)) \<tau> \<tau>'"
+
+| "beval_ind t \<sigma> \<gamma> \<theta> def exp x \<Longrightarrow> beval_ind t \<sigma> \<gamma> \<theta> def exp' x' \<Longrightarrow> x \<noteq> x' \<Longrightarrow>
+   seq_exec_ind t \<sigma> \<gamma> \<theta> def (Bcase exp choices) \<tau> \<tau>'  \<Longrightarrow>
+   seq_exec_ind t \<sigma> \<gamma> \<theta> def (Bcase exp ((Explicit exp', ss) # choices)) \<tau> \<tau>'"
+
+| "seq_exec_ind t \<sigma> \<gamma> \<theta> def ss \<tau> \<tau>' \<Longrightarrow>
+   seq_exec_ind t \<sigma> \<gamma> \<theta> def (Bcase exp ((Others, ss) # choices)) \<tau> \<tau>'"
+
+| "seq_exec_ind t \<sigma> \<gamma> \<theta> def (Bcase exp []) \<tau> \<tau>"
+
 lemma seq_exec_eq_seq_exec_ind:
   "seq_exec t \<sigma> \<gamma> \<theta> def cs \<tau> \<tau>' = seq_exec_ind t \<sigma> \<gamma> \<theta> def cs \<tau> \<tau>'"
 proof
@@ -559,7 +573,30 @@ proof
       then show ?case
         using `beval t \<sigma> \<gamma> (Abs_poly_mapping \<theta>) def e x`
         by (auto simp add: seq_exec_ind.intros(6) beval_eq_beval_ind)
-    qed
+    next
+      case (7 t \<sigma> \<gamma> \<theta> def exp x exp' ss \<tau> \<tau>' choices)
+      have "beval_ind t \<sigma> \<gamma> (Abs_poly_mapping \<theta>) def exp x"
+        by (metis (mono_tags, lifting) "7.hyps"(1) "7.prems"(1) beval.abs_eq beval_eq_beval_ind
+        eq_onp_same_args)
+      moreover have "beval_ind t \<sigma> \<gamma> (Abs_poly_mapping \<theta>) def exp' x"
+        by (metis "7.hyps"(2) "7.prems"(1) beval.rep_eq beval_eq_beval_ind lookup_Abs_poly_mapping)
+      moreover have " seq_exec_ind t \<sigma> \<gamma> (Abs_poly_mapping \<theta>) def ss (Abs_poly_mapping \<tau>) (Abs_poly_mapping \<tau>')"
+        using 7 by auto
+      ultimately show ?case
+        by (intro seq_exec_ind.intros) auto
+    next
+      case (8 t \<sigma> \<gamma> \<theta> def exp x exp' x' choices \<tau> \<tau>' ss)
+      have "beval_ind t \<sigma> \<gamma> (Abs_poly_mapping \<theta>) def exp x"
+        by (metis (mono_tags, lifting) "8.hyps"(1) "8.prems"(1) beval.abs_eq beval_eq_beval_ind
+        eq_onp_same_args)
+      moreover have "beval_ind t \<sigma> \<gamma> (Abs_poly_mapping \<theta>) def exp' x'"
+        by (metis (mono_tags) "8.hyps"(2) "8.prems"(1) beval.rep_eq beval_eq_beval_ind
+        lookup_Abs_poly_mapping)
+      moreover have "seq_exec_ind t \<sigma> \<gamma> (Abs_poly_mapping \<theta>) def (Bcase exp choices) (Abs_poly_mapping \<tau>) (Abs_poly_mapping \<tau>')"
+        using 8 by auto
+      ultimately show ?case
+        using 8(3) by (intro seq_exec_ind.intros(8)) auto
+    qed (auto simp add: seq_exec_ind.intros)
   qed
   thus "seq_exec_ind t \<sigma> \<gamma> \<theta> def cs \<tau> \<tau>'"
     unfolding lookup_inverse by auto
@@ -596,6 +633,26 @@ next
       using 6(2) by transfer' auto
     then show ?case
       by (metis \<open>t , \<sigma> , \<gamma> , lookup \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b x\<close> b_seq_exec.intros(6))
+  next
+    case (7 t \<sigma> \<gamma> \<theta> def exp x exp' ss \<tau> \<tau>' choices)
+    have "t, \<sigma> , \<gamma> , lookup \<theta> , def \<turnstile> exp \<longrightarrow>\<^sub>b x"
+      by (metis "7.hyps"(1) beval.rep_eq beval_eq_beval_ind)
+    moreover have "t, \<sigma> , \<gamma> , lookup \<theta> , def \<turnstile> exp' \<longrightarrow>\<^sub>b x"
+      by (metis "7.hyps"(2) beval.rep_eq beval_eq_beval_ind)
+    moreover have "b_seq_exec t \<sigma> \<gamma> (lookup \<theta>) def ss (lookup \<tau>) (lookup \<tau>')"
+      using 7(3)  by (simp add: "7.IH")
+    ultimately show ?case
+      by (intro b_seq_exec.intros) auto
+  next
+    case (8 t \<sigma> \<gamma> \<theta> def exp x exp' x' choices \<tau> \<tau>' ss)
+    have "t, \<sigma> , \<gamma> , lookup \<theta> , def \<turnstile> exp \<longrightarrow>\<^sub>b x"
+      by (metis "8.hyps"(1) beval.rep_eq beval_eq_beval_ind)
+    moreover have "t, \<sigma> , \<gamma> , lookup \<theta> , def \<turnstile> exp' \<longrightarrow>\<^sub>b x'"
+      by (metis "8.hyps"(2) beval.rep_eq beval_eq_beval_ind)
+    moreover have "b_seq_exec t \<sigma> \<gamma> (lookup \<theta>) def (Bcase exp choices) (lookup \<tau>) (lookup \<tau>')"
+      using 8 by auto
+    ultimately show ?case
+      using 8(3) by (intro b_seq_exec.intros(8)) auto
   qed (auto intro!: b_seq_exec.intros)
 qed
 

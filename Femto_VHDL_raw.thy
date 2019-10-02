@@ -77,6 +77,10 @@ this expression are the construct for detecting whether a signal has changed fro
 --- @{term "Bsig_event"}. Construct @{term "Bsig_delayed"} checks the signal value in the previous
 @{term "delay"} unit of time.\<close>
 
+datatype signedness = Neu  (* neutral, uninterpreted *)
+                    | Sig  (* signed *)
+                    | Uns  (* unsigned *)
+
 datatype 'signal bexp =
     Bsig 'signal
   | Bsig_event 'signal
@@ -98,6 +102,7 @@ datatype 'signal bexp =
   | Bshiftl  "'signal bexp" nat              (* corresponds to shift_left in numeric_std  *)
   | Bshiftr  "'signal bexp" nat              (* corresponds to shift_right in numeric_std *)
   | Bwhen "'signal bexp" "'signal bexp" "'signal bexp"
+  | Bliteral signedness "bool list"
 
 text \<open>Sequential statements in VHDL are standard. They include skip statements @{term "Bnull"},
 sequential compositions @{term "Bcomp"}, branching statements @{term "Bguarded"}, and assignments.
@@ -105,12 +110,15 @@ Two types of assignment are formalised here: transport and inertial. The explana
 assignments are best explained elsewhere (for example here \<^url>\<open>http://gmvhdl.com/delay.htm\<close>).
 \<close>
 
+datatype 'signal choices = Explicit (pattern: "'signal bexp") | Others
+
 datatype 'signal seq_stmt =
     Bcomp "'signal seq_stmt" "'signal seq_stmt"
   | Bguarded "'signal bexp" "'signal seq_stmt" "'signal seq_stmt"
   | Bassign_trans 'signal "'signal bexp" delay
   | Bassign_inert 'signal "'signal bexp" delay
   | Bnull
+  | Bcase "'signal bexp" "('signal choices \<times> 'signal seq_stmt) list"
 
 fun nonneg_delay :: "'signal seq_stmt \<Rightarrow> bool" where
   "nonneg_delay Bnull = True"
@@ -118,6 +126,7 @@ fun nonneg_delay :: "'signal seq_stmt \<Rightarrow> bool" where
 | "nonneg_delay (Bguarded g s1 s2) \<longleftrightarrow> nonneg_delay s1 \<and> nonneg_delay s2"
 | "nonneg_delay (Bassign_trans sig exp dly) \<longleftrightarrow> 0 < dly"
 | "nonneg_delay (Bassign_inert sig exp dly) \<longleftrightarrow> 0 < dly"
+| "nonneg_delay (Bcase exp choices) \<longleftrightarrow> list_all nonneg_delay (map snd choices)"
 
 fun signals_in :: "'signal seq_stmt \<Rightarrow> 'signal list" where
   "signals_in (Bnull) = []"
@@ -125,6 +134,7 @@ fun signals_in :: "'signal seq_stmt \<Rightarrow> 'signal list" where
 | "signals_in (Bassign_inert sig _ _) = [sig]"
 | "signals_in (Bguarded sig ss1 ss2) =  remdups (signals_in ss1 @ signals_in ss2)"
 | "signals_in (Bcomp ss1 ss2) = remdups (signals_in ss1 @ signals_in ss2)"
+| "signals_in (Bcase exp choices) = remdups (concat (map (signals_in o snd) choices))"
 
 lemma
   "distinct (signals_in ss)"
@@ -132,6 +142,10 @@ lemma
 
 abbreviation
   "signals_of s \<equiv> set (signals_in s)"
+
+lemma [simp]:
+  "signals_of (Bcase exp (choice # choices)) = signals_of (snd choice) \<union> signals_of (Bcase exp choices)"
+  by auto
 
 text \<open>Concurrent statements in VHDL is very simple: it is either a process running by itself, or
 a composition of several processes. Each process is a sequential statement guarded by its
@@ -173,10 +187,6 @@ lemma [elim]:
   unfolding conc_stmt_wf_def by auto
 
 subsection \<open>Operational Semantics\<close>
-
-datatype signedness = Neu  (* neutral, uninterpreted *)
-                    | Sig  (* signed *)
-                    | Uns  (* unsigned *)
 
 datatype val = Bv (bval_of : bool) | Lv (sign_of: signedness) (lval_of : "bool list")
 
@@ -647,7 +657,7 @@ in our concrete syntax, Bslice DATA 31 0.\<close>
     len = (length bs1) + (length bs2); bs = bin_to_bl len (bl_to_bin bs1 * bl_to_bin bs2)\<rbrakk>
                                               \<Longrightarrow>  beval_raw now \<sigma> \<gamma> \<theta> def (Bmult e1 e2) (Lv Uns bs)"
 
-\<comment> \<open>signed multiplication\<close>             
+\<comment> \<open>signed multiplication\<close>
 | "\<lbrakk>beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1);   beval_raw now \<sigma> \<gamma> \<theta> def e2 (Lv Sig bs2);
     len = (length bs1) + (length bs2); bs = bin_to_bl len (sbl_to_bin bs1 * sbl_to_bin bs2)\<rbrakk>
                                               \<Longrightarrow>  beval_raw now \<sigma> \<gamma> \<theta> def (Bmult e1 e2) (Lv Sig bs)"
@@ -673,18 +683,20 @@ in our concrete syntax, Bslice DATA 31 0.\<close>
 \<comment> \<open>unsigned right shift\<close>
 | "\<lbrakk>beval_raw now \<sigma> \<gamma> \<theta> def e (Lv Uns bs);  bs' = take (length bs) (replicate n False @ bs)\<rbrakk>
                                               \<Longrightarrow>  beval_raw now \<sigma> \<gamma> \<theta> def (Bshiftr e n) (Lv Uns bs')"
-  
+
 \<comment> \<open>signed right shift\<close>
 | "\<lbrakk>beval_raw now \<sigma> \<gamma> \<theta> def e (Lv Sig bs);  bs' = take (length bs) (replicate n (hd bs) @ bs)\<rbrakk>
                                               \<Longrightarrow>  beval_raw now \<sigma> \<gamma> \<theta> def (Bshiftr e n) (Lv Sig bs')"
 
 \<comment> \<open>conditional expression true\<close>
-| "beval_raw now \<sigma> \<gamma> \<theta> def guard (Bv True) \<Longrightarrow> beval_raw now \<sigma> \<gamma> \<theta> def th res \<Longrightarrow> 
+| "beval_raw now \<sigma> \<gamma> \<theta> def guard (Bv True) \<Longrightarrow> beval_raw now \<sigma> \<gamma> \<theta> def th res \<Longrightarrow>
                                                     beval_raw now \<sigma> \<gamma> \<theta> def (Bwhen th guard el) res"
 
 \<comment> \<open>conditional expression false\<close>
-| "beval_raw now \<sigma> \<gamma> \<theta> def guard (Bv False) \<Longrightarrow> beval_raw now \<sigma> \<gamma> \<theta> def el res \<Longrightarrow> 
+| "beval_raw now \<sigma> \<gamma> \<theta> def guard (Bv False) \<Longrightarrow> beval_raw now \<sigma> \<gamma> \<theta> def el res \<Longrightarrow>
                                                     beval_raw now \<sigma> \<gamma> \<theta> def (Bwhen th guard el) res"
+
+| "beval_raw now \<sigma> \<gamma> \<theta> def (Bliteral sign val) (Lv sign val)"
 
 inductive_cases beval_cases[elim!]:
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bsig sig) \<longrightarrow>\<^sub>b res"
@@ -707,7 +719,8 @@ inductive_cases beval_cases[elim!]:
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bshiftl e n) \<longrightarrow>\<^sub>b res"
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bshiftr e n) \<longrightarrow>\<^sub>b res"
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bwhen th g el) \<longrightarrow>\<^sub>b res"
-  
+  "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> (Bliteral sign val) \<longrightarrow>\<^sub>b res"
+
 inductive_cases beval_cases2:
   "now, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b res"
 
@@ -717,42 +730,42 @@ lemma [simp]:
 
 lemma
   assumes "beval_raw now \<sigma> \<gamma> \<theta> def (Badd e1 e2) (Lv Uns bs)"
-  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Uns bs1) 
+  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Uns bs1)
                    \<and> beval_raw now \<sigma> \<gamma> \<theta> def e2 (Lv Uns bs2)
                    \<and> length bs = max (length bs1) (length bs2)"
   using assms size_bin_to_bl_aux by fastforce
 
 lemma
   assumes "beval_raw now \<sigma> \<gamma> \<theta> def (Badd e1 e2) (Lv Sig bs)"
-  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1) 
+  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1)
                    \<and> beval_raw now \<sigma> \<gamma> \<theta> def e2 (Lv Sig bs2)
                    \<and> length bs = max (length bs1) (length bs2)"
-  using assms size_bin_to_bl_aux by fastforce 
+  using assms size_bin_to_bl_aux by fastforce
 
 lemma
   assumes "beval_raw now \<sigma> \<gamma> \<theta> def (Bsub e1 e2) (Lv Uns bs)"
-  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Uns bs1) 
+  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Uns bs1)
                    \<and> beval_raw now \<sigma> \<gamma> \<theta> def e2 (Lv Uns bs2)
                    \<and> length bs = max (length bs1) (length bs2)"
   using assms size_bin_to_bl_aux by fastforce
 
 lemma
   assumes "beval_raw now \<sigma> \<gamma> \<theta> def (Bsub e1 e2) (Lv Sig bs)"
-  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1) 
+  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1)
                    \<and> beval_raw now \<sigma> \<gamma> \<theta> def e2 (Lv Sig bs2)
                    \<and> length bs = max (length bs1) (length bs2)"
-  using assms size_bin_to_bl_aux by fastforce 
+  using assms size_bin_to_bl_aux by fastforce
 
 lemma
   assumes "beval_raw now \<sigma> \<gamma> \<theta> def (Bmult e1 e2)(Lv Uns bs)"
-  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Uns bs1) 
+  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Uns bs1)
                    \<and> beval_raw now \<sigma> \<gamma> \<theta> def e2 (Lv Uns bs2)
                    \<and> length bs = (length bs1) + (length bs2)"
   using assms size_bin_to_bl_aux by fastforce
 
 lemma
   assumes "beval_raw now \<sigma> \<gamma> \<theta> def (Bmult e1 e2)(Lv Sig bs)"
-  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1) 
+  shows   "\<exists>bs1 bs2. beval_raw now \<sigma> \<gamma> \<theta> def e1 (Lv Sig bs1)
                    \<and> beval_raw now \<sigma> \<gamma> \<theta> def e2 (Lv Sig bs2)
                    \<and> length bs = (length bs1) + (length bs2)"
   using assms size_bin_to_bl_aux by fastforce
@@ -773,14 +786,14 @@ lemma shift_left_amount_too_large_unsigned:
   assumes "beval_raw now \<sigma> \<gamma> \<theta> def e (Lv Uns bs')"
   assumes "n \<ge> length bs'"
   shows   "beval_raw now \<sigma> \<gamma> \<theta> def (Bshiftl e n) (Lv Uns (replicate (length bs') False))"
-  using assms 
+  using assms
   by (smt append_self_conv2 beval_raw.intros(28) diff_diff_cancel drop_append drop_eq_Nil drop_replicate)
 
 lemma shift_left_amount_too_large_signed:
   assumes "beval_raw now \<sigma> \<gamma> \<theta> def e (Lv Sig bs')"
   assumes "n \<ge> length bs'"
   shows   "beval_raw now \<sigma> \<gamma> \<theta> def (Bshiftl e n) (Lv Sig (replicate (length bs') False))"
-  using assms 
+  using assms
   by (smt append_self_conv2 beval_raw.intros(29) diff_diff_cancel drop_append drop_eq_Nil drop_replicate)
 
 lemma shift_right_amount_too_large_unsigned:
@@ -817,6 +830,9 @@ lemma beval_raw_deterministic:
   shows "res2 = res1"
   using assms
 proof (induction arbitrary:res2 rule:beval_raw.induct)
+  case (34 now \<sigma> \<gamma> \<theta> def sign val)
+  then show ?case by blast
+next
   case (32 now \<sigma> \<gamma> \<theta> def guard th res el)
   then show ?case by blast
 next
@@ -1639,20 +1655,78 @@ inductive b_seq_exec :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal e
 | "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> e \<longrightarrow>\<^sub>b x \<Longrightarrow> inr_post_raw sig x (\<sigma> sig) \<tau> t dly = \<tau>' \<Longrightarrow>
                                               b_seq_exec t \<sigma> \<gamma> \<theta>  def (Bassign_inert sig e dly) \<tau> \<tau>'"
 
-inductive_cases seq_cases [elim!]:
-  "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bnull, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-  "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bcomp ss1 ss2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-  "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bguarded guard ss1 ss2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-  "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_trans sig e dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-  "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_inert sig e dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+\<comment> \<open>case matches current choice\<close>
+| "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp \<longrightarrow>\<^sub>b x \<Longrightarrow> t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp' \<longrightarrow>\<^sub>b x \<Longrightarrow>
+   b_seq_exec t \<sigma> \<gamma> \<theta> def ss \<tau> \<tau>' \<Longrightarrow>
+   b_seq_exec t \<sigma> \<gamma> \<theta> def (Bcase exp ((Explicit exp', ss) # choices)) \<tau> \<tau>'"
+
+\<comment> \<open>case does not match current choice\<close>
+| "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp \<longrightarrow>\<^sub>b x \<Longrightarrow> t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp' \<longrightarrow>\<^sub>b x' \<Longrightarrow> x \<noteq> x' \<Longrightarrow>
+   b_seq_exec t \<sigma> \<gamma> \<theta> def (Bcase exp choices) \<tau> \<tau>' \<Longrightarrow>
+   b_seq_exec t \<sigma> \<gamma> \<theta> def (Bcase exp ((Explicit exp', ss) # choices)) \<tau> \<tau>'"
+
+\<comment> \<open>case others\<close>
+| "b_seq_exec t \<sigma> \<gamma> \<theta> def ss \<tau> \<tau>' \<Longrightarrow>
+   b_seq_exec t \<sigma> \<gamma> \<theta> def (Bcase exp ((Others, ss) # choices)) \<tau> \<tau>'"
+
+\<comment> \<open>case does not match any choices\<close>
+| "b_seq_exec t \<sigma> \<gamma> \<theta> def (Bcase exp []) \<tau> \<tau>"
+
+inductive_cases seq_cases [elim!]: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bnull, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and
+  seq_cases_bcomp: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bcomp ss1 ss2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and
+  seq_cases_bguarded: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bguarded guard ss1 ss2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and
+  seq_cases_trans: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_trans sig e dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and
+  seq_cases_inert: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_inert sig e dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and
+  seq_cases_bcase: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bcase exp choices, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
 
 lemma b_seq_exec_deterministic:
   assumes   "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>1"
   assumes   "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>2"
   shows "\<tau>2 = \<tau>1"
   using assms
-  apply (induction arbitrary:\<tau>2 rule:b_seq_exec.induct)
-  using beval_raw_deterministic by blast+
+proof (induction arbitrary:\<tau>2 rule:b_seq_exec.induct)
+  case (1 t \<sigma> \<gamma> \<theta> def \<tau>)
+  then show ?case  using beval_raw_deterministic by blast+
+next
+  case (2 t \<sigma> \<gamma> \<theta> def ss1 \<tau> \<tau>'' ss2 \<tau>')
+  then show ?case by (metis (full_types) seq_cases_bcomp)
+next
+  case (3 t \<sigma> \<gamma> \<theta> def guard ss1 \<tau> \<tau>' ss2)
+  then show ?case
+    by (metis beval_raw_deterministic seq_cases_bguarded val.inject(1))
+next
+  case (4 t \<sigma> \<gamma> \<theta> def guard ss2 \<tau> \<tau>' ss1)
+  then show ?case
+    by (metis beval_raw_deterministic seq_cases_bguarded val.inject(1))
+next
+  case (5 t \<sigma> \<gamma> \<theta> def e x sig \<tau> dly \<tau>')
+  then show ?case
+    by (metis beval_raw_deterministic seq_cases_trans)
+next
+  case (6 t \<sigma> \<gamma> \<theta> def e x sig \<tau> dly \<tau>')
+  then show ?case using beval_raw_deterministic
+    by (metis seq_cases_inert)
+next
+  case (7 t \<sigma> \<gamma> \<theta> def exp x exp' ss \<tau> \<tau>' choices)
+  show ?case
+    apply (rule seq_cases_bcase[OF 7(5), rotated])
+    by (metis "7.hyps"(1) "7.hyps"(2) Pair_inject beval_raw_deterministic choices.inject list.inject)
+       (auto simp add: 7)
+next
+  case (8 t \<sigma> \<gamma> \<theta> def exp x exp' x' choices \<tau> \<tau>' ss)
+  show ?case
+    apply (rule seq_cases_bcase[OF 8(6)])
+    by (metis 8 beval_raw_deterministic choices.inject list.inject prod.inject)
+       (auto simp add: 8)
+next
+  case (9 t \<sigma> \<gamma> \<theta> def ss \<tau> \<tau>' exp choices)
+  show ?case
+    apply (rule seq_cases_bcase[OF 9(3)])
+    using "9.IH" by auto
+next
+  case (10 t \<sigma> \<gamma> \<theta> def exp \<tau>)
+  then show ?case using seq_cases_bcase  by blast
+qed
 
 lemma
   assumes "t, \<sigma>, \<gamma>, \<theta>, def  \<turnstile> <Bnull, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
@@ -1759,6 +1833,34 @@ lemma seq_stmts_modify_local_only_raw:
   shows "\<And>n. dom (map_diff (\<tau>' n) (\<tau> n)) \<subseteq> set (signals_in ss)"
   using assms
 proof (induction rule:b_seq_exec.inducts)
+  case (7 t \<sigma> \<gamma> \<theta> def exp x exp' ss \<tau> \<tau>' choices)
+  have " signals_of (Bcase exp ((Explicit exp', ss) # choices)) = signals_of ss \<union> signals_of (Bcase exp choices)"
+    by auto
+  also have "... \<supseteq> signals_of ss"
+    by auto
+  then show ?case
+    using "7.IH" calculation by blast
+next
+  case (8 t \<sigma> \<gamma> \<theta> def exp x exp' x' choices \<tau> \<tau>' ss)
+  have "signals_of (Bcase exp ((Explicit exp', ss) # choices)) = signals_of ss \<union> signals_of (Bcase exp choices)"
+    by auto
+  hence "... \<supseteq> signals_of (Bcase exp choices)"
+    by auto
+  then show ?case
+    using "8.IH" \<open>signals_of (Bcase exp ((Explicit exp', ss) # choices)) = signals_of ss \<union>
+    signals_of (Bcase exp choices)\<close> by blast
+next
+  case (9 t \<sigma> \<gamma> \<theta> def ss \<tau> \<tau>' exp choices)
+  have "signals_of (Bcase exp ((Others, ss) # choices)) = signals_of ss \<union> signals_of (Bcase exp choices)"
+    by auto
+  hence "signals_of ss \<subseteq> signals_of (Bcase exp ((Others, ss) # choices))"
+    by auto
+  then show ?case
+    using "9.IH" by blast
+next
+  case (10 t \<sigma> \<gamma> \<theta> def exp \<tau>)
+  then show ?case by simp
+next
   case (1 t \<sigma> \<gamma> \<theta> def \<tau>)
   then show ?case by auto
 next
@@ -2295,9 +2397,6 @@ lemma b_seq_exec_modifies_local:
   shows "\<And>i s. s \<notin> set (signals_in ss) \<Longrightarrow> i \<ge> t  \<Longrightarrow> \<tau> i s =  \<tau>' i s"
   using assms
 proof (induction rule:b_seq_exec.induct)
-case (1 t \<sigma> \<gamma> \<theta> def \<tau>)
-  then show ?case by auto
-next
   case (2 t \<sigma> \<gamma> \<theta> def ss1 \<tau> \<tau>'' ss2 \<tau>')
   hence "s \<notin> set (signals_in ss1)" and "s \<notin> set (signals_in ss2)"
     by auto
@@ -2324,16 +2423,13 @@ next
     using inr_post unfolding inr_post_raw_def by auto
   then show ?case using `s \<noteq> sig`
     by (metis inr_post_raw_def inr_post_raw_does_not_affect_other_sig)
-qed
+qed (auto)
 
 lemma b_seq_exec_modifies_local_before_now:
   assumes "b_seq_exec t \<sigma> \<gamma> def \<theta> ss \<tau> \<tau>'"
   shows "\<And>i s. s \<notin> set (signals_in ss) \<Longrightarrow> i < t  \<Longrightarrow> \<tau> i s = \<tau>' i s"
   using assms
 proof (induction rule:b_seq_exec.induct)
-  case (1 t \<sigma> \<gamma> \<theta> \<tau>)
-  then show ?case by auto
-next
   case (2 t \<sigma> \<gamma> \<theta> ss1 \<tau> \<tau>'' ss2 \<tau>')
   then show ?case by auto
 next
@@ -2350,7 +2446,7 @@ next
   case (6 t \<sigma> \<gamma> \<theta> e x sig \<tau> dly \<tau>')
   then show ?case
     by (metis inr_post_raw_does_not_affect_other_sig list.set_intros(1) signals_in.simps(3))
-qed
+qed (auto)
 
 lemma b_seq_exec_modifies_local':
   assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
@@ -3075,7 +3171,7 @@ proof -
   hence "s = sig"
     using assms by auto
   obtain v where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b v"
-    using assms(2) ss_def by auto
+    using assms(2) ss_def  by (meson seq_cases_trans)
   hence "b_seq_exec t \<sigma> \<gamma> \<theta> def (Bassign_trans sig e dly) \<tau>1 (trans_post_raw sig v (\<sigma> sig) \<tau>1 t dly)"
     by (meson b_seq_exec.intros(5))
   have "trans_post_raw sig v (\<sigma> sig) \<tau>1 t dly k s =  (trans_post_raw sig v (\<sigma> sig) \<tau> t dly) k s"
@@ -3091,7 +3187,7 @@ proof -
       unfolding trans_post_raw_def  by smt
   qed
   thus "\<tau>1' k s =   \<tau>' k s"
-    by (metis assms \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b v\<close> beval_raw_deterministic seq_cases(4))
+    by (metis assms \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b v\<close> beval_raw_deterministic seq_cases_trans)
 qed
 
 lemma purge_raw_equal_signal:
@@ -3151,7 +3247,7 @@ proof -
   hence 2: "\<And>k.  \<tau> k s =  \<tau>1 k s"
     using assms unfolding ss_def by auto
   obtain v where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b v"
-    using assms(2) ss_def by auto
+    using assms(2) ss_def by (meson seq_cases_inert)
   hence 3: "b_seq_exec t \<sigma> \<gamma> \<theta> def (Bassign_inert sig e dly) \<tau>1 (inr_post_raw sig v (\<sigma> sig) \<tau>1 t dly)"
     by (meson b_seq_exec.intros(6))
   have in_tr: "inr_post_raw  sig v (\<sigma> sig) \<tau>1 t dly =
@@ -3184,7 +3280,8 @@ proof -
   also have "... =   (inr_post_raw  sig v (\<sigma> sig) \<tau> t dly) k s"
     unfolding inr_post_raw_def by auto
   also have "... =  \<tau>' k s"
-    using \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b v\<close> assms(2) beval_raw_deterministic ss_def by blast
+    using \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b v\<close> assms(2) beval_raw_deterministic ss_def
+    by (metis b_seq_exec.intros(6) b_seq_exec_deterministic)
   finally show " \<tau>1' k s = \<tau>' k s"
     by auto
 qed
@@ -3196,12 +3293,117 @@ lemma b_seq_exec_same:
   shows "\<And>k s. s \<in> set (signals_in ss) \<Longrightarrow>  \<tau>1'' k s =  \<tau>'' k s"
   using assms
 proof (induction arbitrary: \<tau> \<tau>'' rule:b_seq_exec.induct)
+  case (7 t \<sigma> \<gamma> \<theta> def exp x exp' ss \<tau>1 \<tau>' choices)
+  have *: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>''"
+    apply (rule seq_cases_bcase[OF 7(6), rotated])
+    by (metis "7.hyps"(1) "7.hyps"(2) Pair_inject beval_raw_deterministic choices.inject list.inject) auto
+  have **: "\<And>sa k. sa \<in> signals_of ss \<Longrightarrow> \<tau> k sa = \<tau>1 k sa"
+  proof -
+    fix sa k
+    assume "sa \<in> signals_of ss"
+    hence  "sa \<in> signals_of (Bcase exp ((Explicit exp', ss) # choices)) "
+      by auto
+    thus "\<tau> k sa = \<tau>1 k sa"
+      using 7 by auto
+  qed
+  have "s \<in> signals_of ss \<or> s \<notin> signals_of ss"
+    by auto
+  moreover
+  { assume " s \<in> signals_of ss"
+    hence ?case
+      using "*" "**" "7.IH" by blast }
+  moreover
+  { assume " s \<notin> signals_of ss"
+    hence "\<tau>' k s = \<tau>1 k s"
+      using 7  by (metis \<open>s \<notin> signals_of ss\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> < ss , \<tau>1> \<longrightarrow>\<^sub>s \<tau>'\<close>
+      b_seq_exec_modifies_local_strongest)
+    also have "... = \<tau> k s"
+      using 7 by simp
+    also have "... = \<tau>'' k s"
+      using \<open>s \<notin> signals_of ss\<close> * by (meson b_seq_exec_modifies_local_strongest)
+    finally have ?case
+      by auto }
+  ultimately show ?case
+    by auto
+next
+  case (8 t \<sigma> \<gamma> \<theta> def exp x exp' x' choices \<tau>1 \<tau>' ss)
+  have *: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <Bcase exp choices , \<tau>> \<longrightarrow>\<^sub>s \<tau>''"
+    apply (rule seq_cases_bcase[OF 8(7)])
+    by (metis "8.hyps"(1) "8.hyps"(2) "8.hyps"(3) Pair_inject beval_raw_deterministic choices.inject
+    list.inject) auto
+  have **: "\<And>sa k.  sa \<in> signals_of (Bcase exp choices) \<Longrightarrow> \<tau> k sa = \<tau>1 k sa"
+  proof -
+    fix sa k
+    assume "sa \<in> signals_of (Bcase exp choices)"
+    hence " sa \<in> signals_of (Bcase exp ((Explicit exp', ss) # choices))"
+      by auto
+    with 8 show "\<tau> k sa = \<tau>1 k sa"
+      by auto
+  qed
+  have "s \<in> signals_of (Bcase exp choices) \<or> s \<notin> signals_of (Bcase exp choices)"
+    by auto
+  moreover
+  { assume "s \<in> signals_of (Bcase exp choices)"
+    hence ?case
+      using "*" "**" "8.IH" by auto }
+  moreover
+  { assume "s \<notin> signals_of (Bcase exp choices)"
+    hence "\<tau>' k s = \<tau> k s"
+      using "8.hyps"(4) "8.prems"(1) "8.prems"(3) b_seq_exec_modifies_local_strongest
+      by metis
+    also have "... = \<tau>'' k s"
+      using * \<open>s \<notin> signals_of (Bcase exp choices)\<close>
+      by (meson b_seq_exec_modifies_local_strongest)
+    finally have ?case
+      by auto }
+  ultimately show ?case
+    by auto
+next
+  case (9 t \<sigma> \<gamma> \<theta> def ss \<tau>1 \<tau>1' exp choices)
+  have *: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>''"
+    by (rule seq_cases_bcase[OF 9(4)]) auto
+  have **: "\<And>sa k. sa \<in> signals_of ss \<Longrightarrow> \<tau> k sa = \<tau>1 k sa"
+  proof -
+    fix sa k
+    assume "sa \<in> signals_of ss"
+    hence  "sa \<in> signals_of (Bcase exp ((Others, ss) # choices)) "
+      by auto
+    thus "\<tau> k sa = \<tau>1 k sa"
+      using 9(5) by auto
+  qed
+  have "s \<in> signals_of ss \<or> s \<notin> signals_of ss"
+    by auto
+  moreover
+  { assume "s \<in> signals_of ss"
+    hence ?case
+      using "*" "**" "9.IH" by blast }
+  moreover
+  { assume "s \<notin> signals_of ss"
+    hence " \<tau>1' k s = \<tau>1 k s"
+      using 9  by (metis b_seq_exec_modifies_local_strongest)
+    also have "... = \<tau> k s"
+      using 9 by simp
+    also have "... = \<tau>'' k s"
+      using \<open>s \<notin> signals_of ss\<close> \<open>t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>''\<close>
+    proof -
+      have "\<exists>f fa sa fb A n fc. \<tau>1' k s = fc k s \<and> s \<notin> signals_of sa \<and> n , fa , A , f, fb \<turnstile> < sa , fc> \<longrightarrow>\<^sub>s \<tau>''"
+        by (metis \<open>s \<notin> signals_of ss\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>''\<close> calculation)
+      then show ?thesis
+        by (metis (no_types) b_seq_exec_modifies_local_strongest calculation)
+    qed
+    finally have ?case by auto }
+  ultimately show ?case
+    by auto
+next
+  case (10 t \<sigma> \<gamma> \<theta> def exp \<tau>)
+  then show ?case by auto
+next
   case (1 t \<sigma> \<gamma> \<theta> def  \<tau>)
   then show ?case by auto
 next
   case (2 t \<sigma> \<gamma> \<theta> def ss1 \<tau>1 \<tau>1' ss2 \<tau>1'')
   then obtain \<tau>' where A: "t , \<sigma> , \<gamma> , \<theta> , def \<turnstile> < ss1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and B: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> < ss2 , \<tau>'> \<longrightarrow>\<^sub>s \<tau>''"
-    by blast
+    by (meson seq_cases_bcomp)
   have *: "\<And>k s. s \<in> set (signals_in ss1) \<Longrightarrow>  \<tau> k s =  \<tau>1 k s" and
        **: "\<And>k s. s \<in> set (signals_in ss2) \<Longrightarrow>  \<tau> k s =  \<tau>1 k s"
     using 2 by auto
@@ -3290,7 +3492,7 @@ next
 next
   case (3 t \<sigma> \<gamma> \<theta> def guard ss1 tau tau' ss2)
   hence "t , \<sigma> , \<gamma> , \<theta> , def \<turnstile> < ss1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>''"
-    using beval_raw_deterministic by blast
+    using beval_raw_deterministic  by (metis seq_cases_bguarded val.inject(1))
   have "s \<in> signals_of ss1 \<or> s\<notin> signals_of ss1"
     by auto
   moreover
@@ -3322,7 +3524,7 @@ next
 next
   case (4 t \<sigma> \<gamma> \<theta> def guard ss2 tau tau' ss1)
   hence "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> < ss2 , \<tau>> \<longrightarrow>\<^sub>s \<tau>''"
-    using beval_raw_deterministic by blast
+    using beval_raw_deterministic  by (metis seq_cases_bguarded val.inject(1))
   have "s \<in> signals_of ss2 \<or> s\<notin> signals_of ss2"
     by auto
   moreover
@@ -3716,6 +3918,7 @@ inductive bexp_wt :: "'s tyenv \<Rightarrow> 's bexp \<Rightarrow> ty \<Rightarr
 | "bexp_wt \<Gamma> exp  (Lty Uns len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftr exp n)  (Lty Uns len)"
 | "bexp_wt \<Gamma> exp  (Lty Sig len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftr exp n)  (Lty Sig len)"
 | "bexp_wt \<Gamma> g Bty \<Longrightarrow> bexp_wt \<Gamma> th ty \<Longrightarrow> bexp_wt \<Gamma> el ty \<Longrightarrow> bexp_wt \<Gamma> (Bwhen th g el) ty"
+| "bexp_wt \<Gamma> (Bliteral sign val) (Lty sign (length val))"
 
 inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
                                   "bexp_wt \<Gamma> (Band  exp1 exp2) type"
@@ -3732,7 +3935,8 @@ inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
                                   "bexp_wt \<Gamma> (Bsub exp1 exp2) type"
                                   "bexp_wt \<Gamma> (Bshiftl exp n) type"
                                   "bexp_wt \<Gamma> (Bshiftr exp n) type" and
-              bexp_wt_cases_when: "bexp_wt \<Gamma> (Bwhen th g el) type"
+              bexp_wt_cases_when: "bexp_wt \<Gamma> (Bwhen th g el) type" and
+               bexp_wt_cases_lit: "bexp_wt \<Gamma> (Bliteral sign val) type"
 
 inductive_cases bexp_wt_cases_all : "bexp_wt \<Gamma> exp type"
 
@@ -3742,12 +3946,17 @@ inductive seq_wt :: "'s tyenv \<Rightarrow> 's seq_stmt \<Rightarrow> bool" wher
 | "bexp_wt \<Gamma> g Bty \<Longrightarrow> seq_wt \<Gamma> s1 \<Longrightarrow> seq_wt \<Gamma> s2 \<Longrightarrow> seq_wt \<Gamma> (Bguarded g s1 s2)"
 | "bexp_wt \<Gamma> exp (\<Gamma> sig) \<Longrightarrow> seq_wt \<Gamma> (Bassign_trans sig exp dly)"
 | "bexp_wt \<Gamma> exp (\<Gamma> sig) \<Longrightarrow> seq_wt \<Gamma> (Bassign_inert sig exp dly)"
+| "bexp_wt \<Gamma> exp ty \<Longrightarrow> seq_wt \<Gamma> (Bcase exp [])"
+| "bexp_wt \<Gamma> exp ty \<Longrightarrow> seq_wt \<Gamma> ss \<Longrightarrow> seq_wt \<Gamma> (Bcase exp ((Others, ss) # choices))"
+| "bexp_wt \<Gamma> exp ty \<Longrightarrow> bexp_wt \<Gamma> exp' ty \<Longrightarrow> seq_wt \<Gamma> ss \<Longrightarrow> seq_wt \<Gamma> (Bcase exp choices) \<Longrightarrow>
+                                               seq_wt \<Gamma> (Bcase exp ((Explicit exp', ss) # choices))"
 
 inductive_cases seq_wt_cases [elim!]: "seq_wt \<Gamma> Bnull"
                                       "seq_wt \<Gamma> (Bcomp s1 s2)"
                                       "seq_wt \<Gamma> (Bguarded g s1 s2)"
                                       "seq_wt \<Gamma> (Bassign_trans sig exp dly)"
-                                      "seq_wt \<Gamma> (Bassign_inert sig exp dly)"
+                                      "seq_wt \<Gamma> (Bassign_inert sig exp dly)" and
+                  seq_wt_cases_bcase: "seq_wt \<Gamma> (Bcase exp choices)"
 
 inductive conc_wt :: "'s tyenv \<Rightarrow> 's conc_stmt \<Rightarrow> bool" where
   "seq_wt \<Gamma> ss \<Longrightarrow> conc_wt \<Gamma> (process sl : ss)"
@@ -3835,17 +4044,17 @@ proof (induction arbitrary: v rule:bexp_wt.inducts)
     using beval_cases(17)[OF 19(10)] by fastforce+
   hence "type_of v1 = Lty Uns len1" and "type_of v2 = Lty Uns len2"
     using 19 by auto
-  show ?case 
+  show ?case
     apply (rule beval_cases(17)[OF 19(10)])
     using 19 size_bin_to_bl_aux  apply (metis add.right_neutral list.size(3) ty.inject type_of.simps(2))
-    using 19 by (metis signedness.distinct(5) ty.inject type_of.simps(2))     
+    using 19 by (metis signedness.distinct(5) ty.inject type_of.simps(2))
 next
   case (20 \<Gamma> exp1 len1 exp2 len2)
   obtain v1 v2 where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp1 \<longrightarrow>\<^sub>b v1" and "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp2 \<longrightarrow>\<^sub>b v2"
     using beval_cases(17)[OF 20(10)] by fastforce+
   hence "type_of v1 = Lty Sig len1" and "type_of v2 = Lty Sig len2"
     using 20 by auto
-  show ?case 
+  show ?case
     apply (rule beval_cases(17)[OF 20(10)])
     using 20 size_bin_to_bl_aux  apply (metis signedness.simps(6) ty.inject type_of.simps(2))
     using 20  by (metis add.right_neutral list.size(3) size_bin_to_bl_aux ty.inject type_of.simps(2))
@@ -3855,9 +4064,9 @@ next
     using beval_cases(16)[OF 17(10)] by fastforce+
   hence "type_of v1 = Lty Uns len1" and "type_of v2 = Lty Uns len2"
     using 17 by auto
-  show ?case 
+  show ?case
     apply(rule beval_cases(16)[OF 17(10)])
-    using 17 size_bin_to_bl_aux  apply (metis add.right_neutral list.size(3) ty.inject type_of.simps(2))    
+    using 17 size_bin_to_bl_aux  apply (metis add.right_neutral list.size(3) ty.inject type_of.simps(2))
     using 17 by fastforce
 next
   case (18 \<Gamma> exp1 len1 exp2 len2)
@@ -3865,10 +4074,10 @@ next
     using beval_cases(16)[OF 18(10)] by fastforce+
   hence "type_of v1 = Lty Sig len1" and "type_of v2 = Lty Sig len2"
     using 18 by auto
-  show ?case 
+  show ?case
     apply(rule beval_cases(16)[OF 18(10)])
     using 18 size_bin_to_bl_aux apply fastforce
-    using 18 size_bin_to_bl_aux 
+    using 18 size_bin_to_bl_aux
     by (metis add.right_neutral list.size(3) ty.inject type_of.simps(2))
 next
   case (15 \<Gamma> exp1 len1 exp2 len2)
@@ -4083,112 +4292,53 @@ lemma inr_post_preserve_type_correctness:
   by (simp add: inr_post_raw_def purge_raw_preserve_type_correctness
   trans_post_preserve_type_correctness)
 
-lemma seq_stmts_preserve_type_correctness:
-  assumes "seq_wt \<Gamma> ss" and "styping \<Gamma> \<sigma>" and "ttyping \<Gamma> \<theta>" and "styping \<Gamma> def" and "ttyping \<Gamma> \<tau>"
-  assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-  shows "ttyping \<Gamma> \<tau>'"
-  using assms
-proof (induction arbitrary: \<tau> \<tau>' rule:seq_wt.inducts)
-  case (1 \<Gamma>)
-  then show ?case by auto
-next
-  case (2 \<Gamma> s1 s2)
-  then show ?case by blast
-next
-  case (3 \<Gamma> g s1 s2)
-  then show ?case by blast
-next
-  case (4 \<Gamma> exp sig dly)
-  then obtain x where "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x"
-    by blast
-  hence "\<tau>' = trans_post_raw sig x (\<sigma> sig) \<tau> t dly"
-    using 4 beval_raw_deterministic by blast
-  then show ?case
-    using trans_post_preserve_type_correctness
-    by (metis "4.hyps" "4.prems"(1) "4.prems"(2) "4.prems"(3) "4.prems"(4) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp
-    \<longrightarrow>\<^sub>b x\<close> beval_raw_preserve_well_typedness)
-next
-  case (5 \<Gamma> exp sig dly)
-  then obtain x where "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x"
-    by blast
-  hence "\<tau>' = inr_post_raw sig x (\<sigma> sig) \<tau> t dly"
-    using 5 beval_raw_deterministic by blast
-  then show ?case
-    using inr_post_preserve_type_correctness
-    by (metis "5.hyps" "5.prems"(1) "5.prems"(2) "5.prems"(3) "5.prems"(4) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp
-    \<longrightarrow>\<^sub>b x\<close> beval_raw_preserve_well_typedness)
-qed
-
-lemma clean_zip_preserve_type_correctness:
-  fixes   \<tau> \<tau>1 \<tau>2 cs1 cs2
-  assumes "ttyping \<Gamma> \<tau>" and "ttyping \<Gamma> \<tau>1" and "ttyping \<Gamma> \<tau>2"
-  defines "\<tau>' \<equiv> clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
-  shows "ttyping \<Gamma> \<tau>'"
-  using assms
-  by (smt CollectI clean_zip_raw_def domIff keys_def prod.simps(2) ttyping_def zero_fun_def zero_option_def)
-
-lemma conc_stmt_preserve_type_correctness:
-  assumes "conc_wt \<Gamma> cs" and "styping \<Gamma> \<sigma>" and "ttyping \<Gamma> \<theta>" and "styping \<Gamma> def" and "ttyping \<Gamma> \<tau>"
-  assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
-  shows "ttyping \<Gamma> \<tau>'"
-  using assms
-proof (induction arbitrary: \<tau> \<tau>' rule:conc_wt.inducts)
-  case (1 \<Gamma> ss sl)
-  then show ?case
-    using seq_stmts_preserve_type_correctness by blast
-next
-  case (2 \<Gamma> cs1 cs2)
-  then show ?case
-    by (metis clean_zip_preserve_type_correctness conc_cases(2))
-qed
-
 lemma beval_raw_progress:
   assumes "bexp_wt \<Gamma> exp type" and "styping \<Gamma> \<sigma>" and "ttyping \<Gamma> \<theta>" and "styping \<Gamma> def"
   shows "\<exists>v. t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b v "
   using assms
 proof (induction rule:bexp_wt.inducts)
   case (25 \<Gamma> th ty el g)
-  then show ?case 
+  then show ?case
     by (metis (full_types) beval_raw.intros(32) beval_raw.intros(33)
     beval_raw_preserve_well_typedness ty.distinct(1) type_of.cases type_of.simps(2))
 next
   case (21 \<Gamma> exp len n)
-  then show ?case 
+  then show ?case
     by (metis beval_raw.intros(28) beval_raw_preserve_well_typedness ty.distinct(1) ty.inject
     type_of.elims)
 next
   case (22 \<Gamma> exp len n)
-  then show ?case 
+  then show ?case
     by (metis beval_raw.intros(29) beval_raw_preserve_well_typedness ty.distinct(1) ty.inject
     type_of.elims)
 next
   case (23 \<Gamma> exp len n)
-  then show ?case 
+  then show ?case
     by (metis beval_raw.intros(30) beval_raw_preserve_well_typedness ty.distinct(1) ty.inject
     type_of.elims)
 next
   case (24 \<Gamma> exp len n)
-  then show ?case 
+  then show ?case
     by (metis beval_raw.intros(31) beval_raw_preserve_well_typedness
     ty.distinct(1) ty.inject type_of.cases type_of.simps(1) type_of.simps(2))
 next
   case (19 \<Gamma> exp1 len1 exp2 len2)
-  then show ?case 
+  then show ?case
     by (metis beval_raw.intros(26) beval_raw_preserve_well_typedness ty.distinct(1) ty.inject
     type_of.elims)
 next
   case (20 \<Gamma> exp1 len1 exp2 len2)
-  then show ?case 
+  then show ?case
     by (metis beval_raw.intros(27) beval_raw_preserve_well_typedness ty.distinct(1) ty.inject
     type_of.elims)
 next
   case (17 \<Gamma> exp1 len1 exp2 len2)
-  then show ?case 
+  then show ?case
     by (metis beval_raw.intros(24) beval_raw_preserve_well_typedness ty.distinct(1) ty.inject
     type_of.elims)
 next
   case (18 \<Gamma> exp1 len1 exp2 len2)
-  then show ?case 
+  then show ?case
     by (metis beval_raw.intros(25) beval_raw_preserve_well_typedness ty.distinct(1) ty.inject
     type_of.elims)
 next
@@ -4330,6 +4480,109 @@ next
     by (metis beval_raw.intros(20) beval_raw_preserve_well_typedness ty.simps(3) type_of.elims)
 qed (auto intro!: beval_raw.intros)
 
+lemma seq_stmts_preserve_type_correctness:
+  assumes "seq_wt \<Gamma> ss" and "styping \<Gamma> \<sigma>" and "ttyping \<Gamma> \<theta>" and "styping \<Gamma> def" and "ttyping \<Gamma> \<tau>"
+  assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  shows "ttyping \<Gamma> \<tau>'"
+  using assms
+proof (induction arbitrary: \<tau> \<tau>' rule:seq_wt.inducts)
+  case (1 \<Gamma>)
+  then show ?case by auto
+next
+  case (2 \<Gamma> s1 s2)
+  then show ?case  by (meson seq_cases_bcomp)
+next
+  case (3 \<Gamma> g s1 s2)
+  then show ?case  by (meson seq_cases_bguarded)
+next
+  case (4 \<Gamma> exp sig dly)
+  then obtain x where "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x"
+    by (meson seq_cases_trans)
+  hence "\<tau>' = trans_post_raw sig x (\<sigma> sig) \<tau> t dly"
+    using 4 beval_raw_deterministic  by (metis seq_cases_trans)
+  then show ?case
+    using trans_post_preserve_type_correctness
+    by (metis "4.hyps" "4.prems"(1) "4.prems"(2) "4.prems"(3) "4.prems"(4) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp
+    \<longrightarrow>\<^sub>b x\<close> beval_raw_preserve_well_typedness)
+next
+  case (5 \<Gamma> exp sig dly)
+  then obtain x where "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x"
+    by (meson seq_cases_inert)
+  hence "\<tau>' = inr_post_raw sig x (\<sigma> sig) \<tau> t dly"
+    using 5 beval_raw_deterministic by (metis seq_cases_inert)
+  then show ?case
+    using inr_post_preserve_type_correctness
+    by (metis "5.hyps" "5.prems"(1) "5.prems"(2) "5.prems"(3) "5.prems"(4) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp
+    \<longrightarrow>\<^sub>b x\<close> beval_raw_preserve_well_typedness)
+next
+  case (6 \<Gamma> exp ty)
+  hence "\<tau>' = \<tau>"
+    using b_seq_exec.intros(10) b_seq_exec_deterministic by metis
+  then show ?case
+    using \<open>ttyping \<Gamma> \<tau>\<close> by auto
+next
+  case (7 \<Gamma> exp ty ss choices)
+  hence "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+    by (smt b_seq_exec.cases choices.distinct(1) list.distinct(1) list.sel(1) prod.inject
+    seq_stmt.distinct(29) seq_stmt.inject(5) seq_stmt.simps(15) seq_stmt.simps(23)
+    seq_stmt.simps(29) seq_stmt.simps(33))
+  then show ?case
+    by (metis "7.IH" "7.prems"(1) "7.prems"(2) "7.prems"(3) "7.prems"(4) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> < ss
+    , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close>)
+next
+  case (8 \<Gamma> exp ty exp' ss choices)
+  obtain x where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x"
+    using "8.hyps"(1) "8.prems"(1) "8.prems"(2) "8.prems"(3) beval_raw_progress by metis
+  obtain x' where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp' \<longrightarrow>\<^sub>b x'"
+    using 8 beval_raw_progress by metis
+  have " x = x' \<or> x \<noteq> x'"
+    by auto
+  moreover
+  { assume "x = x'"
+    have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+      apply (rule seq_cases_bcase[OF 8(11), rotated])
+      by (metis Pair_inject \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp' \<longrightarrow>\<^sub>b x'\<close> \<open>x =
+      x'\<close> beval_raw_deterministic choices.inject list.inject)blast+
+    hence ?case
+      by (metis "8.IH"(1) "8.prems"(1) "8.prems"(2) "8.prems"(3) "8.prems"(4) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile>
+      < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close>) }
+  moreover
+  { assume "x \<noteq> x'"
+    have "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bcase exp choices, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+      apply (rule seq_cases_bcase[OF 8(11)])
+      by (metis Pair_inject \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp' \<longrightarrow>\<^sub>b x'\<close> \<open>x \<noteq>
+      x'\<close> beval_raw_deterministic choices.inject list.inject) auto
+    hence ?case
+      using "8.IH"(2) "8.prems"(1) "8.prems"(2) "8.prems"(3) "8.prems"(4) by auto }
+  ultimately show ?case
+    by auto
+qed
+
+lemma clean_zip_preserve_type_correctness:
+  fixes   \<tau> \<tau>1 \<tau>2 cs1 cs2
+  assumes "ttyping \<Gamma> \<tau>" and "ttyping \<Gamma> \<tau>1" and "ttyping \<Gamma> \<tau>2"
+  defines "\<tau>' \<equiv> clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
+  shows "ttyping \<Gamma> \<tau>'"
+  using assms
+  by (smt CollectI clean_zip_raw_def domIff keys_def prod.simps(2) ttyping_def zero_fun_def zero_option_def)
+
+lemma conc_stmt_preserve_type_correctness:
+  assumes "conc_wt \<Gamma> cs" and "styping \<Gamma> \<sigma>" and "ttyping \<Gamma> \<theta>" and "styping \<Gamma> def" and "ttyping \<Gamma> \<tau>"
+  assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+  shows "ttyping \<Gamma> \<tau>'"
+  using assms
+proof (induction arbitrary: \<tau> \<tau>' rule:conc_wt.inducts)
+  case (1 \<Gamma> ss sl)
+  then show ?case
+    using seq_stmts_preserve_type_correctness by blast
+next
+  case (2 \<Gamma> cs1 cs2)
+  then show ?case
+    by (metis clean_zip_preserve_type_correctness conc_cases(2))
+qed
+
+
+
 lemma bexp_wt_bty_cases:
   assumes "bexp_wt \<Gamma> g type"
   assumes "type = Bty"
@@ -4338,7 +4591,7 @@ lemma bexp_wt_bty_cases:
   using assms
 proof (induction rule:bexp_wt.inducts)
   case (25 \<Gamma> g th ty el)
-  then show ?case 
+  then show ?case
     by (metis beval_raw.intros(32) beval_raw.intros(33))
 next
   case (14 \<Gamma> sig ki len idx)
@@ -4420,6 +4673,19 @@ next
   case (5 \<Gamma> exp sig dly)
   then show ?case
     by (meson b_seq_exec.intros(6) beval_raw_progress)
+next
+  case (6 \<Gamma> exp ty)
+  then show ?case
+    using b_seq_exec.intros(10) by blast
+next
+  case (7 \<Gamma> exp ty ss choices)
+  then show ?case
+    by (meson b_seq_exec.intros(9))
+next
+  case (8 \<Gamma> exp ty exp' ss choices)
+  then show ?case
+    by (metis b_seq_exec.intros(7) b_seq_exec.intros(8) beval_raw_progress
+    only_context_matters_for_progress)
 qed
 
 lemma conc_stmts_progress:
@@ -5122,6 +5388,42 @@ lemma context_invariant_rem_curr_trans:
   using assms unfolding context_invariant_def rem_curr_trans_def
   by (simp add: domIff)
 
+lemma nonneg_delay_seq_next_time_strict_bcase:
+  assumes "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  assumes "ss = Bcase exp choices"
+  assumes "nonneg_delay ss"
+  assumes "\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0"
+  assumes "\<tau>' \<noteq> 0"
+  shows "(LEAST n. dom ( \<tau>' n) \<noteq> {}) > t"
+  using assms
+proof (induction arbitrary: exp choices rule: b_seq_exec.inducts)
+  case (7 t \<sigma> \<gamma> \<theta> def exp x exp' ss \<tau> \<tau>' choices)
+  hence "\<And>n. n \<le> t \<Longrightarrow> \<tau>' n = 0"
+    by (meson b_seq_exec.intros(7) b_seq_exec_preserve_trans_removal_nonstrict)
+  then show ?case
+    using \<open>\<tau>' \<noteq> 0\<close> unfolding zero_fun_def zero_option_def
+    by (meson LeastI_ex dom_eq_empty_conv le_less_linear)
+next
+  case (8 t \<sigma> \<gamma> \<theta> def expa x exp' x' choicesa \<tau> \<tau>' ss)
+  hence "\<And>n. n \<le> t \<Longrightarrow> \<tau>' n = 0"
+    by (meson b_seq_exec.intros(8) b_seq_exec_preserve_trans_removal_nonstrict)
+  then show ?case
+    using \<open>\<tau>' \<noteq> 0\<close> unfolding zero_fun_def zero_option_def
+    by (meson LeastI_ex dom_eq_empty_conv le_less_linear)
+next
+  case (9 t \<sigma> \<gamma> \<theta> def ss \<tau> \<tau>' exp' choices')
+  hence "\<And>n. n \<le> t \<Longrightarrow> \<tau>' n = 0"
+    by (meson b_seq_exec.intros(9) b_seq_exec_preserve_trans_removal_nonstrict)
+  then show ?case
+    using \<open>\<tau>' \<noteq> 0\<close> unfolding zero_fun_def zero_option_def
+    by (meson LeastI_ex dom_eq_empty_conv le_less_linear)
+next
+  case (10 t \<sigma> \<gamma> \<theta> def exp \<tau>)
+  thus ?case
+    unfolding zero_fun_def zero_option_def
+    by (meson LeastI_ex dom_eq_empty_conv le_less_linear)
+qed (auto)
+
 lemma nonneg_delay_seq_next_time_strict:
   assumes "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
   assumes "nonneg_delay ss"
@@ -5130,11 +5432,15 @@ lemma nonneg_delay_seq_next_time_strict:
   shows "(LEAST n. dom ( \<tau>' n) \<noteq> {}) > t"
   using assms
 proof (induction ss arbitrary: \<tau> \<tau>')
+  case (Bcase x1 x2)
+  then show ?case
+    using nonneg_delay_seq_next_time_strict_bcase  by (metis (mono_tags))
+next
   case (Bcomp ss1 ss2)
   obtain \<tau>'' where \<tau>''_def: "b_seq_exec t \<sigma> \<gamma> \<theta> def ss1 \<tau> \<tau>''"
-    using Bcomp.prems(1) by blast
+    using Bcomp.prems(1) by (metis seq_cases_bcomp)
   have \<tau>'_def: "b_seq_exec t \<sigma> \<gamma> \<theta> def ss2 \<tau>'' \<tau>'"
-    using \<tau>''_def Bcomp(3) b_seq_exec_deterministic by blast
+    using \<tau>''_def Bcomp(3) b_seq_exec_deterministic by (metis seq_cases_bcomp)
   have "\<And>n. n \<le> t \<Longrightarrow>  \<tau>'' n = 0"
     using Bcomp(5)  \<tau>''_def
     Bcomp.prems(2) b_seq_exec_preserve_trans_removal_nonstrict nonneg_delay.simps(2) by blast
@@ -5144,14 +5450,15 @@ next
   case (Bguarded x1 ss1 ss2)
   moreover hence "nonneg_delay ss1" and "nonneg_delay ss2"
     by auto
-  ultimately show ?case by blast
+  ultimately show ?case by (metis seq_cases_bguarded)
 next
   case (Bassign_trans sig exp dly)
   hence "0 < dly" by auto
   obtain v where "beval_raw t \<sigma> \<gamma> \<theta> def exp v"
-    using Bassign_trans.prems(1) by blast
+    using Bassign_trans.prems(1)  by (meson seq_cases_trans)
   have \<tau>'_def: "\<tau>' =  trans_post_raw sig v (\<sigma> sig) \<tau> t dly"
-    using Bassign_trans \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b v\<close> beval_raw_deterministic by blast
+    using Bassign_trans \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b v\<close> beval_raw_deterministic
+    by (metis seq_cases_trans)
   hence "\<tau>' \<noteq> 0"
     using Bassign_trans by auto
   have "\<And>n. n < t \<Longrightarrow>  \<tau>' n = 0"
@@ -5186,9 +5493,10 @@ next
   case (Bassign_inert sig exp dly)
   hence "0 < dly" by auto
   obtain v where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b v"
-    using Bassign_inert.prems(1) by blast
+    using Bassign_inert.prems(1) by (metis seq_cases_inert)
   have \<tau>'_def: "\<tau>' = inr_post_raw sig (v) (\<sigma> sig) \<tau> t dly"
-    using Bassign_inert  \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b v\<close> beval_raw_deterministic by blast
+    using Bassign_inert  \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b v\<close> beval_raw_deterministic
+    by (metis seq_cases_inert)
   have "\<And>n. n < t \<Longrightarrow>  \<tau>' n = 0"
     using b_seq_exec_preserve_trans_removal Bassign_inert(1) Bassign_inert(3)
     by (metis dual_order.strict_implies_order)
@@ -5464,8 +5772,7 @@ next
     using purge_raw_before_now_unchanged by (metis order_refl)
   finally show " \<tau> t =  \<tau>' t"
     by auto
-qed
-
+qed (auto)
 
 text \<open>Again, the context invariant is preserved when we have non-negative delay in the sequential
 statement.\<close>

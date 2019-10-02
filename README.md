@@ -49,7 +49,8 @@ The formalisation is still ongoing and currently we do not have proofs of strong
 
 ### Any limitation of this formalisation?  
 
-**Every** assignment must have a non-zero delay.
+1. **Every** assignment must have a non-zero delay.
+2. Every program must be inside a process block.
 
 ### Installation
 

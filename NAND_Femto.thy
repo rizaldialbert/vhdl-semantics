@@ -352,7 +352,7 @@ next
     moreover
     { assume "\<not> disjnt \<gamma> {A, B}"
       then obtain x where "maxtime , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x"
-        by (metis conc_cases(1) cyc disjnt_iff nand3_def seq_cases(4))
+        by (metis conc_cases(1) cyc disjnt_iff nand3_def seq_cases_trans)
       hence "maxtime, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1, \<tau>> \<longrightarrow>\<^sub>s trans_post_raw C x (\<sigma> C) \<tau> maxtime 1"
         by (meson b_seq_exec.intros(5))
       hence \<tau>'_def: "\<tau>' = trans_post_raw C x (\<sigma> C) \<tau> maxtime 1"
@@ -403,7 +403,7 @@ lemma t_strictly_increasing:
 proof (cases "A \<in> \<gamma> \<or> B \<in> \<gamma>")
   case True
   then obtain x where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x"
-    by (metis assms(1) conc_cases(1) disjnt_insert1 nand3_def seq_cases(4))
+    by (metis assms(1) conc_cases(1) disjnt_insert1 nand3_def seq_cases_trans)
   hence \<tau>'_def: "\<tau>' = trans_post_raw C x (\<sigma> C) \<tau> t 1"
     using assms unfolding nand3_def
     by (meson True b_seq_exec.intros(5) b_seq_exec_deterministic conc_cases(1) disjnt_insert1)

@@ -22,14 +22,14 @@ lemma potential_tyenv:
   shows "\<exists>len>0. \<Gamma> IN = Lty Uns len \<and> \<Gamma> OUT = Lty Uns len \<or> \<Gamma> IN = Lty Sig len \<and> \<Gamma> OUT = Lty Sig len"
   by (rule seq_wt_cases(4)[OF assms])
      (metis bexp_wt_cases(14) bexp_wt_cases(9))
- 
+
 locale unsigned_shift_left =
   fixes \<Gamma> :: "sig tyenv"
   fixes len :: nat
   fixes amount :: nat
   assumes "0 < len"
-  assumes "\<Gamma> IN = Lty Uns len \<and> \<Gamma> OUT = Lty Uns len \<or> 
-           \<Gamma> IN = Lty Sig len \<and> \<Gamma> OUT = Lty Sig len" 
+  assumes "\<Gamma> IN = Lty Uns len \<and> \<Gamma> OUT = Lty Uns len \<or>
+           \<Gamma> IN = Lty Sig len \<and> \<Gamma> OUT = Lty Sig len"
 begin
 
 lemma well_typed:
@@ -93,7 +93,7 @@ proof (rule, rule)
       using unchanged_until_next_time_world
       by (metis (mono_tags, lifting) Suc_eq_plus1 \<open>get_time tw = get_time tw'\<close> le_Suc_eq le_add1
           le_less_trans less_diff_conv)
-    moreover have "lof_wline tw' IN i = lof_wline tw' IN (fst tw)" 
+    moreover have "lof_wline tw' IN i = lof_wline tw' IN (fst tw)"
       using unchanged_until_next_time_world
       by (metis \<open>get_time tw = get_time tw'\<close> \<open>get_time tw \<le> i\<close> \<open>i < next_time_world tw'\<close> worldline_upd2_before_dly)
     moreover have "property (fst tw + 1) (fst tw) tw'"
@@ -105,7 +105,7 @@ proof (rule, rule)
       also have "... =  Lv Uns (drop amount (lof_wline tw IN (fst tw) @ replicate amount False))"
         apply (rule beval_world_raw_cases[OF assm2])
         apply ( erule beval_cases)+
-        unfolding state_of_world_def 
+        unfolding state_of_world_def
         apply (metis comp_apply drop_append drop_replicate val.sel(3))
         using assms(3) by auto
       also have "... =  Lv Uns (drop amount (lof_wline tw' IN (fst tw) @ replicate amount False))"
@@ -133,7 +133,7 @@ proof (rule, rule)
       also have "... =  Lv Uns (drop amount (lof_wline tw IN (fst tw) @ replicate amount False))"
         apply (rule beval_world_raw_cases[OF assm2])
         apply ( erule beval_cases)+
-        unfolding state_of_world_def 
+        unfolding state_of_world_def
         apply (metis comp_apply drop_append drop_replicate val.sel(3))
         using assms(3) by auto
       also have "... =  Lv Uns (drop amount (lof_wline tw' IN (fst tw) @ replicate amount False))"
@@ -188,7 +188,7 @@ proof (rule, rule)
       using unchanged_until_next_time_world
       by (metis (mono_tags, lifting) Suc_eq_plus1 \<open>get_time tw = get_time tw'\<close> le_Suc_eq le_add1
           le_less_trans less_diff_conv)
-    moreover have "lof_wline tw' IN i = lof_wline tw' IN (fst tw)" 
+    moreover have "lof_wline tw' IN i = lof_wline tw' IN (fst tw)"
       using unchanged_until_next_time_world
       by (metis \<open>get_time tw = get_time tw'\<close> \<open>get_time tw \<le> i\<close> \<open>i < next_time_world tw'\<close> worldline_upd2_before_dly)
     moreover have "property (fst tw + 1) (fst tw) tw'"
@@ -230,7 +230,7 @@ proof (rule, rule)
         apply (rule beval_world_raw_cases[OF assm2])
         apply ( erule_tac[!] beval_cases)+
         prefer 2
-        unfolding state_of_world_def 
+        unfolding state_of_world_def
         apply (metis comp_apply drop_append drop_replicate val.sel(3))
         using assms(3) by auto
       also have "... =  Lv Sig (drop amount (lof_wline tw' IN (fst tw) @ replicate amount False))"

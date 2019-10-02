@@ -1751,11 +1751,14 @@ lemma trans_post_preserves_non_stuttering:
   shows "non_stuttering (to_trans_raw_sig \<tau>') \<sigma> s"
   using assms
 proof (induction cs arbitrary: \<tau> \<tau>')
+  case (Bcase x1 x2)
+  then show ?case  by force
+next
   case (Bassign_trans sig e dly)
   obtain x where "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b x"
-    using Bassign_trans.prems(5) assms(2) assms(5) by blast
+    using Bassign_trans.prems(5) assms(2) assms(5) by (metis seq_cases_trans)
   hence \<tau>'_def: "\<tau>' = trans_post_raw sig x (\<sigma> sig) \<tau> t dly"
-    using Bassign_trans.prems(2) beval_raw_deterministic by blast
+    using Bassign_trans.prems(2) beval_raw_deterministic by (metis seq_cases_trans)
   have prev_zero: "\<And>n. n < t \<Longrightarrow> to_trans_raw_sig \<tau> s n = 0"
     using Bassign_trans(3) unfolding to_trans_raw_sig_def
     by (auto simp add: zero_fun_def zero_option_def)
@@ -1806,43 +1809,45 @@ next
   then show ?case by auto
 qed
 
-
 lemma b_seq_exec_preserves_non_stuttering:
-  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> s"
   assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> s"
   assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
   assumes "nonneg_delay cs"
   shows "non_stuttering (to_trans_raw_sig \<tau>') \<sigma> s"
   using assms
-proof (induction cs arbitrary: \<tau> \<tau>')
-  case (Bcomp ss1 ss2)
-  obtain \<tau>'' where \<tau>''_def: "b_seq_exec t \<sigma> \<gamma> \<theta> def ss1 \<tau> \<tau>''"
-    using Bcomp.prems(2) by blast
-  hence *: "non_stuttering (to_trans_raw_sig \<tau>'') \<sigma> s"
-    using Bcomp(1)[OF Bcomp(3)] Bcomp(4-) by auto
-  have "b_seq_exec t \<sigma> \<gamma> \<theta> def ss2 \<tau>'' \<tau>'"
-    using \<tau>''_def  Bcomp.prems(2)  using b_seq_exec_deterministic by blast
-  moreover have "\<And>n. n < t \<Longrightarrow> \<tau>'' n = 0"
-    using b_seq_exec_preserve_trans_removal[OF \<tau>''_def Bcomp(5)] by auto
-  ultimately show ?case
-    using Bcomp(2)[OF *] Bcomp(6)
-    by (metis Bcomp.prems(3) \<tau>''_def dual_order.order_iff_strict nonneg_delay.simps(2) nonneg_delay_same)
+proof (induction rule: b_seq_exec.inducts)
+  case (1 t \<sigma> \<gamma> \<theta> def \<tau>)
+  then show ?case by auto
 next
-  case (Bguarded x1 cs1 cs2)
+  case (2 t \<sigma> \<gamma> \<theta> def ss1 \<tau> \<tau>'' ss2 \<tau>')
+  hence *: "non_stuttering (to_trans_raw_sig \<tau>'') \<sigma> s"
+    using nonneg_delay.simps(2) by blast
+  have "b_seq_exec t \<sigma> \<gamma> \<theta> def ss2 \<tau>'' \<tau>'"
+    by (simp add: "2.hyps"(2))
+  moreover have "\<And>n. n < t \<Longrightarrow> \<tau>'' n = 0"
+    using "2.hyps"(1) "2.prems"(2) b_seq_exec_preserve_trans_removal less_imp_le_nat by blast
+  ultimately show ?case
+    by (metis "*" "2.IH"(2) "2.hyps"(1) "2.prems"(2) "2.prems"(3) \<open>\<And>n. n < t \<Longrightarrow> \<tau>'' n = 0\<close>
+    nonneg_delay.simps(2) nonneg_delay_same order.not_eq_order_implies_strict)
+next
+  case (3 t \<sigma> \<gamma> \<theta> def guard ss1 \<tau> \<tau>' ss2)
   then show ?case
     using nonneg_delay.simps(3) by blast
 next
-  case (Bassign_trans sig e dly)
-  thus ?case by (meson trans_post_preserves_non_stuttering)
+  case (4 t \<sigma> \<gamma> \<theta> def guard ss2 \<tau> \<tau>' ss1)
+  then show ?case
+    using nonneg_delay.simps(3) by blast
 next
-  case (Bassign_inert sig e dly)
-  then obtain x where "t , \<sigma> , \<gamma> , \<theta> , def \<turnstile> e \<longrightarrow>\<^sub>b x"
-    by blast
-  hence \<tau>'_def: "\<tau>' = inr_post_raw sig x (\<sigma> sig) \<tau> t dly" and "0 < dly"
-    using Bassign_inert.prems(2) beval_raw_deterministic apply blast
-    using Bassign_inert.prems(4) by auto
+  case (5 t \<sigma> \<gamma> \<theta> def e x sig \<tau> dly \<tau>')
+  then show ?case
+    by (meson b_seq_exec.intros(5) trans_post_preserves_non_stuttering)
+next
+  case (6 t \<sigma> \<gamma> \<theta> def e x sig \<tau> dly \<tau>')
+  hence "0 < dly"
+    by simp
   hence \<tau>'_def': "\<tau>' = trans_post_raw sig x (\<sigma> sig) (purge_raw \<tau> t dly sig (\<sigma> sig) x) t dly"
-    using \<tau>'_def unfolding inr_post_raw_def by auto
+    using 6  by (simp add: inr_post_raw_def)
   let ?\<tau> = "purge_raw \<tau> t dly sig (\<sigma> sig) x"
   have "s = sig \<or> s \<noteq> sig"
     by auto
@@ -1850,31 +1855,27 @@ next
   { assume "s \<noteq> sig"
     hence "\<And>n. to_trans_raw_sig \<tau>' s n = to_trans_raw_sig \<tau> s n"
       using \<tau>'_def'
-      by (metis purge_raw_does_not_affect_other_sig to_trans_raw_sig_def trans_post_raw_diff_sig)
+      by (metis inr_post_raw_def inr_post_raw_does_not_affect_other_sig to_trans_raw_sig_def)
     hence "to_trans_raw_sig \<tau>' s = to_trans_raw_sig \<tau> s"
       by blast
     hence ?case
-      using Bassign_inert(1) unfolding non_stuttering_def Let_def by auto }
+      using 6 unfolding non_stuttering_def Let_def by auto }
   moreover
   { assume "s = sig"
     moreover have 3: "\<And>n. n \<le> t \<Longrightarrow> ?\<tau> n = 0"
-      using Bassign_inert(3)  by (simp add: purge_preserve_trans_removal_nonstrict)
+      by (simp add: "6.prems"(2) purge_preserve_trans_removal_nonstrict)
     obtain cs2 where cs2_def: "cs2 = Bassign_trans sig e dly"
       by auto
     hence 2: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs2, ?\<tau>> \<longrightarrow>\<^sub>s \<tau>'"
-      using \<tau>'_def'
-      by (meson \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b x\<close> b_seq_exec.intros(5))
+      using \<tau>'_def' by (meson "6.hyps"(1) b_seq_exec.intros(5))
     have 4: "nonneg_delay cs2"
-      unfolding cs2_def using Bassign_inert(4) by auto
-    have ?case
-      using purge_trans_post_preserve_non_stuttering[OF Bassign_inert(1)]
-      unfolding \<tau>'_def' `s = sig` using Bassign_inert.prems(3) \<open>0 < dly\<close>
-      by blast }
-    ultimately show ?case by auto
-next
-  case Bnull
-  then show ?case by auto
-qed
+      by (simp add: \<open>0 < dly\<close> cs2_def)
+    hence ?case
+      using "6.prems"(1) "6.prems"(2) \<open>0 < dly\<close> \<tau>'_def' calculation
+      purge_trans_post_preserve_non_stuttering by force }
+  ultimately show ?case
+    by auto
+qed auto
 
 text \<open>end of non stuttering\<close>
 
@@ -1944,6 +1945,13 @@ Null: "\<turnstile>\<^sub>t {P} Bnull {P}"
 
 | Conseq: "\<lbrakk>\<forall>w . P' w  \<longrightarrow> P w ; \<turnstile>\<^sub>t {P} s {Q}; \<forall>w . Q w  \<longrightarrow> Q' w \<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>t {P'} s {Q'}"
 
+| Bcase_empty_choices: "\<turnstile>\<^sub>t {P} Bcase exp [] {P}"
+
+| Bcase_others: "\<turnstile>\<^sub>t {P} ss {Q} \<Longrightarrow> \<turnstile>\<^sub>t {P} Bcase exp ((Others, ss) # choices) {Q}"
+
+| Bcase_if: "\<turnstile>\<^sub>t {\<lambda>w. P w \<and> (\<exists>x. beval_world_raw w t exp x \<and> beval_world_raw w t exp' x)} ss {Q}
+  \<Longrightarrow> \<turnstile>\<^sub>t {\<lambda>w. P w \<and> (\<exists>x x'. beval_world_raw w t exp x \<and> beval_world_raw w t exp' x' \<and> x \<noteq> x')} Bcase exp choices {Q}
+  \<Longrightarrow> \<turnstile>\<^sub>t {P} Bcase exp ( (Explicit exp', ss) # choices) {Q}"
 
 text \<open>The inductive definition @{term "seq_hoare"} is similar to the inductive definition @{term
 "hoare"} in @{theory_text "Hoare"}. Rules other than @{thm "Assign"} and @{thm "AssignI"} are
@@ -1952,6 +1960,13 @@ standard; we explain those two only here. As can be seen, the construct @{term "
 of VHDL. We show how it makes sense later in the soundness property.\<close>
 
 inductive_cases seq_hoare_ic: "\<turnstile>\<^sub>t {P} s {Q}"
+
+inductive_cases seq_hoare_cases_null [elim!]: "\<turnstile>\<^sub>t {P} Bnull {Q}" and
+                seq_hoare_cases_assign : "\<turnstile>\<^sub>t {P} Bassign_trans sig exp dly {Q}" and
+                seq_hoare_cases_assign_inert : "\<turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q}" and
+                seq_hoare_cases_comp : "\<turnstile>\<^sub>t {P} Bcomp s1 s2 {Q}" and
+                seq_hoare_cases_if : "\<turnstile>\<^sub>t {P} Bguarded g s1 s2 {Q}" and
+                seq_hoare_cases_bcase : "\<turnstile>\<^sub>t {P} Bcase exp choices {Q}"
 
 lemma BnullE:
   assumes "\<turnstile>\<^sub>t {P} s {Q}"
@@ -1962,7 +1977,7 @@ lemma BnullE:
 
 lemma BnullE':
   "\<turnstile>\<^sub>t {P} Bnull {Q} \<Longrightarrow> \<forall>w . P w  \<longrightarrow> Q w "
-  using BnullE by blast
+  by (simp add: BnullE)
 
 lemma BassignE:
   assumes "\<turnstile>\<^sub>t {P} s {Q}"
@@ -1970,12 +1985,9 @@ lemma BassignE:
   shows "\<forall>w . P w  \<longrightarrow> (\<exists>x. beval_world_raw w t exp x \<and> Q (w[sig, t + dly := x]))"
   using assms
 proof (induction rule:seq_hoare.induct)
-  case (Assign t exp P sig dly)
-  then show ?case  by auto
-next
   case (Conseq P' P t s Q Q')
   then show ?case by metis
-qed (blast)+
+qed (auto)
 
 lemma BassignE2:
   assumes "\<turnstile>\<^sub>t {P} s {Q}"
@@ -1989,12 +2001,9 @@ lemma Bassign_inertE:
   shows "\<forall>w. P w \<longrightarrow> (\<exists>x. beval_world_raw w t exp x \<and> Q (w[sig, t, dly := x]))"
   using assms
 proof (induction rule: seq_hoare.induct)
-  case (AssignI t exp P sig dly)
-  then show ?case by auto
-next
   case (Conseq P' P t s Q Q')
   then show ?case by  metis
-qed blast+
+qed auto
 
 lemma Bassign_inertE2:
   assumes "\<turnstile>\<^sub>t {P} s {Q}"
@@ -2006,11 +2015,20 @@ lemma BcompE:
   assumes "\<turnstile>\<^sub>t {P} s {R}"
   assumes "s = Bcomp s1 s2"
   shows "\<exists>Q. \<turnstile>\<^sub>t {P} s1 {Q} \<and> \<turnstile>\<^sub>t {Q} s2 {R}"
-  using assms Conseq
-  by (induction rule:seq_hoare.induct, auto) blast
+  using assms
+proof (induction rule:seq_hoare.induct)
+  case (Comp t P s1 Q s2 R)
+  then show ?case by blast
+next
+  case (Conseq P' P t s Q Q')
+  then show ?case
+    by (metis seq_hoare.Conseq)
+qed auto
 
 lemmas [simp] = seq_hoare.Null seq_hoare.Assign seq_hoare.Comp seq_hoare.If
+                seq_hoare.Bcase_empty_choices seq_hoare.Bcase_if seq_hoare.Bcase_others
 lemmas [intro!] = seq_hoare.Null seq_hoare.Assign seq_hoare.Comp seq_hoare.If
+                  seq_hoare.Bcase_empty_choices seq_hoare.Bcase_if seq_hoare.Bcase_others
 
 lemma strengthen_pre:
   assumes "\<forall>w. P' w \<longrightarrow> P w" and "\<turnstile>\<^sub>t {P} s {Q}"
@@ -2073,7 +2091,7 @@ proof (rule)+
     and "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <Bcomp s1 s2 , \<tau>> \<longrightarrow>\<^sub>s \<tau>' " and 2: "w' = worldline_raw t \<sigma> \<theta> def \<tau>'"
     by auto
   then obtain \<tau>'' where 0: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < s1, \<tau>> \<longrightarrow>\<^sub>s \<tau>''" and 1: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < s2, \<tau>''> \<longrightarrow>\<^sub>s \<tau>'"
-    by auto
+    using seq_cases_bcomp by blast
   define w'' where "w'' = worldline_raw t \<sigma> \<theta> def \<tau>''"
   hence "Q w''"
     using `\<Turnstile>\<^sub>t {P} s1 {Q}` unfolding seq_hoare_valid_def
@@ -2086,10 +2104,10 @@ proof (rule)+
   moreover have "\<forall>s. non_stuttering (to_trans_raw_sig \<tau>') \<sigma> s"
   proof -
     have "\<forall>s. non_stuttering (to_trans_raw_sig \<tau>'') \<sigma> s"
-      using b_seq_exec_preserves_non_stuttering[OF _ 0] `All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)`
+      using b_seq_exec_preserves_non_stuttering[OF 0] `All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)`
       `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>` assms(3)  by (simp add: context_invariant_def)
     thus ?thesis
-      using b_seq_exec_preserves_non_stuttering[OF _ 1]
+      using b_seq_exec_preserves_non_stuttering[OF 1]
       `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>` assms(3)
       by (meson calculation context_invariant_def nonneg_delay.simps(2))
   qed
@@ -2451,16 +2469,16 @@ proof (rule)+
       "All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)" and "All (non_stuttering (to_trans_raw_sig \<theta>) def)"
     by auto
   obtain x where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b x"
-    using s by blast
+    using s by (metis seq_cases_bguarded)
   hence "is_Bv x"
-    using beval_raw_deterministic s by fastforce
+    using beval_raw_deterministic s  by (metis seq_cases_bguarded val.discI(1))
   have "bval_of x \<or> \<not> bval_of x"
     by auto
   moreover
   { assume "bval_of x "
     hence \<tau>'_def: "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> < s1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       using s \<open>is_Bv x\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b x\<close> beval_raw_deterministic val.collapse(1)
-      by blast
+      by (metis seq_cases_bguarded val.inject(1))
     have "beval_world_raw w t g x"
       using `bval_of x` beval_beval_world_raw[OF w] c unfolding context_invariant_def
       using \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b x\<close>
@@ -2473,7 +2491,7 @@ proof (rule)+
   { assume "\<not> bval_of x"
     hence \<tau>'_def: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < s2, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       using s \<open>is_Bv x\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b x\<close> beval_raw_deterministic val.collapse(1)
-      by blast
+      by (metis dual_order.irrefl less_irrefl neq_iff seq_cases_bguarded val.sel(1))
     have "beval_world_raw w t g x"
       using `\<not> bval_of x` beval_beval_world_raw[OF w] c unfolding context_invariant_def
       using \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> g \<longrightarrow>\<^sub>b x\<close> \<open>All (non_stuttering (to_trans_raw_sig \<theta>) def)\<close>
@@ -2590,7 +2608,7 @@ proof -
     assume "All (non_stuttering (to_trans_raw_sig \<theta>) def)"
     assume "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_trans sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     then obtain x where "beval_raw t \<sigma> \<gamma> \<theta> def exp x" and "\<tau>' = trans_post_raw sig x (\<sigma> sig) \<tau> t dly"
-      by auto
+      by (metis seq_cases_trans)
     moreover have "beval_raw t \<sigma> \<gamma> \<theta> def exp = beval_world_raw w t exp"
       using `w = worldline_raw t \<sigma> \<theta> def \<tau>` \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> beval_beval_world_raw_ci
       \<open>All (non_stuttering (to_trans_raw_sig \<theta>) def)\<close> by blast
@@ -2623,7 +2641,7 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
   have "beval_raw t \<sigma> \<gamma> \<theta> def exp x"
     using assms beval_beval_world_raw_ci by metis
   have "\<tau>' = inr_post_raw sig x (\<sigma> sig) \<tau> t dly"
-    using assms(3) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> beval_raw_deterministic by blast
+    using assms(3) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> beval_raw_deterministic by (metis seq_cases_inert)
   moreover have "beval_raw t \<sigma> \<gamma> \<theta> def exp = beval_world_raw \<omega> t exp"
     using `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau> ` and `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>`
     by (simp add: assms(6) beval_beval_world_raw_ci)
@@ -3138,12 +3156,174 @@ proof -
     unfolding seq_hoare_valid_def  by meson
 qed
 
+lemma Bcase_empty_valid:
+  "\<Turnstile>\<^sub>t {P} Bcase exp [] {P}"
+proof -
+  { fix \<sigma> :: "'a state"
+    fix \<tau> :: "'a trans_raw"
+    fix \<gamma> \<theta> \<tau>' w w' def
+    assume w_def: "w = worldline_raw t \<sigma> \<theta> def \<tau>"
+    assume " P w"
+    assume " t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <Bcase exp [] , \<tau>> \<longrightarrow>\<^sub>s \<tau>' "
+    hence "\<tau>' = \<tau>"
+      using b_seq_exec.intros(10) b_seq_exec_deterministic  by blast
+    assume " w' = worldline_raw t \<sigma> \<theta> def \<tau>'"
+    hence "w' = w"
+      unfolding \<open>\<tau>' = \<tau>\<close> w_def by auto
+    hence "P w'"
+      using \<open>P w\<close> by auto }
+  thus ?thesis
+    unfolding seq_hoare_valid_def by metis
+qed
+
+lemma Bcase_other_valid:
+  assumes " \<Turnstile>\<^sub>t {P} ss {Q}"
+  shows "\<Turnstile>\<^sub>t {P} Bcase exp ((Others, ss) # choices) {Q}"
+proof -
+  { fix \<sigma> :: "'a state"
+    fix \<tau> :: "'a trans_raw"
+    fix \<gamma> \<theta> \<tau>' w w' def
+    assume "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <Bcase exp ((Others, ss) # choices) , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+    hence "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+      using Femto_VHDL_raw.seq_cases_bcase by fastforce
+    assume "w = worldline_raw t \<sigma> \<theta> def \<tau>"
+    assume "P w"
+    assume "context_invariant t \<sigma> \<gamma> \<theta> def \<tau> "
+    assume "All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)"
+    assume "All (non_stuttering (to_trans_raw_sig \<theta>) def)"
+    assume "w' = worldline_raw t \<sigma> \<theta> def \<tau>' "
+    hence  "Q w'"
+      using assms unfolding seq_hoare_valid_def
+      by (metis \<open>All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)\<close> \<open>All (non_stuttering (to_trans_raw_sig
+      \<theta>) def)\<close> \<open>P w\<close> \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close> \<open>w =
+      worldline_raw t \<sigma> \<theta> def \<tau>\<close>) }
+  thus ?thesis
+    unfolding seq_hoare_valid_def  by metis
+qed
+
+lemma Bcase_if_valid:
+  assumes "\<Turnstile>\<^sub>t {\<lambda>a. P a \<and> (\<exists>x. beval_world_raw a t exp x \<and> beval_world_raw a t exp' x)} ss {Q}"
+  assumes "\<Turnstile>\<^sub>t {\<lambda>a. P a \<and> (\<exists>x x'. beval_world_raw a t exp x \<and> beval_world_raw a t exp' x' \<and> x \<noteq> x')} Bcase exp choices {Q}"
+  shows   "\<Turnstile>\<^sub>t {P} Bcase exp ((Explicit exp', ss) # choices) {Q}"
+proof -
+  { fix \<sigma> :: "'a state"
+    fix \<tau> :: "'a trans_raw"
+    fix \<gamma> \<theta> \<tau>' w w' def
+    assume *: " t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <Bcase exp ((Explicit exp', ss) # choices) , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+    have "\<exists>x x'. t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp \<longrightarrow>\<^sub>b x \<and> t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp' \<longrightarrow>\<^sub>b x'"
+      apply (rule Femto_VHDL_raw.seq_cases_bcase[OF *, rotated])
+      by (metis Pair_inject choices.inject list.inject) blast+
+    then obtain x x' where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp \<longrightarrow>\<^sub>b x" and "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp' \<longrightarrow>\<^sub>b x'"
+      by blast
+    assume "P w"
+    assume "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>"
+    hence "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
+      unfolding context_invariant_def by auto
+    assume w_def: "w = worldline_raw t \<sigma> \<theta> def \<tau>"
+    hence "state_of_world w t = \<sigma>"
+      using state_of_world[OF _ `\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0`] by auto
+    have "event_of_world w t = \<gamma>"
+    proof (cases "0 < t")
+      case True
+      fix s
+      have "snd w s t = \<sigma> s"
+        using `state_of_world w t = \<sigma>` unfolding state_of_world_def by auto
+      moreover have "snd w s (t - 1) = signal_of (def s) \<theta> s (t - 1)"
+        using True  by (simp add: w_def worldline_raw_def)
+      ultimately show ?thesis
+        using True \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close>
+        unfolding event_of_world_def context_invariant_def
+        by (smt Collect_cong \<open>state_of_world w t = \<sigma>\<close> diff_less less_numeral_extra(1)
+        less_numeral_extra(3) snd_conv state_of_world_def w_def worldline_raw_def)
+    next
+      case False
+      hence "t = 0" by auto
+      hence ev: "event_of_world w t = {s. snd w s 0 \<noteq> def s}"
+        unfolding event_of_world_def by (simp add: w_def worldline_raw_def)
+      have \<gamma>_def': "\<gamma> = {s. \<sigma> s \<noteq> signal_of (def s) \<theta> s 0}"
+        using `t = 0` \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> unfolding context_invariant_def
+        by auto
+      have "\<theta> = 0"
+        using \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> unfolding `t = 0`
+        by (auto simp add: context_invariant_def zero_fun_def)
+      hence "\<And>s. signal_of (def s) \<theta> s 0 = def s"
+        using signal_of_empty by metis
+      hence "\<gamma> = {s. \<sigma> s \<noteq> def s}"
+        using \<gamma>_def' by auto
+      moreover have "\<And>s.  snd w s 0 = \<sigma> s"
+        using `state_of_world w t = \<sigma>` `t = 0` unfolding state_of_world_def by auto
+      ultimately  have "\<gamma> = {s. snd w s 0 \<noteq> def s}"
+        by auto
+      thus ?thesis  using ev by auto
+    qed
+    assume "All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)"
+    assume "All (non_stuttering (to_trans_raw_sig \<theta>) def)"
+    hence "derivative_hist_raw w t = \<theta>"
+      using derivative_is_history unfolding w_def
+      by (metis \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> context_invariant_def)
+    hence "beval_world_raw w t exp x"
+    proof -
+      have "get_time w = def"
+        by (simp add: w_def worldline_raw_def)
+      then show ?thesis
+        by (simp add: \<open>derivative_hist_raw w t = \<theta>\<close> \<open>event_of_world w t = \<gamma>\<close> \<open>state_of_world w t = \<sigma>\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> beval_world_raw.intros)
+    qed
+    have "beval_world_raw w t exp' x'"
+      using \<open>All (non_stuttering (to_trans_raw_sig \<theta>) def)\<close> \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> \<open>t , \<sigma>
+      , \<gamma> , \<theta>, def \<turnstile> exp' \<longrightarrow>\<^sub>b x'\<close> beval_beval_world_raw_ci w_def by fastforce
+    assume "w' = worldline_raw t \<sigma> \<theta> def \<tau>'"
+    have "x = x' \<or> x \<noteq> x'"
+      by auto
+    moreover
+    { assume "x = x'"
+      have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> < ss , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+        apply (rule seq_cases_bcase[OF *, rotated])
+        by (metis Pair_inject \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp' \<longrightarrow>\<^sub>b x'\<close> \<open>x
+        = x'\<close> beval_raw_deterministic choices.inject list.inject)blast+
+      with `P w` have "Q w'"
+        using assms unfolding seq_hoare_valid_def
+        by (metis \<open>All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)\<close> \<open>All (non_stuttering
+        (to_trans_raw_sig \<theta>) def)\<close> \<open>beval_world_raw w t exp x\<close> \<open>beval_world_raw w t exp' x'\<close>
+        \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> \<open>w' = worldline_raw t \<sigma> \<theta> def \<tau>'\<close> \<open>x = x'\<close> w_def) }
+    moreover
+    { assume "x \<noteq> x'"
+      have "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < Bcase exp choices, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+        apply (rule seq_cases_bcase[OF *])
+        by (metis Pair_inject \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp' \<longrightarrow>\<^sub>b x'\<close>
+        \<open>x \<noteq> x'\<close> beval_raw_deterministic choices.inject list.inject) auto
+      with `P w` have "Q w'"
+        using assms(2) unfolding seq_hoare_valid_def
+        by (metis \<open>All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)\<close> \<open>All (non_stuttering
+        (to_trans_raw_sig \<theta>) def)\<close> \<open>beval_world_raw w t exp x\<close> \<open>beval_world_raw w t exp' x'\<close>
+        \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> \<open>w' = worldline_raw t \<sigma> \<theta> def \<tau>'\<close> \<open>x \<noteq> x'\<close> w_def) }
+    ultimately have "Q w'"
+      by auto }
+  thus ?thesis
+    unfolding seq_hoare_valid_def by metis
+qed
+
 lemma soundness:
   assumes "\<turnstile>\<^sub>t {P} s {R}"
   assumes "nonneg_delay s"
   shows "\<Turnstile>\<^sub>t {P} s {R}"
   using assms
 proof (induction rule:seq_hoare.induct)
+  case (Bcase_others t P ss Q exp choices)
+  hence "nonneg_delay ss"
+    by auto
+  hence " \<Turnstile>\<^sub>t {P} ss {Q}"
+    using Bcase_others by auto
+  then show ?case using Bcase_other_valid
+    by blast
+next
+  case (Bcase_if t P exp exp' ss Q choices)
+  hence " \<Turnstile>\<^sub>t {\<lambda>a. P a \<and> (\<exists>x. beval_world_raw a t exp x \<and> beval_world_raw a t exp' x)} ss {Q}"
+    by auto
+  moreover have "\<Turnstile>\<^sub>t {\<lambda>a. P a \<and> (\<exists>x x'. beval_world_raw a t exp x \<and> beval_world_raw a t exp' x' \<and> x \<noteq> x')} Bcase exp choices {Q}"
+    using Bcase_if by auto
+  ultimately show ?case
+    using Bcase_if_valid by blast
+next
   case (AssignI t exp P sig dly)
   hence "0 < dly" by auto
   then show ?case
@@ -3152,6 +3332,6 @@ next
   case (Conseq P' P t s Q Q')
   then show ?case
     unfolding seq_hoare_valid_def by metis
-qed (auto simp add: Bnull_sound Bassign_trans_sound Bcomp_hoare_valid Bguarded_hoare_valid)
+qed (auto simp add: Bnull_sound Bassign_trans_sound Bcomp_hoare_valid Bguarded_hoare_valid Bcase_empty_valid)
 
 end
