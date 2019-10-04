@@ -46,6 +46,13 @@ definition worldline_inert_upd2 ::
 definition beval_world_raw2 :: "nat \<times> 'signal worldline_init \<Rightarrow> 'signal bexp \<Rightarrow> val \<Rightarrow> bool" where
   "beval_world_raw2 \<equiv> \<lambda>tw exp. beval_world_raw (snd tw) (fst tw) exp"
 
+lemma beval_world_raw2_deterministic:
+  assumes "beval_world_raw2 tw exp x1"
+  assumes "beval_world_raw2 tw exp x2"
+  shows   "x2 = x1"
+  using assms unfolding beval_world_raw2_def
+  by (simp add: beval_world_raw_deterministic)
+  
 lemma beval_world_raw2_Bsig:
   "beval_world_raw2 tw (Bsig s) (wline_of tw s (fst tw))"
   unfolding beval_world_raw2_def
