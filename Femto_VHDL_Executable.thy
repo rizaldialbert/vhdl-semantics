@@ -754,10 +754,10 @@ qed
 
 lemma functional_simulate_fin_sound:
   assumes "simulate_ss maxtime def cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (lookup \<tau>', t', \<sigma>', \<gamma>', lookup \<theta>')"
-  assumes "\<forall>n. (min (maxtime+1) t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
+  assumes "\<forall>n. (min maxtime t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
   assumes "\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0"
   assumes "functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> = beh"
-  assumes "maxtime < t'"
+  assumes "maxtime = t'"
   shows "simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> beh"
 proof -
   have *: "The (simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau>) = beh"
@@ -767,7 +767,7 @@ proof -
   obtain \<tau>' \<sigma>' \<gamma>' \<theta>' where ss: "simulate_ss maxtime def cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (\<tau>', t', \<sigma>', \<gamma>', \<theta>')"
     using assms(1) by auto
   have **: "b_simulate_fin maxtime t \<sigma> \<gamma> (lookup \<theta>) def cs (lookup \<tau>)  (t', \<sigma>', \<theta>', \<tau>')"
-    using small_step_implies_big_step[OF ss assms(2) assms(3)] \<open>maxtime < t'\<close> by auto
+    using small_step_implies_big_step[OF ss assms(2) assms(3)] \<open>maxtime = t'\<close> by auto 
   have fin: "finite {x. \<theta>' x \<noteq> 0}"
     using b_simulate_fin_almost_all_zero[OF **] by auto
   have fin2: "finite {x. \<tau>' x \<noteq> 0}"
@@ -784,17 +784,17 @@ qed
 
 lemma functional_simulate_eq_simulate_fin_ind:
   assumes "simulate_ss maxtime def cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (lookup \<tau>', t', \<sigma>', \<gamma>', lookup \<theta>')"
-  assumes "\<forall>n. (min (maxtime+1) t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
+  assumes "\<forall>n. (min maxtime t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
   assumes "\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0"
-  assumes "maxtime < t'"
+  assumes "maxtime = t'"
   shows "simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> beh \<longleftrightarrow> (functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> = beh)"
-  by (meson assms functional_simulate_fin_complete functional_simulate_fin_sound)
+  by (metis assms(1) assms(2) assms(3) assms(4) functional_simulate_fin_complete functional_simulate_fin_sound)
 
 lemma functional_simulate_eq_b_simulate_fin:
   assumes "simulate_ss maxtime def cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (lookup \<tau>', t', \<sigma>', \<gamma>', lookup \<theta>')"
-  assumes "\<forall>n. (min (maxtime+1) t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
+  assumes "\<forall>n. (min maxtime t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
   assumes "\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0"
-  assumes "maxtime < t'"
+  assumes "maxtime = t'"
   shows "simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> beh \<longleftrightarrow> (functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> = beh)"
   using functional_simulate_eq_simulate_fin_ind[OF assms] simulate_fin_eq_simulate_fin_ind
   by metis
@@ -824,7 +824,8 @@ theorem functional_simulate_sound:
   assumes "update_config_raw (0, def, {}, 0) \<tau> = (t, \<sigma>, \<gamma>, \<theta>)"
   assumes "simulate_ss maxtime def cs (\<tau>(t:=0), t, \<sigma>, \<gamma>, \<theta>) (\<tau>', t', \<sigma>', \<gamma>', \<theta>')"
   assumes "functional_simulate maxtime def cs ctrans = beh"
-  assumes "maxtime < t'"
+  assumes "maxtime = t'"
+  assumes "0 < maxtime"
   shows "simulate_ind maxtime def cs ctrans beh"
 proof -
   have the_beh: "The (simulate_ind maxtime def cs ctrans) = beh"
@@ -845,20 +846,20 @@ proof -
       using assms(2) by (auto simp add: Let_def)
     also have "... = 0(0:=Some o def)"
       unfolding Femto_VHDL_raw.add_to_beh_def using `0 < t` by auto
-    finally have *: "\<forall>n\<ge>(min (maxtime + 1) t). \<theta> n = 0"
-      using `0 < t` by (auto simp add: zero_fun_def zero_option_def)
+    finally have *: "\<forall>n\<ge>(min maxtime t). \<theta> n = 0"
+      using `0 < t` `0 < maxtime` by (auto simp add: zero_fun_def zero_option_def)
     hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<theta>', \<tau>')"
-      using small_step_implies_big_step[OF assms(3)] look' \<open>maxtime < t'\<close> by auto }
+      using small_step_implies_big_step[OF assms(3)] look' \<open>maxtime = t'\<close> by auto }
   moreover
   { assume "t = 0"
     have "\<theta> = Femto_VHDL_raw.add_to_beh def 0 0 t"
       using assms(2) by (auto simp add: Let_def)
     also have "... = 0"
       unfolding Femto_VHDL_raw.add_to_beh_def using `t = 0` by auto
-    finally have *: "\<forall>n\<ge>(min (maxtime+1) t). \<theta> n = 0"
+    finally have *: "\<forall>n\<ge>(min maxtime t). \<theta> n = 0"
       by (auto simp add: zero_fun_def zero_option_def)
     hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<theta>', \<tau>')"
-      using small_step_implies_big_step[OF assms(3)] look' \<open>maxtime < t'\<close> by auto }
+      using small_step_implies_big_step[OF assms(3)] look' \<open>maxtime = t'\<close> by auto }
   ultimately have bsf: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<theta>', \<tau>')"
     by auto
   hence bs: "b_simulate maxtime def cs (lookup ctrans) (t', \<sigma>', \<theta>', \<tau>')"
@@ -901,7 +902,7 @@ theorem
   assumes "Femto_VHDL_raw.init' 0 def {} 0 def cs (lookup ctrans) \<tau>"
   assumes "update_config_raw (0, def, {}, 0) \<tau> = (t, \<sigma>, \<gamma>, \<theta>)"
   assumes "simulate_ss maxtime def cs (\<tau>(t:=0), t, \<sigma>, \<gamma>, \<theta>) (\<tau>', t', \<sigma>', \<gamma>', \<theta>')"
-  assumes "maxtime < t'"
+  assumes "maxtime = t'" and "0 < maxtime"
   shows "functional_simulate maxtime def cs ctrans = beh \<longleftrightarrow> simulate_ind maxtime def cs ctrans beh"
   using assms functional_simulate_sound functional_simulate_complete by metis
 

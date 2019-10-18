@@ -165,16 +165,20 @@ lemma b_simulate_fin_only_if':
   using assms
 proof (induction rule:b_simulate_fin.inducts)
   case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
-  then show ?case
-    by (simp add: "1.IH" b_conc_exec_mux2_eq_mux2' b_simulate_fin.intros(1))
+  then show ?case 
+    by (meson b_simulate_fin.intros(1) whenever)
 next
-  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
-  then show ?case
-    using b_simulate_fin.intros(2) by blast
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    by (simp add: b_simulate_fin.intros(2) whenever)
 next
-  case (3 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
-  then show ?case
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case 
     by (simp add: b_simulate_fin.intros(3))
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case 
+    by (simp add: b_simulate_fin.intros(4))
 qed
 
 lemma b_simulate_fin_only_if:
@@ -187,9 +191,23 @@ lemma b_simulate_fin_whenever':
   assumes "cs = mux2'"
   shows   "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <mux2 , \<tau>> \<leadsto> tres"
   using assms
-  apply (induction rule:b_simulate_fin.inducts)
-  by (simp add: b_conc_exec_mux2_eq_mux2' b_simulate_fin.intros(1))
-     (blast intro: b_simulate_fin.intros)+
+proof (induction rule:b_simulate_fin.inducts)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  then show ?case 
+    by (simp add: "1.IH" b_conc_exec_mux2_eq_mux2' b_simulate_fin.intros(1))
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    by (simp add: b_conc_exec_mux2_eq_mux2' b_simulate_fin.intros(2))
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case 
+    by (simp add: b_simulate_fin.intros(3))
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case 
+    by (simp add: b_simulate_fin.intros(4))
+qed
 
 lemma b_simulate_fin_whenever:
   assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <mux2', \<tau>> \<leadsto> tres"

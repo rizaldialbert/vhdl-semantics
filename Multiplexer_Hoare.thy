@@ -80,29 +80,31 @@ lemma mux2_inv_next_time:
   assumes "mux2_inv tw" and "beval_world_raw2 tw (Bsig SEL) (Bv True)"
   assumes "beval_world_raw2 tw (Bsig IN1) v"
   defines "tw' \<equiv> tw[ OUT, 1 :=\<^sub>2 v]"
-  shows   "mux2_inv (next_time_world tw', snd tw')"
-proof -
-  let ?t' = "next_time_world tw'"
+  shows   "\<forall>j \<in> {fst tw' <.. next_time_world tw'}. mux2_inv (j, snd tw')"
+proof (rule)
+  fix j
+  assume "j \<in> {fst tw' <.. next_time_world tw'}"
   have assms2: "beval_world_raw (snd tw) (fst tw) (Bsig SEL) (Bv True)"
     using assms(2) unfolding beval_world_raw2_def by auto
   have "bval_of_wline tw SEL (fst tw)"
     by (rule beval_world_raw_cases[OF assms2], erule beval_cases)
        (metis comp_def state_of_world_def val.sel(1))
-  have "fst tw' < next_time_world tw'"
-    using next_time_world_at_least  using nat_less_le by blast
+  have "fst tw' < j"
+    using next_time_world_at_least  using nat_less_le 
+    using \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> by auto
   moreover have "fst tw = fst tw'"
     unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-  ultimately have "fst tw < next_time_world tw'"
+  ultimately have "fst tw < j"
     by auto
   have 0: "bval_of_wline tw' SEL (fst tw)= bval_of_wline tw SEL (fst tw)" and 1: "wline_of tw IN1 (fst tw) = wline_of tw' IN1 (fst tw)"
    and 2: "wline_of tw IN0 (fst tw) =  wline_of tw' IN0 (fst tw)"
     unfolding tw'_def worldline_upd2_def worldline_upd_def by simp+
-  have "\<forall>i < ?t'. wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
+  have "\<forall>i < j. wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
   proof (rule, rule)
     fix i
-    assume "i < ?t'"
-    have "i < fst tw \<or> fst tw \<le> i \<and> i < ?t' - 1 \<or> i = ?t' - 1"
-      using next_time_world_at_least \<open>i < next_time_world tw'\<close> not_less by linarith
+    assume "i < j"
+    have "i < fst tw \<or> fst tw \<le> i \<and> i < j - 1 \<or> i = j - 1"
+      using next_time_world_at_least \<open>i < j\<close> not_less by linarith
     moreover
     { assume "i < fst tw"
       hence "wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL i then wline_of tw IN1 i else wline_of tw IN0 i)"
@@ -113,20 +115,21 @@ proof -
         by (metis \<open>i < get_time tw\<close> add.right_neutral add_mono_thms_linordered_field(5) tw'_def
         worldline_upd2_before_dly zero_less_one) }
     moreover
-    { assume "fst tw \<le> i \<and> i < ?t' - 1"
+    { assume "fst tw \<le> i \<and> i < j - 1"
       hence "wline_of tw' OUT (i + 1) = wline_of tw' OUT (fst tw + 1)"
         using unchanged_until_next_time_world
-        by (metis (mono_tags, lifting) Suc_eq_plus1 \<open>get_time tw = get_time tw'\<close> le_Suc_eq le_add1
-        le_less_trans less_diff_conv)
+        by (smt \<open>get_time tw = get_time tw'\<close> \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close>
+        dual_order.strict_trans1 greaterThanAtMost_iff le_add1 less_diff_conv not_less)
       moreover have "wline_of tw' IN1 i = wline_of tw' IN1 (fst tw)" and "wline_of tw' IN0 i = wline_of tw' IN0 (fst tw)"
           and "wline_of tw' SEL i = wline_of tw' SEL (fst tw)"
-        using unchanged_until_next_time_world \<open>fst tw \<le> i \<and> i < next_time_world tw' - 1\<close>
-        by (metis \<open>get_time tw = get_time tw'\<close> \<open>i < next_time_world tw'\<close>)+
+        using unchanged_until_next_time_world \<open>fst tw \<le> i \<and> i < j - 1\<close>
+        by (metis (no_types, lifting) \<open>get_time tw = get_time tw'\<close> \<open>i < j\<close> \<open>j \<in> {get_time
+        tw'<..next_time_world tw'}\<close> dual_order.strict_trans1 greaterThanAtMost_iff)+
       moreover have "wline_of tw' OUT (fst tw + 1) =
                       (if bval_of_wline tw' SEL (fst tw) then wline_of tw' IN1 (fst tw) else wline_of tw' IN0 (fst tw))"
       proof -
         have "wline_of tw' OUT (fst tw + 1) = v"
-          using \<open>fst tw \<le> i \<and> i < ?t' - 1\<close> unfolding tw'_def worldline_upd2_def worldline_upd_def
+          using \<open>fst tw \<le> i \<and> i < j - 1\<close> unfolding tw'_def worldline_upd2_def worldline_upd_def
           by auto
         also have "... = wline_of tw IN1 (fst tw)"
           by (rule beval_world_raw_cases[OF assms2], erule beval_cases)
@@ -143,11 +146,11 @@ proof -
       ultimately have "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
         by auto }
     moreover
-    { assume "i = ?t' - 1"
-      hence "wline_of tw' OUT (i + 1) = wline_of tw' OUT ?t'"
-        using \<open>i < ?t'\<close> by auto
+    { assume "i = j - 1"
+      hence "wline_of tw' OUT (i + 1) = wline_of tw' OUT j"
+        using \<open>i < j\<close> by auto
       also have "... = wline_of tw' OUT (fst tw + 1)"
-        using \<open>fst tw < ?t'\<close> unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+        using \<open>fst tw < j\<close> unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
       also have "... = (if bval_of_wline tw' SEL (fst tw) then wline_of tw' IN1 (fst tw) else wline_of tw' IN0 (fst tw))"
       proof -
         have "wline_of tw' OUT (fst tw + 1) = wline_of tw IN1 (fst tw)"
@@ -162,15 +165,16 @@ proof -
         finally show ?thesis by auto
       qed
       also have "... = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
-        by (metis (no_types, hide_lams) \<open>get_time tw = get_time tw'\<close> \<open>i < get_time tw \<Longrightarrow> wline_of tw'
-        OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)\<close>
-        \<open>i < next_time_world tw'\<close> calculation not_le unchanged_until_next_time_world)
+        by (smt \<open>get_time tw = get_time tw'\<close> \<open>i < get_time tw \<Longrightarrow> wline_of tw' OUT (i + 1) = (if
+        bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)\<close> \<open>i < j\<close> \<open>j \<in>
+        {get_time tw'<..next_time_world tw'}\<close> calculation dual_order.strict_trans1
+        greaterThanAtMost_iff not_le unchanged_until_next_time_world)
       finally have "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
         by auto }
     ultimately show "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
       by auto
   qed
-  thus ?thesis
+  thus "mux2_inv (j, snd tw')"
     unfolding mux2_inv_def by auto
 qed
 
@@ -178,9 +182,10 @@ lemma mux2_inv_next_time':
   assumes "mux2_inv tw" and "beval_world_raw2 tw (Bsig SEL) (Bv False)"
   assumes "beval_world_raw2 tw (Bsig IN0) v"
   defines "tw' \<equiv> tw[ OUT, 1 :=\<^sub>2 v]"
-  shows   "mux2_inv (next_time_world tw', snd tw')"
-proof -
-  let ?t' = "next_time_world tw'"
+  shows   "\<forall>j \<in> {fst tw' <.. next_time_world tw'}. mux2_inv (j, snd tw')"
+proof (rule)
+  fix j
+  assume "j \<in> {fst tw' <.. next_time_world tw'}"
   have assms2: "beval_world_raw (snd tw) (fst tw) (Bsig SEL) (Bv False)"
     using assms(2) unfolding beval_world_raw2_def by auto
   have "\<not> bval_of_wline tw SEL (fst tw)"
@@ -195,12 +200,12 @@ proof -
   have 0: "bval_of_wline tw' SEL (fst tw)= bval_of_wline tw SEL (fst tw)" and 1: "wline_of tw IN1 (fst tw) = wline_of tw' IN1 (fst tw)"
    and 2: "wline_of tw IN0 (fst tw) = wline_of tw' IN0 (fst tw)"
     unfolding tw'_def worldline_upd2_def worldline_upd_def by simp+
-  have "\<forall>i < ?t'. wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
+  have "\<forall>i < j. wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
   proof (rule, rule)
     fix i
-    assume "i < ?t'"
-    have "i < fst tw \<or> fst tw \<le> i \<and> i < ?t' - 1 \<or> i = ?t' - 1"
-      using next_time_world_at_least \<open>i < next_time_world tw'\<close> not_less by linarith
+    assume "i < j"
+    have "i < fst tw \<or> fst tw \<le> i \<and> i < j - 1 \<or> i = j - 1"
+      using next_time_world_at_least \<open>i < j\<close> not_less by linarith
     moreover
     { assume "i < fst tw"
       hence "wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL i then wline_of tw IN1 i else wline_of tw IN0 i)"
@@ -211,20 +216,21 @@ proof -
         by (metis \<open>i < get_time tw\<close> add.right_neutral add_mono_thms_linordered_field(5) tw'_def
         worldline_upd2_before_dly zero_less_one) }
     moreover
-    { assume "fst tw \<le> i \<and> i < ?t' - 1"
+    { assume "fst tw \<le> i \<and> i < j - 1"
       hence "wline_of tw' OUT (i + 1) = wline_of tw' OUT (fst tw + 1)"
         using unchanged_until_next_time_world
-        by (metis (mono_tags, lifting) Suc_eq_plus1 \<open>get_time tw = get_time tw'\<close> le_Suc_eq le_add1
-        le_less_trans less_diff_conv)
+        by (smt \<open>get_time tw = get_time tw'\<close> \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close>
+        dual_order.strict_trans1 greaterThanAtMost_iff le_add1 less_diff_conv not_less)
       moreover have "wline_of tw' IN1 i = wline_of tw' IN1 (fst tw)" and "wline_of tw' IN0 i = wline_of tw' IN0 (fst tw)"
           and "bval_of_wline tw' SEL i \<longleftrightarrow> bval_of_wline tw' SEL (fst tw)"
-        using unchanged_until_next_time_world \<open>fst tw \<le> i \<and> i < next_time_world tw' - 1\<close>
-        by (metis \<open>get_time tw = get_time tw'\<close> \<open>i < next_time_world tw'\<close>)+
+        using unchanged_until_next_time_world \<open>fst tw \<le> i \<and> i < j - 1\<close>
+        by (metis (no_types, lifting) \<open>get_time tw = get_time tw'\<close> \<open>i < j\<close> \<open>j \<in> {get_time
+        tw' <..next_time_world tw'}\<close> dual_order.strict_trans1 greaterThanAtMost_iff)+
       moreover have "wline_of tw' OUT (fst tw + 1) =
                       (if bval_of_wline tw' SEL (fst tw) then wline_of tw' IN1 (fst tw) else wline_of tw' IN0 (fst tw))"
       proof -
         have "wline_of tw' OUT (fst tw + 1) = v"
-          using \<open>fst tw \<le> i \<and> i < ?t' - 1\<close> unfolding tw'_def worldline_upd2_def worldline_upd_def
+          using \<open>fst tw \<le> i \<and> i < j - 1\<close> unfolding tw'_def worldline_upd2_def worldline_upd_def
           by auto
         have " ... = wline_of tw IN0 (fst tw)"
           by (rule beval_world_raw_cases[OF assms2], erule beval_cases)
@@ -240,11 +246,12 @@ proof -
       ultimately have "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
         by auto }
     moreover
-    { assume "i = ?t' - 1"
-      hence "wline_of tw' OUT (i + 1) = wline_of tw' OUT ?t'"
-        using \<open>i < ?t'\<close> by auto
+    { assume "i = j - 1"
+      hence "wline_of tw' OUT (i + 1) = wline_of tw' OUT j"
+        using \<open>i < j\<close> by auto
       also have "... = wline_of tw' OUT (fst tw + 1)"
-        using \<open>fst tw < ?t'\<close> unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+        unfolding tw'_def worldline_upd2_def worldline_upd_def  using \<open>j \<in> {get_time tw' <..next_time_world tw'}\<close> 
+        by (simp add: \<open>get_time tw = get_time tw'\<close> discrete)
       also have "... = (if bval_of_wline tw' SEL (fst tw) then wline_of tw' IN1 (fst tw) else wline_of tw' IN0 (fst tw))"
       proof -
         have "wline_of tw' OUT (fst tw + 1) = wline_of tw IN0 (fst tw)"
@@ -259,33 +266,38 @@ proof -
           using \<open>wline_of tw' OUT (get_time tw + 1) = wline_of tw IN0 (get_time tw)\<close> by auto
       qed
       also have "... = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
-        by (metis \<open>get_time tw = get_time tw'\<close> \<open>i < get_time tw \<Longrightarrow> wline_of tw' OUT (i + 1) = (if
-        bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)\<close> \<open>i <
-        next_time_world tw'\<close> calculation not_le unchanged_until_next_time_world)
+        by (smt \<open>get_time tw = get_time tw'\<close> \<open>i < get_time tw \<Longrightarrow> wline_of tw' OUT (i + 1) = (if
+        bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)\<close> \<open>i < j\<close> \<open>j \<in>
+        {get_time tw' <..next_time_world tw'}\<close> calculation dual_order.strict_trans1
+        greaterThanAtMost_iff not_le unchanged_until_next_time_world)
       finally have "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
         by auto }
     ultimately show "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
       by auto
   qed
-  thus ?thesis
+  thus "mux2_inv (j, snd tw')"
     unfolding mux2_inv_def by auto
 qed
 
 lemma mux2_seq_hoare_next_time_if:
-  "\<turnstile> [\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> beval_world_raw2 tw (Bsig SEL) (Bv True)] Bassign_trans OUT (Bsig IN1) 1 [\<lambda>tw. mux2_inv (next_time_world tw, snd tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. mux2_inv (next_time_world tw, snd tw)", rotated 1], rule Assign2)
-  using mux2_inv_next_time by blast+
+  "\<turnstile> [\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> beval_world_raw2 tw (Bsig SEL) (Bv True)] 
+        Bassign_trans OUT (Bsig IN1) 1 
+     [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv (j, snd tw)]"
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv (j, snd tw)", rotated 1], rule Assign2, simp)
+  using mux2_inv_next_time by blast
 
 lemma mux2_seq_hoare_next_time_else:
-  "\<turnstile> [\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> beval_world_raw2 tw (Bsig SEL) (Bv False)] Bassign_trans OUT (Bsig IN0) 1 [\<lambda>tw. mux2_inv (next_time_world tw, snd tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. mux2_inv (next_time_world tw, snd tw)", rotated 1], rule Assign2)
-  using mux2_inv_next_time' by blast+
+  "\<turnstile> [\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> beval_world_raw2 tw (Bsig SEL) (Bv False)] 
+        Bassign_trans OUT (Bsig IN0) 1 
+     [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv (j, snd tw)]"
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv (j, snd tw)", rotated 1], rule Assign2, simp)
+  using mux2_inv_next_time' by blast
 
 theorem mux2_seq_hoare_next_time:
   "\<turnstile> [\<lambda>tw. mux2_inv tw \<and> wityping \<Gamma> (snd tw)]
         Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1)
-     [\<lambda>tw. mux2_inv (next_time_world tw, snd tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. mux2_inv (next_time_world tw, snd tw)" and P = "\<lambda>tw. mux2_inv tw \<and> wityping \<Gamma> (snd tw)", rotated 1], rule If2)
+     [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv (j, snd tw)]"
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv (j, snd tw)" and P = "\<lambda>tw. mux2_inv tw \<and> wityping \<Gamma> (snd tw)", rotated 1], rule If2)
      apply (rule mux2_seq_hoare_next_time_if)
     apply (rule mux2_seq_hoare_next_time_else)
   apply simp+
@@ -298,7 +310,10 @@ theorem mux2_seq_hoare_next_time_wityping:
         Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1)
      [\<lambda>tw. mux2_inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)]"
   apply (rule Conj)
-   apply (rule mux2_seq_hoare_next_time)
+   apply (rule Conseq2[rotated])
+     apply (rule mux2_seq_hoare_next_time[where \<Gamma>="\<Gamma>"])
+    apply (simp add: next_time_world_at_least)
+  apply simp
   apply (rule strengthen_precondition2)
   apply (rule seq_stmt_preserve_wityping_hoare)
   apply (rule assms)
@@ -308,8 +323,10 @@ theorem mux2_seq_hoare_next_time0:
   "\<turnstile> [\<lambda>tw. fst tw = 0 \<and> wityping \<Gamma> (snd tw)]
         Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1)
      [\<lambda>tw. mux2_inv (next_time_world tw, snd tw)]"
-  apply (rule Conseq2[where P="\<lambda>tw. mux2_inv tw \<and> wityping \<Gamma> (snd tw)" and Q="\<lambda>tw. mux2_inv (next_time_world tw, snd tw)"])
-  using mux2_seq_hoare_next_time unfolding mux2_inv_def by auto
+  apply (rule Conseq2[where P="\<lambda>tw. mux2_inv tw \<and> wityping \<Gamma> (snd tw)" and Q="\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv (j, snd tw)"])
+  apply (simp add: mux2_inv_def) 
+  apply (rule mux2_seq_hoare_next_time)
+  by (simp add: next_time_world_at_least)
 
 theorem mux2_seq_hoare_next_time0_wityping:
   assumes "seq_wt \<Gamma> (Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1))"
@@ -371,43 +388,48 @@ lemma mux2_inv'_next_time:
   assumes "beval_world_raw2 tw (Bsig SEL) (Bv True)"
   assumes "beval_world_raw2 tw (Bsig IN1) v"
   defines "tw' \<equiv> tw[ OUT, 1 :=\<^sub>2 v]"
-  shows   "mux2_inv' (next_time_world tw', snd tw')"
-proof -
-  let ?t' = "next_time_world tw'"
+  shows   "\<forall>j \<in> {fst tw' <.. next_time_world tw'}. mux2_inv' (j, snd tw')"
+proof (rule)
+  fix j
+  assume "j \<in> {fst tw' <.. next_time_world tw'}"
   have assms1: "beval_world_raw (snd tw) (fst tw) (Bsig SEL) (Bv True)"
     using assms(1) unfolding beval_world_raw2_def by auto
   have "bval_of_wline tw SEL (fst tw)"
     apply (rule beval_world_raw_cases[OF assms1], erule beval_cases)
     by (metis comp_def state_of_world_def val.sel(1))
-  { assume "disjnt {IN0, IN1, SEL} (event_of (?t', snd tw'))"
-    have "fst tw' < ?t'"
-      using next_time_world_at_least by blast
+  { assume "disjnt {IN0, IN1, SEL} (event_of (j, snd tw'))"
+    have "fst tw' < j"
+      using next_time_world_at_least 
+      using \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> greaterThanAtMost_iff by blast
     moreover have "fst tw = fst tw'"
       unfolding tw'_def unfolding worldline_upd2_def by auto
-    ultimately have "fst tw < ?t'"
+    ultimately have "fst tw < j"
       by auto
-    have *: "\<And>s. s \<in> {IN0, IN1, SEL} \<Longrightarrow> wline_of tw' s ?t' = wline_of tw s (fst tw)"
-      using \<open>disjnt {IN0, IN1, SEL} (event_of (next_time_world tw', snd tw'))\<close>
-      input_signals_unchanged tw'_def  assms(2) assms(3) by blast
-    have "\<And>i. ?t' \<le> i \<Longrightarrow> wline_of tw' OUT (i + 1) =
-       (if bval_of_wline tw' SEL ?t' then wline_of tw' IN1 ?t' else wline_of tw' IN0 ?t')"
+    have *: "\<And>s. s \<in> {IN0, IN1, SEL} \<Longrightarrow> wline_of tw' s j = wline_of tw s (fst tw)"
+      using \<open>disjnt {IN0, IN1, SEL} (event_of (j, snd tw'))\<close>
+      input_signals_unchanged tw'_def  assms(2) assms(3) 
+      by (metis \<open>get_time tw = get_time tw'\<close> \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close>
+      greaterThanAtMost_iff le_neq_implies_less less_add_one less_imp_le_nat
+      unchanged_until_next_time_world worldline_upd2_before_dly)
+    have "\<And>i. j \<le> i \<Longrightarrow> wline_of tw' OUT (i + 1) =
+       (if bval_of_wline tw' SEL j then wline_of tw' IN1 j else wline_of tw' IN0 j)"
     proof -
       fix i
-      assume "?t' \<le> i"
+      assume "j \<le> i"
       have assms2: "beval_world_raw (snd tw) (fst tw) (Bsig IN1) v"
         using assms(2) unfolding beval_world_raw2_def by auto
       have "wline_of tw' OUT (i + 1) = wline_of tw IN1 (fst tw)"
         apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-        using `?t' \<le> i` `fst tw < ?t'` unfolding tw'_def worldline_upd2_def worldline_upd_def
+        using `j \<le> i` `fst tw < j` unfolding tw'_def worldline_upd2_def worldline_upd_def
         by (simp add: state_of_world_def)
-      also have "... = (if bval_of_wline tw SEL (fst tw) then wline_of tw IN1 (fst tw) else wline_of tw' IN0 ?t')"
+      also have "... = (if bval_of_wline tw SEL (fst tw) then wline_of tw IN1 (fst tw) else wline_of tw' IN0 j)"
         using \<open>bval_of_wline tw SEL (fst tw)\<close>  by (simp add: state_of_world_def)
-      also have "... = (if bval_of_wline tw' SEL ?t' then wline_of tw' IN1 ?t' else wline_of tw' IN0 ?t')"
+      also have "... = (if bval_of_wline tw' SEL j then wline_of tw' IN1 j else wline_of tw' IN0 j)"
         using * by auto
-      finally show "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL ?t' then wline_of tw' IN1 ?t' else wline_of tw' IN0 ?t')"
+      finally show "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL j then wline_of tw' IN1 j else wline_of tw' IN0 j)"
         by auto
     qed }
-  thus ?thesis
+  thus " mux2_inv' (j, snd tw')"
     unfolding mux2_inv'_def by auto
 qed
 
@@ -415,60 +437,69 @@ lemma mux2_inv'_next_time2:
   assumes "beval_world_raw2 tw (Bsig SEL) (Bv False)"
   assumes "beval_world_raw2 tw (Bsig IN0) v"
   defines "tw' \<equiv> tw[ OUT, 1 :=\<^sub>2 v]"
-  shows   "mux2_inv' (next_time_world tw', snd tw')"
-proof -
-  let ?t' = "next_time_world tw'"
+  shows   "\<forall>j \<in> {fst tw' <.. next_time_world tw'}. mux2_inv' (j, snd tw')"
+proof (rule)
+  fix j
+  assume "j \<in> {fst tw' <.. next_time_world tw'}"
   have assms1: "beval_world_raw (snd tw) (fst tw) (Bsig SEL) (Bv False)"
     using assms(1) unfolding beval_world_raw2_def by auto
   have "\<not> bval_of_wline tw SEL (fst tw)"
     by (rule beval_world_raw_cases[OF assms1], erule beval_cases)
        (metis comp_def state_of_world_def val.sel(1))
-  { assume "disjnt {IN0, IN1, SEL} (event_of (?t', snd tw'))"
-    have "fst tw' < ?t'"
-      using next_time_world_at_least by blast
+  { assume "disjnt {IN0, IN1, SEL} (event_of (j , snd tw'))"
+    have "fst tw' < j "
+      using next_time_world_at_least \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> by auto
     moreover have "fst tw = fst tw'"
       unfolding tw'_def unfolding worldline_upd2_def by auto
-    ultimately have "fst tw < ?t'"
+    ultimately have "fst tw < j "
       by auto
-    have *: "\<And>s. s \<in> {IN0, IN1, SEL} \<Longrightarrow> wline_of tw' s ?t' = wline_of tw s (fst tw)"
-      using \<open>disjnt {IN0, IN1, SEL} (event_of (next_time_world tw', snd tw'))\<close>
-      input_signals_unchanged tw'_def assms(2) assms(3) by auto
-    have "\<And>i. ?t' \<le> i \<Longrightarrow> wline_of tw' OUT (i + 1) =
-                                     (if bval_of_wline tw' SEL ?t' then wline_of tw' IN1 ?t' else wline_of tw' IN0 ?t')"
+    have *: "\<And>s. s \<in> {IN0, IN1, SEL} \<Longrightarrow> wline_of tw' s j  = wline_of tw s (fst tw)"
+      using \<open>disjnt {IN0, IN1, SEL} (event_of (j, snd tw'))\<close>
+      input_signals_unchanged tw'_def assms(2) assms(3) 
+      by (metis \<open>get_time tw = get_time tw'\<close> \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close>
+      greaterThanAtMost_iff le_neq_implies_less less_add_one less_imp_le_nat
+      unchanged_until_next_time_world worldline_upd2_before_dly)
+    have "\<And>i. j  \<le> i \<Longrightarrow> wline_of tw' OUT (i + 1) =
+                                     (if bval_of_wline tw' SEL j  then wline_of tw' IN1 j  else wline_of tw' IN0 j )"
     proof -
       fix i
-      assume "?t' \<le> i"
+      assume "j  \<le> i"
       have assms2: "beval_world_raw (snd tw) (fst tw) (Bsig IN0) v"
         using assms(2) unfolding beval_world_raw2_def by auto
       have "wline_of tw' OUT (i + 1) = wline_of tw IN0 (fst tw)"
         apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-        using `fst tw < ?t'` and `?t' \<le> i` unfolding tw'_def worldline_upd2_def worldline_upd_def
+        using `fst tw < j ` and `j  \<le> i` unfolding tw'_def worldline_upd2_def worldline_upd_def
         state_of_world_def by auto
       also have "... = (if bval_of_wline tw SEL (fst tw) then wline_of tw IN1 (fst tw) else wline_of tw IN0 (fst tw))"
         using \<open>\<not> bval_of_wline tw SEL (fst tw)\<close> by (simp add: state_of_world_def)
-      also have "... = (if bval_of_wline tw' SEL ?t' then wline_of tw' IN1 ?t' else wline_of tw' IN0 ?t')"
+      also have "... = (if bval_of_wline tw' SEL j  then wline_of tw' IN1 j  else wline_of tw' IN0 j )"
         using * by auto
-      finally show "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL ?t' then wline_of tw' IN1 ?t' else wline_of tw' IN0 ?t')"
+      finally show "wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL j  then wline_of tw' IN1 j  else wline_of tw' IN0 j )"
         by auto
     qed }
-  thus ?thesis
+  thus "mux2_inv' (j, snd tw')"
     unfolding mux2_inv'_def by auto
 qed
 
 lemma mux2_seq_hoare_next_time_if':
-  "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw) \<and> beval_world_raw2 tw (Bsig SEL) (Bv True)] Bassign_trans OUT (Bsig IN1) 1 [\<lambda>tw. mux2_inv' (next_time_world tw, snd tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. mux2_inv' (next_time_world tw, snd tw)", rotated 1], rule Assign2)
-  using mux2_inv'_next_time  by blast+
-
+  "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw) \<and> beval_world_raw2 tw (Bsig SEL) (Bv True)] 
+        Bassign_trans OUT (Bsig IN1) 1 
+     [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv' (j, snd tw)]"
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv' (j, snd tw)", rotated 1], rule Assign2, simp)
+  using mux2_inv'_next_time by blast
+               
 lemma mux2_seq_hoare_next_time_else':
-  " \<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw) \<and> beval_world_raw2 tw (Bsig SEL) (Bv False)] Bassign_trans OUT (Bsig IN0) 1 [\<lambda>tw. mux2_inv' (next_time_world tw, snd tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. mux2_inv' (next_time_world tw, snd tw)", rotated 1], rule Assign2)
-  using mux2_inv'_next_time2  by blast+
+  " \<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw) \<and> beval_world_raw2 tw (Bsig SEL) (Bv False)] 
+        Bassign_trans OUT (Bsig IN0) 1 
+      [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv' (j, snd tw)]"
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv' (j, snd tw)", rotated 1], rule Assign2, simp)
+  using mux2_inv'_next_time2 by blast
 
 theorem mux2_seq_hoare_next_time':
-  "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw)] Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1) [\<lambda>tw. mux2_inv' (next_time_world tw, snd tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. mux2_inv' (next_time_world tw, snd tw)" and P = "\<lambda>tw. wityping \<Gamma> (snd tw)", rotated 1], rule If2)
-  unfolding simp_thms(22)
+  "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw)] 
+        Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1) 
+     [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv' (j, snd tw)]"
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv' (j, snd tw)" and P = "\<lambda>tw. wityping \<Gamma> (snd tw)", rotated 1], rule If2)
      apply (rule mux2_seq_hoare_next_time_if')
     apply (rule mux2_seq_hoare_next_time_else')
    apply simp+
@@ -479,7 +510,7 @@ theorem mux2_seq_hoare_next_time'_wityping:
   shows
   "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw)]
         Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1)
-     [\<lambda>tw. mux2_inv' (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)]"
+     [\<lambda>tw. (\<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv' (j, snd tw)) \<and> wityping \<Gamma> (snd tw)]"
   apply (rule Conj)
    apply (rule mux2_seq_hoare_next_time')
   apply (rule seq_stmt_preserve_wityping_hoare)
@@ -489,9 +520,11 @@ theorem mux2_seq_hoare_next_time'_wityping:
 subsection \<open>Proving that the concurrent component\<close>
 
 lemma mux2_inv_conc_hoare:
-  "\<And>tw. mux2_inv tw \<and> mux2_inv' tw \<and> disjnt {IN0, IN1, SEL} (event_of tw) \<Longrightarrow> mux2_inv (next_time_world tw, snd tw)"
-proof -
-  fix tw
+  "\<And>tw. mux2_inv tw \<and> mux2_inv' tw \<and> disjnt {IN0, IN1, SEL} (event_of tw) \<Longrightarrow> \<forall>k \<in> {fst tw <.. next_time_world tw}. mux2_inv (k, snd tw)"
+proof (rule)
+  fix k
+  fix tw :: "nat \<times> (sig \<Rightarrow> val) \<times> (sig \<Rightarrow> nat \<Rightarrow> val)"
+  assume "k \<in> {fst tw <.. next_time_world tw}"
   assume "mux2_inv tw \<and> mux2_inv' tw \<and> disjnt {IN0, IN1, SEL} (event_of tw)"
   hence "mux2_inv tw" and "mux2_inv' tw" and "disjnt {IN0, IN1, SEL} (event_of tw)"
     by auto
@@ -508,7 +541,7 @@ proof -
     using \<open>disjnt {IN0, IN1, SEL} (event_of tw)\<close> unfolding event_of_alt_def
     by (smt diff_0_eq_0 disjnt_insert1 mem_Collect_eq)+
  { fix i
-    assume "i < next_time_world tw"
+    assume "i < k"
     have "i < fst tw \<or> fst tw \<le> i"
       by auto
     moreover
@@ -522,21 +555,25 @@ proof -
       also have "... = (if bval_of_wline tw SEL (fst tw) then wline_of tw IN1 (fst tw) else wline_of tw IN0 (fst tw))"
         using *** \<open>fst tw \<le> i\<close> by auto
       also have "... = (if bval_of_wline tw SEL i then wline_of tw IN1 i else wline_of tw IN0 i)"
-        using ** \<open>i < next_time_world tw\<close> \<open>fst tw \<le> i\<close> less_imp_le_nat by presburger
+        using ** \<open>i < k\<close> \<open>fst tw \<le> i\<close> less_imp_le_nat 
+        by (smt \<open>k \<in> {get_time tw<..next_time_world tw}\<close> dual_order.strict_trans1
+            greaterThanAtMost_iff)
       finally have "wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL i then wline_of tw IN1 i else wline_of tw IN0 i)"
         by auto }
     ultimately have "wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL i then wline_of tw IN1 i else wline_of tw IN0 i)"
       by auto }
-  hence "\<And>i. i < next_time_world tw \<Longrightarrow> wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL i then wline_of tw IN1 i else wline_of tw IN0 i)"
+  hence "\<And>i. i < k \<Longrightarrow> wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL i then wline_of tw IN1 i else wline_of tw IN0 i)"
     by auto
-  thus "mux2_inv (next_time_world tw, snd tw)"
+  thus " mux2_inv (k, snd tw)"
     unfolding mux2_inv_def by auto
 qed
 
 lemma mux2_inv'_conc_hoare:
-  "\<And>tw. mux2_inv tw \<and> mux2_inv' tw \<and> disjnt {IN0, IN1, SEL} (event_of tw) \<Longrightarrow> mux2_inv' (next_time_world tw, snd tw)"
-proof -
-  fix tw
+  "\<And>tw. mux2_inv tw \<and> mux2_inv' tw \<and> disjnt {IN0, IN1, SEL} (event_of tw) \<Longrightarrow> \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv' (j, snd tw)"
+proof (rule)
+  fix tw :: "nat \<times> (sig \<Rightarrow> val) \<times> (sig \<Rightarrow> nat \<Rightarrow> val)"
+  fix j
+  assume "j \<in> {fst tw <.. next_time_world tw}"
   assume "mux2_inv tw \<and> mux2_inv' tw \<and> disjnt {IN0, IN1, SEL} (event_of tw)"
   hence "mux2_inv tw" and "mux2_inv' tw" and "disjnt {IN0, IN1, SEL} (event_of tw)"
     by auto
@@ -544,86 +581,85 @@ proof -
     unfolding mux2_inv'_def by auto
   have 1: "\<forall>i\<ge>fst tw. i < next_time_world tw \<longrightarrow> (\<forall>s. wline_of tw s i = wline_of tw s (fst tw))"
     using unchanged_until_next_time_world by blast
-  let ?t' = "next_time_world tw"
-  { assume "disjnt {IN0, IN1, SEL} (event_of (next_time_world tw, snd tw))"
-    hence *: "wline_of tw IN0 ?t' = wline_of tw IN0 (?t' - 1)" and **: "wline_of tw IN1 ?t' = wline_of tw IN1 (?t' - 1)"
-        and ***: "wline_of tw SEL ?t' = wline_of tw SEL (?t' - 1)"
+  { assume "disjnt {IN0, IN1, SEL} (event_of (j, snd tw))"
+    hence *: "wline_of tw IN0 j = wline_of tw IN0 (j - 1)" and **: "wline_of tw IN1 j = wline_of tw IN1 (j - 1)"
+        and ***: "wline_of tw SEL j = wline_of tw SEL (j - 1)"
       unfolding event_of_alt_def
       by (smt comp_apply diff_is_0_eq' disjnt_insert1 fst_conv le_numeral_extra(1) mem_Collect_eq snd_conv)+
-    have "fst tw < next_time_world tw"
-      by (simp add: next_time_world_at_least)
+    have "fst tw < j"
+      using \<open>j \<in> {get_time tw<..next_time_world tw}\<close> by auto
     { fix i
-      assume "?t' \<le> i"
+      assume "j \<le> i"
       hence "wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL (fst tw) then wline_of tw IN1 (fst tw) else wline_of tw IN0 (fst tw))"
-        using 0 \<open>fst tw < ?t'\<close> by auto
-      moreover have "wline_of tw IN0 (fst tw) = wline_of tw IN0 (?t' - 1)" and "wline_of tw IN1 (fst tw) = wline_of tw IN1 (?t' - 1)"
-        and "wline_of tw SEL (fst tw) = wline_of tw SEL (?t' - 1)"
+        using 0 \<open>fst tw < j\<close> by auto
+      moreover have "wline_of tw IN0 (fst tw) = wline_of tw IN0 (j - 1)" and "wline_of tw IN1 (fst tw) = wline_of tw IN1 (j - 1)"
+        and "wline_of tw SEL (fst tw) = wline_of tw SEL (j - 1)"
         using 1
-        by (metis (no_types, lifting) One_nat_def Suc_leI \<open>get_time tw < next_time_world tw\<close>
-        add_le_cancel_right diff_add diff_less discrete gr_implies_not_zero neq0_conv zero_less_one)+
-      ultimately have "wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL ?t' then wline_of tw IN1 ?t' else wline_of tw IN0 ?t')"
+        by (metis (no_types, lifting) \<open>j \<in> {get_time tw<..next_time_world tw}\<close> add_le_cancel_right
+        diff_add diff_is_0_eq' discrete gr_implies_not_zero greaterThanAtMost_iff
+        le_numeral_extra(4) neq0_conv)+
+      ultimately have "wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL j then wline_of tw IN1 j else wline_of tw IN0 j)"
         using * ** *** by auto
     }
-    hence "(\<forall>i\<ge>?t'. wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL ?t' then wline_of tw IN1 ?t' else wline_of tw IN0 ?t'))"
+    hence "(\<forall>i\<ge>j. wline_of tw OUT (i + 1) = (if bval_of_wline tw SEL j then wline_of tw IN1 j else wline_of tw IN0 j))"
       by auto }
-  thus "mux2_inv' (next_time_world tw, snd tw)"
+  thus "mux2_inv' (j, snd tw)"
     unfolding mux2_inv'_def by auto
 qed
 
 lemma mux2_conc_hoare_without:
   assumes "seq_wt \<Gamma> (Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1))"
   shows
-  "\<turnstile> \<lbrace>\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' tw\<rbrace>
+  "\<turnstile> \<lbrace>\<lambda>tw. (mux2_inv tw \<and> mux2_inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace>
         mux2
-     \<lbrace>\<lambda>tw. mux2_inv  (next_time_world tw, snd tw)  \<and> mux2_inv' (next_time_world tw, snd tw)\<rbrace>"
+     \<lbrace>\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. mux2_inv  (j, snd tw)  \<and> mux2_inv' (j, snd tw)\<rbrace>"
   unfolding mux2_def
   apply (rule Single)
-  apply (rule Conj)
-    apply (rule strengthen_precondition)
-    apply (rule strengthen_precondition)
-    apply (rule mux2_seq_hoare_next_time)
-   apply (rule strengthen_precondition)
-   apply (rule strengthen_precondition)
-   apply (rule strengthen_precondition2)
-   apply (rule mux2_seq_hoare_next_time')
+   apply (rule Conj_univ_qtfd)
+    apply (rule Conseq2[rotated])
+      apply (rule mux2_seq_hoare_next_time[where \<Gamma>="\<Gamma>"])
+     apply simp
+    apply simp
+   apply(rule Conseq2[rotated])
+     apply (rule mux2_seq_hoare_next_time'[where \<Gamma>="\<Gamma>"])
+    apply simp
+   apply simp       
   using mux2_inv_conc_hoare mux2_inv'_conc_hoare by blast
 
 lemma mux2_conc_hoare:
   assumes "seq_wt \<Gamma> (Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1))"
   shows
-  "\<turnstile> \<lbrace>\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' tw\<rbrace>
+  "\<turnstile> \<lbrace>\<lambda>tw. (mux2_inv tw \<and> mux2_inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace>
         mux2
-     \<lbrace>\<lambda>tw. (mux2_inv  (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' (next_time_world tw, snd tw)\<rbrace>"
-  apply (rule Conj2)
-   apply (rule Conj2)
-  apply (rule weaken_post_conc_hoare[OF _ mux2_conc_hoare_without], blast)
+     \<lbrace>\<lambda>tw. \<forall>i\<in>{get_time tw<..next_time_world tw}. (mux2_inv (i, snd tw) \<and> mux2_inv' (i, snd tw)) \<and> wityping \<Gamma> (snd (i, snd tw))\<rbrace>"
+  apply (rule Conj2_univ_qtfd)
+   apply (rule weaken_post_conc_hoare[OF _ mux2_conc_hoare_without], blast)
     apply(rule assms)
-   apply (rule strengthen_pre_conc_hoare[rotated])
+  apply (rule strengthen_pre_conc_hoare[rotated])
+   apply (rule weaken_post_conc_hoare[rotated])
   unfolding mux2_def apply (rule single_conc_stmt_preserve_wityping_hoare)
     apply (rule assms)
-   apply blast
-  apply (fold mux2_def)
-  apply (rule weaken_post_conc_hoare[OF _ mux2_conc_hoare_without])
-   apply blast
-  apply (rule assms)
-  done
+   apply simp
+  by auto
 
 subsection \<open>Simulation preserves the invariant\<close>
 
 lemma mux2_conc_sim:
   assumes "seq_wt \<Gamma> (Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1))"
   shows
-    "\<turnstile>\<^sub>s \<lbrace>\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' tw\<rbrace> mux2 \<lbrace>\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' tw\<rbrace>"
+    "\<turnstile>\<^sub>s \<lbrace>\<lambda>tw. (mux2_inv tw \<and> mux2_inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace> 
+            mux2 
+        \<lbrace>\<lambda>tw. (mux2_inv tw \<and> mux2_inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace>"
   apply (rule While)
-  apply (unfold snd_conv, rule mux2_conc_hoare)
+  apply (unfold snd_conv, rule mux2_conc_hoare[unfolded snd_conv])
   apply (rule assms)
   done
 
 lemma mux2_conc_sim':
   assumes "seq_wt \<Gamma> (Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1))"
   shows "\<turnstile>\<^sub>s \<lbrace>\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' tw\<rbrace> mux2 \<lbrace>mux2_inv'\<rbrace>"
-  apply (rule Conseq_sim[where Q="\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' tw" and
-                               P="\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' tw"])
+  apply (rule Conseq_sim[where Q="\<lambda>tw. (mux2_inv tw \<and> mux2_inv' tw) \<and> wityping \<Gamma> (snd tw)" and
+                               P="\<lambda>tw. (mux2_inv tw \<and> mux2_inv' tw) \<and> wityping \<Gamma> (snd tw)"])
   by (blast intro: mux2_conc_sim[OF assms])+
 
 subsection \<open>Initialisation preserves the invariant\<close>
@@ -643,8 +679,11 @@ lemma init_sat_mux_inv':
   unfolding mux2_def
   apply (rule AssignI)
   apply (rule SingleI)
-  apply (rule weaken_postcondition[OF mux2_seq_hoare_next_time'_wityping[OF assms]])
-  done
+  apply (rule Conseq2[rotated])
+    apply (rule mux2_seq_hoare_next_time'_wityping)
+    apply (rule assms)
+   apply (simp add: next_time_world_at_least)
+  by auto
 
 lemma init_sat_nand_mux_inv_comb:
   assumes "seq_wt \<Gamma> (Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1))"
@@ -678,7 +717,7 @@ lemma mux2_correctness:
 proof -
   obtain tw where "init_sim (0, w) mux2 tw" and  "tw, i + 1, mux2 \<Rightarrow>\<^sub>S tw'"
     using premises_sim_fin_obt[OF assms(1)] by auto
-  hence "i + 1 < fst tw'"
+  hence "i + 1 = fst tw'"
     using world_maxtime_lt_fst_tres  by blast
   have "conc_stmt_wf mux2"
     unfolding conc_stmt_wf_def mux2_def by auto
@@ -693,7 +732,7 @@ proof -
     by (metis (full_types) snd_conv)
   hence "mux2_inv tw" and "mux2_inv' tw" and "wityping \<Gamma> (snd tw)"
     by auto
-  moreover have "\<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' tw\<rbrace> mux2 \<lbrace>\<lambda>tw. (mux2_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> mux2_inv' tw\<rbrace>"
+  moreover have "\<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (mux2_inv tw \<and> mux2_inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace> mux2 \<lbrace>\<lambda>tw. (mux2_inv tw \<and> mux2_inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace>"
     using conc_sim_soundness[OF mux2_conc_sim] \<open>conc_stmt_wf mux2\<close> \<open>nonneg_delay_conc mux2\<close>
     using \<open>seq_wt \<Gamma> (Bguarded (Bsig SEL) (Bassign_trans OUT (Bsig IN1) 1) (Bassign_trans OUT (Bsig IN0) 1))\<close>
     by simp
@@ -701,8 +740,8 @@ proof -
     using \<open>tw, i + 1, mux2 \<Rightarrow>\<^sub>S tw'\<close> unfolding sim_hoare_valid_def by blast
   hence "\<forall>i < fst tw'. wline_of tw' OUT (i + 1) = (if bval_of_wline tw' SEL i then wline_of tw' IN1 i else wline_of tw' IN0 i)"
     unfolding mux2_inv_def by auto
-  with \<open>i + 1 < fst tw'\<close> show ?thesis
-    by auto
+  with \<open>i + 1 = fst tw'\<close> show ?thesis
+    by (metis less_add_one)
 qed
 
 end

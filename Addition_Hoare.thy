@@ -75,21 +75,19 @@ lemma inv_next_time:
   assumes "inv tw"
   assumes "beval_world_raw2 tw (Badd (Bsig A) (Bsig B)) v" and "type_of v = Lty Uns len"
   defines "tw' \<equiv> tw[C, 1 :=\<^sub>2 v]"
-  shows   "inv (next_time_world tw', snd tw')"
+  shows   "\<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv (j, snd tw')"
   unfolding inv_def
-proof (rule, rule)
-  fix i
-  assume "i < fst (next_world tw')"
-  hence "i < next_time_world tw'"
+proof (rule, rule, rule)
+  fix i j
+  assume "j \<in> {fst tw' <.. next_time_world tw'}"
+  assume "i < fst (j, snd tw')"
+  hence "i < j"
     by auto
-  have "fst tw' < next_time_world tw'"
-    using next_time_world_at_least  using nat_less_le by blast
-  moreover have "fst tw = fst tw'"
-    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-  ultimately have "fst tw < next_time_world tw'"
-    by auto
-  hence "i < fst tw \<or> fst tw \<le> i \<and> i < next_time_world tw' - 1 \<or> i = next_time_world tw' - 1"
-    using \<open>i < next_time_world tw'\<close> by linarith
+  have "fst tw < j"
+    by (metis \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> greaterThanAtMost_iff snd_conv snd_swap
+    swap_simp tw'_def worldline_upd2_def)
+  hence "i < fst tw \<or> fst tw \<le> i \<and> i < j - 1 \<or> i = j - 1"
+    using \<open>i < j\<close> by linarith
   moreover
   { assume "i < fst tw"
     have "lof_wline tw' C (i + 1) = lof_wline tw C (i + 1)"
@@ -98,20 +96,20 @@ proof (rule, rule)
       using assms(1) \<open>i < fst tw\<close> unfolding inv_def property_def by auto
     also have "... = bin_to_bl len (bl_to_bin (lof_wline tw' A i) + bl_to_bin (lof_wline tw' B i))"
       by (metis \<open>i < get_time tw\<close> add.commute trans_less_add2 tw'_def worldline_upd2_before_dly)
-    finally have "property (i + 1) i (next_time_world tw', snd tw')"
+    finally have "property (i + 1) i (j, snd tw')"
       unfolding property_def by auto }
   moreover
-  { assume "fst tw \<le> i \<and> i < next_time_world tw' - 1"
-    hence "fst tw \<le> i" and "i < next_time_world tw' - 1"
+  { assume "fst tw \<le> i \<and> i < j - 1"
+    hence "fst tw \<le> i" and "i < j - 1"
       by auto
     hence "lof_wline tw' C (i + 1) = lof_wline tw' C (fst tw + 1)"
       using unchanged_until_next_time_world
-      by (metis (mono_tags, lifting) Suc_eq_plus1 \<open>get_time tw = get_time tw'\<close> le_Suc_eq le_add1
-          le_less_trans less_diff_conv)
+      by (smt \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> dual_order.strict_trans1
+      greaterThanAtMost_iff le_add1 less_diff_conv not_less prod.exhaust_sel prod.inject tw'_def
+      worldline_upd2_def)
     moreover have "lof_wline tw' A i = lof_wline tw' A (fst tw)" and "lof_wline tw' B i = lof_wline tw' B (fst tw)"
       using unchanged_until_next_time_world
-      by (metis \<open>get_time tw = get_time tw'\<close> \<open>get_time tw \<le> i\<close> \<open>i < next_time_world tw'\<close>
-      less_add_one tw'_def worldline_upd2_before_dly)+
+      by (metis (no_types, lifting) Pair_inject \<open>get_time tw \<le> i\<close> \<open>i < j\<close> \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> dual_order.strict_trans1 greaterThanAtMost_iff prod.exhaust_sel tw'_def worldline_upd2_def)+
     moreover have "property (fst tw + 1) (fst tw) tw'"
     proof -
       have assm2: "beval_world_raw (snd tw) (fst tw) (Badd (Bsig A) (Bsig B)) v"
@@ -131,15 +129,20 @@ proof (rule, rule)
       finally show ?thesis
         unfolding property_def bin_to_bl_def by auto
     qed
-    ultimately have "property (i + 1) i (next_world tw')"
+    ultimately have "property (i + 1) i (j, snd tw')"
       unfolding property_def by auto }
   moreover
-  { assume "i = next_time_world tw' - 1"
+  { assume "i = j - 1"
     hence "lof_wline tw' C (i + 1) = lof_wline tw' C (next_time_world tw')"
-      using \<open>i < next_time_world tw'\<close> by force
+      using \<open>i < j\<close>
+      by (smt \<open>get_time tw < j\<close> add_diff_cancel_left' comp_apply discrete
+      dual_order.order_iff_strict fst_conv leD le_add1 less_imp_Suc_add next_time_world_at_least
+      plus_1_eq_Suc snd_conv tw'_def worldline_upd2_def worldline_upd_def)
     also have "... = lof_wline tw' C (fst tw + 1)"
-      using \<open>fst tw < next_time_world tw'\<close> unfolding tw'_def worldline_upd2_def
-      worldline_upd_def by auto
+      using \<open>fst tw < j\<close> unfolding tw'_def worldline_upd2_def
+      worldline_upd_def 
+      by (smt Suc_lessI add.commute comp_apply fst_conv next_time_world_at_least order.asym
+      plus_1_eq_Suc snd_conv)
     finally have "lof_wline tw' C (i + 1) = lof_wline tw' C (fst tw + 1)"
       by auto
     moreover have "property (fst tw + 1) (fst tw) tw'"
@@ -161,11 +164,12 @@ proof (rule, rule)
     qed
     moreover have "lof_wline tw' A i = lof_wline tw' A (fst tw)" and "lof_wline tw' B i = lof_wline tw' B (fst tw)"
       using unchanged_until_next_time_world
-      by (metis \<open>get_time tw < next_time_world tw'\<close> \<open>get_time tw = get_time tw'\<close> \<open>i <
-      next_time_world tw'\<close> \<open>i = next_time_world tw' - 1\<close> add_le_imp_le_diff discrete)+
-    ultimately have "property (i + 1) i (next_world tw')"
+      by (smt Pair_inject Suc_eq_plus1 Suc_lessI \<open>i < j\<close> \<open>i = j - 1\<close> \<open>j \<in> {get_time
+      tw'<..next_time_world tw'}\<close> dual_order.strict_trans1 greaterThanAtMost_iff less_diff_conv
+      less_or_eq_imp_le not_le prod.exhaust_sel tw'_def worldline_upd2_def)+
+    ultimately have "property (i + 1) i (j, snd tw')"
       unfolding property_def by auto }
-  ultimately show "property (i + 1) i (next_world tw')"
+  ultimately show "property (i + 1) i (j, snd tw')"
     by auto
 qed
 
@@ -191,8 +195,8 @@ qed
 lemma add_seq_hoare_next_time:
   "\<turnstile> [\<lambda>tw. inv tw \<and> wityping \<Gamma> (snd tw)]
         Bassign_trans C (Badd (Bsig A) (Bsig B)) 1
-     [\<lambda>tw. inv (next_world tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. inv (next_world tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule Assign2, simp)
+     [\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. inv (i, snd tw)]"
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule Assign2, simp)
   using inv_next_time type_correctness_length
   by (metis ctype snd_conv worldline_upd2_def worldline_upd_preserve_wityping)
 
@@ -200,19 +204,22 @@ lemma add_seq_hoare_next_time0:
   "\<turnstile> [\<lambda>tw. fst tw = 0 \<and> wityping \<Gamma> (snd tw)]
         Bassign_trans C (Badd (Bsig A) (Bsig B)) 1
      [\<lambda>tw. inv (next_world tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. inv (next_world tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule Assign2, simp)
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule Assign2)
+  using next_time_world_at_least apply fastforce
   using inv_next_time type_correctness_length unfolding inv_def
   by (metis ctype gr_implies_not0 snd_conv worldline_upd2_def worldline_upd_preserve_wityping)
 
 lemma add_conc_hoare:
-  "\<And>tw. inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw) \<Longrightarrow> inv (next_world tw)"
-proof -
-  fix tw
+  "\<And>tw. inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw) \<Longrightarrow> \<forall>j \<in> {fst tw <.. next_time_world tw}. inv (j, snd tw)"
+proof (rule)
+  fix tw :: "nat \<times> (sig \<Rightarrow> val) \<times> (sig \<Rightarrow> nat \<Rightarrow> val)"
+  fix j
+  assume "j \<in> {fst tw <.. next_time_world tw}"
   assume "inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw)"
   hence "inv tw" and "inv2 tw" and "disjnt {A, B} (event_of tw)"
     by auto
   { fix i
-    assume "i < next_time_world tw"
+    assume "i < j"
     have "fst tw < next_time_world tw"
       by (simp add: next_time_world_at_least)
     have "i < fst tw \<or> fst tw \<le> i"
@@ -221,7 +228,7 @@ proof -
     { assume "i < fst tw"
       hence "property (i + 1) i tw"
         using \<open>inv tw\<close> unfolding inv_def by auto
-      hence "property (i + 1) i (next_world tw)"
+      hence "property (i + 1) i (j, snd tw)"
         unfolding property_def by simp }
     moreover
     { assume "fst tw \<le> i"
@@ -232,42 +239,47 @@ proof -
         by auto
       hence "property (i + 1) i tw"
         unfolding property_def
-        by (metis \<open>get_time tw \<le> i\<close> \<open>i < next_time_world tw\<close> unchanged_until_next_time_world)
-      hence "property (i + 1) i (next_world tw)"
+        by (smt \<open>get_time tw \<le> i\<close> \<open>i < j\<close> \<open>j \<in> {get_time tw<..next_time_world tw}\<close>
+        dual_order.strict_trans1 greaterThanAtMost_iff unchanged_until_next_time_world)
+      hence "property (i + 1) i (j, snd tw)"
         unfolding property_def by auto }
-    ultimately have "property (i + 1) i (next_world tw)"
+    ultimately have "property (i + 1) i (j, snd tw)"
       by auto }
-  thus "inv (next_world tw)"
+  thus "inv (j, snd tw)"
     unfolding inv_def by auto
 qed
 
+
 lemma add_conc_hoare2:
-  "\<And>tw. inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw) \<Longrightarrow> inv2 (next_world tw)"
-proof -
-  fix tw
+  "\<And>tw. inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw) \<Longrightarrow> \<forall>j \<in> {fst tw <.. next_time_world tw}. inv2 (j, snd tw)"
+proof (rule)
+  fix tw :: "nat \<times> (sig \<Rightarrow> val) \<times> (sig \<Rightarrow> nat \<Rightarrow> val)"
+  fix j :: nat
+  assume "j \<in> {fst tw <.. next_time_world tw}"
   assume "inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw)"
   hence "inv tw" and "inv2 tw" and "disjnt {A, B} (event_of tw)"
     by auto
-  let ?t' = "next_time_world tw"
-  { assume "disjnt {A, B} (event_of (next_world tw))"
-    hence *: "lof_wline tw A ?t' = lof_wline tw A (?t' - 1)" and **: "lof_wline tw B ?t' = lof_wline tw B (?t' - 1)"
+  { assume "disjnt {A, B} (event_of (j, snd tw))"
+    hence *: "lof_wline tw A j = lof_wline tw A (j - 1)" and **: "lof_wline tw B j = lof_wline tw B (j - 1)"
       unfolding event_of_alt_def
       by (smt comp_apply diff_0_eq_0 disjnt_insert1 fst_conv mem_Collect_eq snd_conv)+
-    have "fst tw < ?t'"
-      by (simp add: next_time_world_at_least)
+    have "fst tw < j"
+      using \<open>j \<in> {get_time tw<..next_time_world tw}\<close> greaterThanAtMost_iff by blast
     { fix i
-      assume "?t' \<le> i"
+      assume "j \<le> i"
       have "property (i + 1) (fst tw) tw"
         using \<open>inv2 tw\<close> \<open>disjnt {A, B} (event_of tw)\<close> unfolding inv2_def
-        using \<open>get_time tw < next_time_world tw\<close> \<open>next_time_world tw \<le> i\<close> by auto
-      moreover have "lof_wline tw A (fst tw) = lof_wline tw A (?t' - 1)" and
-                    "lof_wline tw B (fst tw) = lof_wline tw B (?t' - 1)"
-        by (metis \<open>get_time tw < next_time_world tw\<close> add_le_imp_le_diff diff_less discrete gr_implies_not0 not_less_iff_gr_or_eq unchanged_until_next_time_world zero_less_one)+
-      ultimately have "property (i + 1) ?t' (next_world tw)"
+        using \<open>fst tw < j\<close> \<open>j \<le> i\<close> by auto
+      moreover have "lof_wline tw A (fst tw) = lof_wline tw A (j - 1)" and
+                    "lof_wline tw B (fst tw) = lof_wline tw B (j - 1)"
+        by (metis (no_types, lifting) One_nat_def Suc_eq_plus1 \<open>j \<in> {get_time tw<..next_time_world
+        tw}\<close> add_le_imp_le_diff diff_add discrete gr_implies_not0 greaterThanAtMost_iff
+        not_less_iff_gr_or_eq unchanged_until_next_time_world)+
+      ultimately have "property (i + 1) j (j, snd tw)"
         unfolding property_def using * **  by auto }
-    hence "\<forall>i\<ge>?t'. property (i + 1) ?t' (next_world tw)"
+    hence "\<forall>i\<ge>j. property (i + 1) j (j, snd tw)"
       by auto }
-  thus "inv2 (next_world tw)"
+  thus "inv2 (j, snd tw)"
     unfolding inv2_def by auto
 qed
 
@@ -275,53 +287,50 @@ lemma inv2_next_time:
   fixes tw
   assumes "beval_world_raw2 tw (Badd (Bsig A) (Bsig B)) v" and "type_of v = Lty Uns len"
   defines "tw' \<equiv> tw[C, 1 :=\<^sub>2 v]"
-  shows   "inv2 (next_time_world tw', snd tw')"
+  shows   "\<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv2 (j, snd tw')"
   unfolding inv2_def
-proof (rule, rule, rule)
-  fix i
-  assume "disjnt {A, B} (event_of (next_world tw'))"
-  hence "A \<notin> event_of (next_world tw')" and "B \<notin> event_of (next_world tw')"
+proof (rule)+
+  fix j i
+  assume "j \<in> {fst tw' <.. next_time_world tw'}"
+  assume "disjnt {A, B} (event_of (j, snd tw'))"
+  hence "A \<notin> event_of (j, snd tw')" and "B \<notin> event_of (j, snd tw')"
     by auto
-  assume "fst (next_world tw') \<le> i"
-  hence "next_time_world tw' \<le> i"
+  assume "fst (j, snd tw') \<le> i"
+  hence "j \<le> i"
     by auto
-  let ?t' = "next_time_world tw'"
-  have "fst tw' < ?t'"
-    using next_time_world_at_least by blast
-  moreover have "fst tw = fst tw'"
-    unfolding tw'_def unfolding worldline_upd2_def by auto
-  ultimately have "fst tw < ?t'"
-    by auto
-  have 0: "wline_of (next_world tw') A ?t' = wline_of tw A (fst tw)"
+  have "fst tw < j"
+    by (metis \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> greaterThanAtMost_iff prod.exhaust_sel
+    prod.inject tw'_def worldline_upd2_def)
+  have 0: "wline_of (j, snd tw') A j = wline_of tw A (fst tw)"
   proof -
-    have "wline_of tw' A ?t' = wline_of tw' A (?t' - 1)"
-      using \<open>A \<notin> event_of (next_world tw')\<close> unfolding event_of_alt_def
-      using \<open>get_time tw' < next_time_world tw'\<close> by auto
+    have "wline_of tw' A j = wline_of tw' A (j - 1)"
+      using \<open>A \<notin> event_of (j, snd tw')\<close> unfolding event_of_alt_def
+      using \<open>fst tw < j\<close> by auto
     also have " ... = wline_of tw' A (fst tw')"
       using unchanged_until_next_time_world
-      by (metis (no_types, lifting) Suc_diff_1 \<open>get_time tw' < next_time_world tw'\<close> diff_less
-      gr_implies_not_zero le_0_eq less_Suc_eq_le not_less zero_less_one)
+      by (metis (mono_tags, lifting) Suc_diff_1 \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close>
+      gr_implies_not_zero greaterThanAtMost_iff le_0_eq less_Suc_eq_le not_less)
     also have "... = wline_of tw' A (fst tw)"
-      by (simp add: \<open>get_time tw = get_time tw'\<close>)
+      by (simp add: tw'_def worldline_upd2_def)
     also have "... = wline_of tw A (fst tw)"
       unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-    finally show "wline_of (next_world tw') A ?t' = wline_of tw A (fst tw)"
+    finally show "wline_of (j, snd tw') A j = wline_of tw A (fst tw)"
       by auto
   qed
-  have 1: "wline_of (next_world tw') B ?t' = wline_of tw B (fst tw)"
+  have 1: "wline_of (j, snd tw') B j = wline_of tw B (fst tw)"
   proof -
-    have "wline_of tw' B ?t' = wline_of tw' B (?t' - 1)"
-      using \<open>B \<notin> event_of (next_world tw')\<close> unfolding event_of_alt_def
-      using \<open>get_time tw' < next_time_world tw'\<close> by auto
+    have "wline_of tw' B j = wline_of tw' B (j - 1)"
+      using \<open>B \<notin> event_of (j, snd tw')\<close> unfolding event_of_alt_def
+      using \<open>fst tw < j\<close> by auto
     also have " ... = wline_of tw' B (fst tw')"
       using unchanged_until_next_time_world
-      by (metis (no_types, lifting) Suc_diff_1 \<open>get_time tw' < next_time_world tw'\<close> diff_less
-      gr_implies_not_zero le_0_eq less_Suc_eq_le not_less zero_less_one)
+      by (metis (no_types, lifting) Suc_diff_1 \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close>
+      dual_order.order_iff_strict greaterThanAtMost_iff le_0_eq less_Suc_eq_le not_less)
     also have "... = wline_of tw' B (fst tw)"
-      by (simp add: \<open>get_time tw = get_time tw'\<close>)
+      by (simp add: tw'_def worldline_upd2_def)
     also have "... = wline_of tw B (fst tw)"
       unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-    finally show "wline_of (next_world tw') B ?t' = wline_of tw B (fst tw)"
+    finally show "wline_of (j, snd tw') B j = wline_of tw B (fst tw)"
       by auto
   qed
   have assm2: "beval_world_raw (snd tw) (fst tw) (Badd (Bsig A) (Bsig B)) v"
@@ -329,7 +338,7 @@ proof (rule, rule, rule)
   have "wline_of (next_world tw') C (i + 1) = v"
   proof -
     have "wline_of tw' C (i + 1) = v"
-      using `fst tw < ?t'` \<open>?t' \<le> i\<close>
+      using `fst tw < j` \<open>j \<le> i\<close>
       unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
     thus ?thesis
       by auto
@@ -339,51 +348,52 @@ proof (rule, rule, rule)
     apply (erule beval_cases)+
     apply (metis assms(2) beval_raw.intros(1) beval_world_raw.simps beval_world_raw2_Bsig beval_world_raw2_def beval_world_raw_deterministic bin_to_bl_def size_bin_to_bl ty.inject type_of.simps(2) val.sel(3))
     using assms(2) by auto
-  finally have "property (i + 1) ?t' (next_world tw')"
+  finally have "property (i + 1) j (j, snd tw')"
     unfolding property_def using 0 1  by auto
-  thus "property (i + 1) (get_time (next_time_world tw', snd tw')) (next_time_world tw', snd tw')"
+  thus "property (i + 1) (get_time (j, snd tw')) (j, snd tw')"
     by auto
 qed
 
 lemma add_seq_hoare_next_time1:
-  shows "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw)] Bassign_trans C (Badd (Bsig A) (Bsig B)) 1 [\<lambda>tw. inv2 (next_time_world tw, snd tw)]"
+  "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw)] Bassign_trans C (Badd (Bsig A) (Bsig B)) 1 [\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. inv2 (i, snd tw)]"
   apply (rule Assign2_altI)
   using inv2_next_time type_correctness_length by blast
-
-lemma add_conc_hoare3:
-  "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add \<lbrace>\<lambda>tw. inv (next_time_world tw, snd tw) \<and> inv2 (next_time_world tw, snd tw)\<rbrace>"
-  unfolding add_def
-  apply (rule Single)
-   apply (rule Conj)
-    apply (rule strengthen_precondition)
-  apply (rule strengthen_precondition)
-    apply (rule add_seq_hoare_next_time)
-  apply (rule strengthen_precondition)
-   apply (rule strengthen_precondition)
-   apply (rule strengthen_precondition2)
-   apply (rule add_seq_hoare_next_time1)
-  using add_conc_hoare add_conc_hoare2 by blast
 
 lemma seq_wt_add:
   "seq_wt \<Gamma> (Bassign_trans C (Badd (Bsig A) (Bsig B)) 1)"
   using well_typed by blast
 
-lemma add_conc_hoare4:
-  "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add \<lbrace>\<lambda>tw. (inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)) \<and> inv2 (next_time_world tw, snd tw)\<rbrace>"
+lemma add_conc_hoare3:
+  "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add \<lbrace>\<lambda>tw. (\<forall>i \<in> {fst tw <.. next_time_world tw}. inv (i, snd tw) \<and> inv2 (i, snd tw)) \<and> wityping \<Gamma> (snd tw)\<rbrace>"
   apply (rule Conj2)
-   apply (rule Conj2)
-    apply (rule weaken_post_conc_hoare[OF _ add_conc_hoare3], blast)
-   apply (rule strengthen_pre_conc_hoare[rotated])
-    apply (unfold add_def, rule single_conc_stmt_preserve_wityping_hoare)
-    apply (rule seq_wt_add)
-   apply blast
-  apply (fold add_def, rule weaken_post_conc_hoare[OF _ add_conc_hoare3], blast)
-  done
+  unfolding add_def
+   apply (rule Single)
+    apply(rule Conj_univ_qtfd[where Q="inv" and R="inv2"])
+     apply (rule strengthen_precondition)
+     apply (rule strengthen_precondition)
+     apply (rule add_seq_hoare_next_time)
+    apply (rule strengthen_precondition)
+    apply (rule strengthen_precondition)
+    apply (rule strengthen_precondition2)
+    apply (rule add_seq_hoare_next_time1)
+  using add_conc_hoare add_conc_hoare2 apply blast
+  apply (rule strengthen_pre_conc_hoare[rotated])
+  apply (rule single_conc_stmt_preserve_wityping_hoare)
+   apply (rule seq_wt_add)
+  by simp
+
+lemma add_conc_hoare4:
+  "\<turnstile> \<lbrace>\<lambda>tw. (local.inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add
+       \<lbrace>\<lambda>tw. \<forall>i\<in>{get_time tw<..next_time_world tw}. (local.inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)) \<and> inv2 (i, snd tw)\<rbrace>"
+  apply (rule Conseq'[rotated])
+  apply (rule add_conc_hoare3)
+  by auto
 
 lemma add_conc_sim':
   "\<turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace>"
   apply (rule While)
-  apply (unfold snd_conv, rule add_conc_hoare4)
+  unfolding snd_conv
+  apply (rule add_conc_hoare4)
   done
 
 lemma add_conc_sim2:
@@ -405,8 +415,11 @@ lemma init_sat_add_inv2:
   unfolding add_def
   apply (rule AssignI)
   apply (rule SingleI)
-  unfolding snd_conv apply (rule add_seq_hoare_next_time1)
-  done
+  unfolding snd_conv 
+  apply (rule Conseq2[rotated])
+    apply (rule add_seq_hoare_next_time1)
+   apply (simp add: next_time_world_at_least)
+  by auto
 
 lemma init_sat_add_inv_comb:
   shows "init_sim_hoare (\<lambda>tw. fst tw = 0 \<and> wityping \<Gamma> (snd tw)) add  (\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw)"
@@ -422,7 +435,7 @@ lemma add_correctness:
 proof -
   obtain tw where "init_sim (0, w) add tw" and  "tw, i + 1, add \<Rightarrow>\<^sub>S tw'"
     using premises_sim_fin_obt[OF assms(1)] by auto
-  hence "i + 1 < fst tw'"
+  hence "i + 1 = fst tw'"
     using world_maxtime_lt_fst_tres  by blast
   have "conc_stmt_wf add"
     unfolding conc_stmt_wf_def add_def by auto
@@ -442,8 +455,8 @@ proof -
     by auto
   ultimately have "inv tw'"
     using \<open>tw, i + 1, add \<Rightarrow>\<^sub>S tw'\<close> unfolding sim_hoare_valid_def by blast
-  with \<open>i + 1 < fst tw'\<close> show ?thesis
-    unfolding inv_def by auto
+  with \<open>i + 1 = fst tw'\<close> show ?thesis
+    unfolding inv_def  by (metis less_add_one)
 qed
 
 corollary add_correctness2:
@@ -513,21 +526,19 @@ lemma inv_next_time:
   assumes "inv tw"
   assumes "beval_world_raw2 tw (Badd (Bsig A) (Bsig B)) v" and "type_of v = Lty Sig len"
   defines "tw' \<equiv> tw[C, 1 :=\<^sub>2 v]"
-  shows   "inv (next_time_world tw', snd tw')"
+  shows   "\<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv (j, snd tw')"
   unfolding inv_def
-proof (rule, rule)
-  fix i
-  assume "i < fst (next_world tw')"
-  hence "i < next_time_world tw'"
+proof (rule, rule, rule)
+  fix i j
+  assume "j \<in> {fst tw' <.. next_time_world tw'}"
+  assume "i < fst (j, snd tw')"
+  hence "i < j"
     by auto
-  have "fst tw' < next_time_world tw'"
-    using next_time_world_at_least  using nat_less_le by blast
-  moreover have "fst tw = fst tw'"
-    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-  ultimately have "fst tw < next_time_world tw'"
-    by auto
-  hence "i < fst tw \<or> fst tw \<le> i \<and> i < next_time_world tw' - 1 \<or> i = next_time_world tw' - 1"
-    using \<open>i < next_time_world tw'\<close> by linarith
+  have "fst tw < j"
+    by (metis \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> greaterThanAtMost_iff snd_conv snd_swap
+    swap_simp tw'_def worldline_upd2_def)
+  hence "i < fst tw \<or> fst tw \<le> i \<and> i < j - 1 \<or> i = j - 1"
+    using \<open>i < j\<close> by linarith
   moreover
   { assume "i < fst tw"
     have "lof_wline tw' C (i + 1) = lof_wline tw C (i + 1)"
@@ -536,20 +547,22 @@ proof (rule, rule)
       using assms(1) \<open>i < fst tw\<close> unfolding inv_def property_def by auto
     also have "... = bin_to_bl len (sbl_to_bin (lof_wline tw' A i) + sbl_to_bin (lof_wline tw' B i))"
       by (metis \<open>i < get_time tw\<close> add.commute trans_less_add2 tw'_def worldline_upd2_before_dly)
-    finally have "property (i + 1) i (next_time_world tw', snd tw')"
+    finally have "property (i + 1) i (j, snd tw')"
       unfolding property_def by auto }
   moreover
-  { assume "fst tw \<le> i \<and> i < next_time_world tw' - 1"
-    hence "fst tw \<le> i" and "i < next_time_world tw' - 1"
+  { assume "fst tw \<le> i \<and> i < j - 1"
+    hence "fst tw \<le> i" and "i < j - 1"
       by auto
     hence "lof_wline tw' C (i + 1) = lof_wline tw' C (fst tw + 1)"
       using unchanged_until_next_time_world
-      by (metis (mono_tags, lifting) Suc_eq_plus1 \<open>get_time tw = get_time tw'\<close> le_Suc_eq le_add1
-          le_less_trans less_diff_conv)
+      by (smt Pair_inject \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> dual_order.strict_trans1
+      greaterThanAtMost_iff le_add1 less_diff_conv not_less prod.exhaust_sel tw'_def
+      worldline_upd2_def)
     moreover have "lof_wline tw' A i = lof_wline tw' A (fst tw)" and "lof_wline tw' B i = lof_wline tw' B (fst tw)"
       using unchanged_until_next_time_world
-      by (metis \<open>get_time tw = get_time tw'\<close> \<open>get_time tw \<le> i\<close> \<open>i < next_time_world tw'\<close>
-      less_add_one tw'_def worldline_upd2_before_dly)+
+      by (metis (no_types, lifting) Pair_inject \<open>get_time tw \<le> i\<close> \<open>i < j\<close> \<open>j \<in> {get_time
+      tw'<..next_time_world tw'}\<close> dual_order.strict_trans1 greaterThanAtMost_iff prod.exhaust_sel
+      tw'_def worldline_upd2_def)+
     moreover have "property (fst tw + 1) (fst tw) tw'"
     proof -
       have assm2: "beval_world_raw (snd tw) (fst tw) (Badd (Bsig A) (Bsig B)) v"
@@ -571,14 +584,14 @@ proof (rule, rule)
       finally show ?thesis
         unfolding property_def bin_to_bl_def by auto
     qed
-    ultimately have "property (i + 1) i (next_world tw')"
+    ultimately have "property (i + 1) i (j, snd tw')"
       unfolding property_def by auto }
   moreover
-  { assume "i = next_time_world tw' - 1"
-    hence "lof_wline tw' C (i + 1) = lof_wline tw' C (next_time_world tw')"
-      using \<open>i < next_time_world tw'\<close> by force
+  { assume "i = j - 1"
+    hence "lof_wline tw' C (i + 1) = lof_wline tw' C (j)"
+      using \<open>i < j\<close> by force
     also have "... = lof_wline tw' C (fst tw + 1)"
-      using \<open>fst tw < next_time_world tw'\<close> unfolding tw'_def worldline_upd2_def
+      using \<open>fst tw < j\<close> unfolding tw'_def worldline_upd2_def
       worldline_upd_def by auto
     finally have "lof_wline tw' C (i + 1) = lof_wline tw' C (fst tw + 1)"
       by auto
@@ -603,11 +616,12 @@ proof (rule, rule)
     qed
     moreover have "lof_wline tw' A i = lof_wline tw' A (fst tw)" and "lof_wline tw' B i = lof_wline tw' B (fst tw)"
       using unchanged_until_next_time_world
-      by (metis \<open>get_time tw < next_time_world tw'\<close> \<open>get_time tw = get_time tw'\<close> \<open>i <
-      next_time_world tw'\<close> \<open>i = next_time_world tw' - 1\<close> add_le_imp_le_diff discrete)+
-    ultimately have "property (i + 1) i (next_world tw')"
+      by (metis (no_types, lifting) Suc_eq_plus1 Suc_lessI \<open>i < j\<close> \<open>i = j - 1\<close> \<open>j \<in> {get_time
+      tw'<..next_time_world tw'}\<close> discrete greaterThanAtMost_iff less_diff_conv less_or_eq_imp_le
+      not_less prod.exhaust_sel prod.inject tw'_def worldline_upd2_def)+
+    ultimately have "property (i + 1) i (j, snd tw')"
       unfolding property_def by auto }
-  ultimately show "property (i + 1) i (next_world tw')"
+  ultimately show "property (i + 1) i (j, snd tw')"
     by auto
 qed
 
@@ -633,8 +647,8 @@ qed
 lemma add_seq_hoare_next_time:
   "\<turnstile> [\<lambda>tw. inv tw \<and> wityping \<Gamma> (snd tw)]
         Bassign_trans C (Badd (Bsig A) (Bsig B)) 1
-     [\<lambda>tw. inv (next_world tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. inv (next_world tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule Assign2, simp)
+     [\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. inv (i, snd tw)]"
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule Assign2, simp)
   using inv_next_time type_correctness_length
   by (metis ctype snd_conv worldline_upd2_def worldline_upd_preserve_wityping)
 
@@ -642,19 +656,22 @@ lemma add_seq_hoare_next_time0:
   "\<turnstile> [\<lambda>tw. fst tw = 0 \<and> wityping \<Gamma> (snd tw)]
         Bassign_trans C (Badd (Bsig A) (Bsig B)) 1
      [\<lambda>tw. inv (next_world tw)]"
-  apply (rule Conseq2[where Q="\<lambda>tw. inv (next_world tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule Assign2, simp)
+  apply (rule Conseq2[where Q="\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule Assign2)
+  apply (simp add: next_time_world_at_least)
   using inv_next_time type_correctness_length unfolding inv_def
   by (metis ctype gr_implies_not0 snd_conv worldline_upd2_def worldline_upd_preserve_wityping)
 
 lemma add_conc_hoare:
-  "\<And>tw. inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw) \<Longrightarrow> inv (next_world tw)"
-proof -
-  fix tw
+  "\<And>tw. inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw) \<Longrightarrow> \<forall>j \<in> {fst tw <.. next_time_world tw}. inv (j, snd tw)"
+proof (rule+)
+  fix tw :: "nat \<times> (sig \<Rightarrow> val) \<times> (sig \<Rightarrow> nat \<Rightarrow> val)"
+  fix j  
+  assume "j \<in> {fst tw <.. next_time_world tw}"
   assume "inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw)"
   hence "inv tw" and "inv2 tw" and "disjnt {A, B} (event_of tw)"
     by auto
   { fix i
-    assume "i < next_time_world tw"
+    assume "i < j"
     have "fst tw < next_time_world tw"
       by (simp add: next_time_world_at_least)
     have "i < fst tw \<or> fst tw \<le> i"
@@ -663,7 +680,7 @@ proof -
     { assume "i < fst tw"
       hence "property (i + 1) i tw"
         using \<open>inv tw\<close> unfolding inv_def by auto
-      hence "property (i + 1) i (next_world tw)"
+      hence "property (i + 1) i (j, snd tw)"
         unfolding property_def by simp }
     moreover
     { assume "fst tw \<le> i"
@@ -674,42 +691,45 @@ proof -
         by auto
       hence "property (i + 1) i tw"
         unfolding property_def
-        by (metis \<open>get_time tw \<le> i\<close> \<open>i < next_time_world tw\<close> unchanged_until_next_time_world)
-      hence "property (i + 1) i (next_world tw)"
+        by (smt \<open>get_time tw \<le> i\<close> \<open>i < j\<close> \<open>j \<in> {get_time tw<..next_time_world tw}\<close> dual_order.strict_trans1 greaterThanAtMost_iff unchanged_until_next_time_world)
+      hence "property (i + 1) i (j, snd tw)"
         unfolding property_def by auto }
-    ultimately have "property (i + 1) i (next_world tw)"
+    ultimately have "property (i + 1) i (j, snd tw)"
       by auto }
-  thus "inv (next_world tw)"
+  thus "inv (j, snd tw)"
     unfolding inv_def by auto
 qed
 
 lemma add_conc_hoare2:
-  "\<And>tw. inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw) \<Longrightarrow> inv2 (next_world tw)"
-proof -
-  fix tw
+  "\<And>tw. inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw) \<Longrightarrow> \<forall>j \<in> {fst tw <.. next_time_world tw}. inv2 (j, snd tw)"
+proof (rule)
+  fix tw :: "nat \<times> (sig \<Rightarrow> val) \<times> (sig \<Rightarrow> nat \<Rightarrow> val)"
+  fix j :: nat
+  assume "j \<in> {fst tw <.. next_time_world tw}"
   assume "inv tw \<and> inv2 tw \<and> disjnt {A, B} (event_of tw)"
   hence "inv tw" and "inv2 tw" and "disjnt {A, B} (event_of tw)"
     by auto
-  let ?t' = "next_time_world tw"
-  { assume "disjnt {A, B} (event_of (next_world tw))"
-    hence *: "lof_wline tw A ?t' = lof_wline tw A (?t' - 1)" and **: "lof_wline tw B ?t' = lof_wline tw B (?t' - 1)"
+  { assume "disjnt {A, B} (event_of (j, snd tw))"
+    hence *: "lof_wline tw A j = lof_wline tw A (j - 1)" and **: "lof_wline tw B j = lof_wline tw B (j - 1)"
       unfolding event_of_alt_def
       by (smt comp_apply diff_0_eq_0 disjnt_insert1 fst_conv mem_Collect_eq snd_conv)+
-    have "fst tw < ?t'"
-      by (simp add: next_time_world_at_least)
+    have "fst tw < j"
+      using \<open>j \<in> {get_time tw<..next_time_world tw}\<close> greaterThanAtMost_iff by blast
     { fix i
-      assume "?t' \<le> i"
+      assume "j \<le> i"
       have "property (i + 1) (fst tw) tw"
         using \<open>inv2 tw\<close> \<open>disjnt {A, B} (event_of tw)\<close> unfolding inv2_def
-        using \<open>get_time tw < next_time_world tw\<close> \<open>next_time_world tw \<le> i\<close> by auto
-      moreover have "lof_wline tw A (fst tw) = lof_wline tw A (?t' - 1)" and
-                    "lof_wline tw B (fst tw) = lof_wline tw B (?t' - 1)"
-        by (metis \<open>get_time tw < next_time_world tw\<close> add_le_imp_le_diff diff_less discrete gr_implies_not0 not_less_iff_gr_or_eq unchanged_until_next_time_world zero_less_one)+
-      ultimately have "property (i + 1) ?t' (next_world tw)"
+        using \<open>fst tw < j\<close> \<open>j \<le> i\<close> by auto
+      moreover have "lof_wline tw A (fst tw) = lof_wline tw A (j - 1)" and
+                    "lof_wline tw B (fst tw) = lof_wline tw B (j - 1)"
+        by (metis (no_types, lifting) One_nat_def Suc_eq_plus1 \<open>j \<in> {get_time tw<..next_time_world
+        tw}\<close> add_le_imp_le_diff diff_add discrete gr_implies_not0 greaterThanAtMost_iff
+        not_less_iff_gr_or_eq unchanged_until_next_time_world)+      
+      ultimately have "property (i + 1) j (j, snd tw)"
         unfolding property_def using * **  by auto }
-    hence "\<forall>i\<ge>?t'. property (i + 1) ?t' (next_world tw)"
+    hence "\<forall>i\<ge>j. property (i + 1) j (j, snd tw)"
       by auto }
-  thus "inv2 (next_world tw)"
+  thus "inv2 (j, snd tw)"
     unfolding inv2_def by auto
 qed
 
@@ -717,53 +737,50 @@ lemma inv2_next_time:
   fixes tw
   assumes "beval_world_raw2 tw (Badd (Bsig A) (Bsig B)) v" and "type_of v = Lty Sig len"
   defines "tw' \<equiv> tw[C, 1 :=\<^sub>2 v]"
-  shows   "inv2 (next_time_world tw', snd tw')"
+  shows   "\<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv2 (j, snd tw')"
   unfolding inv2_def
-proof (rule, rule, rule)
-  fix i
-  assume "disjnt {A, B} (event_of (next_world tw'))"
-  hence "A \<notin> event_of (next_world tw')" and "B \<notin> event_of (next_world tw')"
+proof (rule+)
+  fix j i
+  assume "j \<in> {fst tw' <.. next_time_world tw'}"
+  assume "disjnt {A, B} (event_of (j, snd tw'))"
+  hence "A \<notin> event_of (j, snd tw')" and "B \<notin> event_of (j, snd tw')"
     by auto
-  assume "fst (next_world tw') \<le> i"
-  hence "next_time_world tw' \<le> i"
+  assume "fst (j, snd tw') \<le> i"
+  hence "j \<le> i"
     by auto
-  let ?t' = "next_time_world tw'"
-  have "fst tw' < ?t'"
-    using next_time_world_at_least by blast
-  moreover have "fst tw = fst tw'"
-    unfolding tw'_def unfolding worldline_upd2_def by auto
-  ultimately have "fst tw < ?t'"
-    by auto
-  have 0: "wline_of (next_world tw') A ?t' = wline_of tw A (fst tw)"
+  have "fst tw < j"
+    by (metis \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> greaterThanAtMost_iff prod.exhaust_sel
+    prod.inject tw'_def worldline_upd2_def)
+  have 0: "wline_of (j, snd tw') A j = wline_of tw A (fst tw)"
   proof -
-    have "wline_of tw' A ?t' = wline_of tw' A (?t' - 1)"
-      using \<open>A \<notin> event_of (next_world tw')\<close> unfolding event_of_alt_def
-      using \<open>get_time tw' < next_time_world tw'\<close> by auto
+    have "wline_of tw' A j = wline_of tw' A (j - 1)"
+      using \<open>A \<notin> event_of (j, snd tw')\<close> unfolding event_of_alt_def
+      using \<open>fst tw < j\<close> by auto
     also have " ... = wline_of tw' A (fst tw')"
       using unchanged_until_next_time_world
-      by (metis (no_types, lifting) Suc_diff_1 \<open>get_time tw' < next_time_world tw'\<close> diff_less
-      gr_implies_not_zero le_0_eq less_Suc_eq_le not_less zero_less_one)
+      by (metis (mono_tags, lifting) Suc_diff_1 \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close>
+      gr_implies_not_zero greaterThanAtMost_iff le_0_eq less_Suc_eq_le not_less)
     also have "... = wline_of tw' A (fst tw)"
-      by (simp add: \<open>get_time tw = get_time tw'\<close>)
+      by (simp add: tw'_def worldline_upd2_def)
     also have "... = wline_of tw A (fst tw)"
       unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-    finally show "wline_of (next_world tw') A ?t' = wline_of tw A (fst tw)"
+    finally show "wline_of (j, snd tw') A j = wline_of tw A (fst tw)"
       by auto
   qed
-  have 1: "wline_of (next_world tw') B ?t' = wline_of tw B (fst tw)"
+  have 1: "wline_of (j, snd tw') B j = wline_of tw B (fst tw)"
   proof -
-    have "wline_of tw' B ?t' = wline_of tw' B (?t' - 1)"
-      using \<open>B \<notin> event_of (next_world tw')\<close> unfolding event_of_alt_def
-      using \<open>get_time tw' < next_time_world tw'\<close> by auto
+    have "wline_of tw' B j = wline_of tw' B (j - 1)"
+      using \<open>B \<notin> event_of (j, snd tw')\<close> unfolding event_of_alt_def
+      using \<open>fst tw < j\<close> by auto
     also have " ... = wline_of tw' B (fst tw')"
       using unchanged_until_next_time_world
-      by (metis (no_types, lifting) Suc_diff_1 \<open>get_time tw' < next_time_world tw'\<close> diff_less
-      gr_implies_not_zero le_0_eq less_Suc_eq_le not_less zero_less_one)
+      by (metis (no_types, lifting) Suc_diff_1 \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close>
+      dual_order.order_iff_strict greaterThanAtMost_iff le_0_eq less_Suc_eq_le not_less)
     also have "... = wline_of tw' B (fst tw)"
-      by (simp add: \<open>get_time tw = get_time tw'\<close>)
+      by (simp add: tw'_def worldline_upd2_def)
     also have "... = wline_of tw B (fst tw)"
       unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-    finally show "wline_of (next_world tw') B ?t' = wline_of tw B (fst tw)"
+    finally show "wline_of (j, snd tw') B j = wline_of tw B (fst tw)"
       by auto
   qed
   have assm2: "beval_world_raw (snd tw) (fst tw) (Badd (Bsig A) (Bsig B)) v"
@@ -771,7 +788,7 @@ proof (rule, rule, rule)
   have "wline_of (next_world tw') C (i + 1) = v"
   proof -
     have "wline_of tw' C (i + 1) = v"
-      using `fst tw < ?t'` \<open>?t' \<le> i\<close>
+      using `fst tw < j` \<open>j \<le> i\<close>
       unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
     thus ?thesis
       by auto
@@ -782,51 +799,52 @@ proof (rule, rule, rule)
     defer
     apply (metis (mono_tags, lifting) add.right_neutral assms(2) beval_cases(1) bin_to_bl_def comp_apply list.size(3) size_bin_to_bl_aux state_of_world_def ty.distinct(1) ty.inject type_of.elims val.sel(3))
     using assms(2) by auto
-  finally have "property (i + 1) ?t' (next_world tw')"
+  finally have "property (i + 1) j (j, snd tw')"
     unfolding property_def using 0 1  by auto
-  thus "property (i + 1) (get_time (next_time_world tw', snd tw')) (next_time_world tw', snd tw')"
+  thus " property (i + 1) (get_time (j, snd tw')) (j, snd tw')"
     by auto
 qed
 
 lemma add_seq_hoare_next_time1:
-  shows "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw)] Bassign_trans C (Badd (Bsig A) (Bsig B)) 1 [\<lambda>tw. inv2 (next_time_world tw, snd tw)]"
+  "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw)] Bassign_trans C (Badd (Bsig A) (Bsig B)) 1 [\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. inv2 (i, snd tw)]"
   apply (rule Assign2_altI)
   using inv2_next_time type_correctness_length by blast
-
-lemma add_conc_hoare3:
-  "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add \<lbrace>\<lambda>tw. inv (next_time_world tw, snd tw) \<and> inv2 (next_time_world tw, snd tw)\<rbrace>"
-  unfolding add_def
-  apply (rule Single)
-   apply (rule Conj)
-    apply (rule strengthen_precondition)
-  apply (rule strengthen_precondition)
-    apply (rule add_seq_hoare_next_time)
-  apply (rule strengthen_precondition)
-   apply (rule strengthen_precondition)
-   apply (rule strengthen_precondition2)
-   apply (rule add_seq_hoare_next_time1)
-  using add_conc_hoare add_conc_hoare2 by blast
 
 lemma seq_wt_add:
   "seq_wt \<Gamma> (Bassign_trans C (Badd (Bsig A) (Bsig B)) 1)"
   using well_typed by blast
 
-lemma add_conc_hoare4:
-  "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add \<lbrace>\<lambda>tw. (inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)) \<and> inv2 (next_time_world tw, snd tw)\<rbrace>"
+lemma add_conc_hoare3:
+  "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add \<lbrace>\<lambda>tw. (\<forall>i \<in> {fst tw <.. next_time_world tw}. inv (i, snd tw) \<and> inv2 (i, snd tw)) \<and> wityping \<Gamma> (snd tw)\<rbrace>"
   apply (rule Conj2)
-   apply (rule Conj2)
-    apply (rule weaken_post_conc_hoare[OF _ add_conc_hoare3], blast)
-   apply (rule strengthen_pre_conc_hoare[rotated])
-    apply (unfold add_def, rule single_conc_stmt_preserve_wityping_hoare)
-    apply (rule seq_wt_add)
-   apply blast
-  apply (fold add_def, rule weaken_post_conc_hoare[OF _ add_conc_hoare3], blast)
-  done
+  unfolding add_def
+   apply (rule Single)
+    apply(rule Conj_univ_qtfd[where Q="inv" and R="inv2"])
+     apply (rule strengthen_precondition)
+     apply (rule strengthen_precondition)
+     apply (rule add_seq_hoare_next_time)
+    apply (rule strengthen_precondition)
+    apply (rule strengthen_precondition)
+    apply (rule strengthen_precondition2)
+    apply (rule add_seq_hoare_next_time1)
+  using add_conc_hoare add_conc_hoare2 apply blast
+  apply (rule strengthen_pre_conc_hoare[rotated])
+  apply (rule single_conc_stmt_preserve_wityping_hoare)
+   apply (rule seq_wt_add)
+  by simp
+
+lemma add_conc_hoare4:
+  "\<turnstile> \<lbrace>\<lambda>tw. (local.inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add
+       \<lbrace>\<lambda>tw. \<forall>i\<in>{get_time tw<..next_time_world tw}. (local.inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)) \<and> inv2 (i, snd tw)\<rbrace>"
+  apply (rule Conseq'[rotated])
+  apply (rule add_conc_hoare3)
+  by auto
 
 lemma add_conc_sim':
   "\<turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace> add \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw\<rbrace>"
   apply (rule While)
-  apply (unfold snd_conv, rule add_conc_hoare4)
+  unfolding snd_conv
+  apply (rule add_conc_hoare4)
   done
 
 lemma add_conc_sim2:
@@ -848,8 +866,11 @@ lemma init_sat_add_inv2:
   unfolding add_def
   apply (rule AssignI)
   apply (rule SingleI)
-  unfolding snd_conv apply (rule add_seq_hoare_next_time1)
-  done
+  unfolding snd_conv 
+  apply (rule Conseq2[rotated])
+    apply (rule add_seq_hoare_next_time1)
+   apply (simp add: next_time_world_at_least)
+  by auto
 
 lemma init_sat_add_inv_comb:
   shows "init_sim_hoare (\<lambda>tw. fst tw = 0 \<and> wityping \<Gamma> (snd tw)) add  (\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv2 tw)"
@@ -865,7 +886,7 @@ lemma add_correctness:
 proof -
   obtain tw where "init_sim (0, w) add tw" and  "tw, i + 1, add \<Rightarrow>\<^sub>S tw'"
     using premises_sim_fin_obt[OF assms(1)] by auto
-  hence "i + 1 < fst tw'"
+  hence "i + 1 = fst tw'"
     using world_maxtime_lt_fst_tres  by blast
   have "conc_stmt_wf add"
     unfolding conc_stmt_wf_def add_def by auto
@@ -885,8 +906,8 @@ proof -
     by auto
   ultimately have "inv tw'"
     using \<open>tw, i + 1, add \<Rightarrow>\<^sub>S tw'\<close> unfolding sim_hoare_valid_def by blast
-  with \<open>i + 1 < fst tw'\<close> show ?thesis
-    unfolding inv_def by auto
+  with \<open>i + 1 = fst tw'\<close> show ?thesis
+    unfolding inv_def by (metis less_add_one)
 qed
 
 lemma add_correctness2:
@@ -895,7 +916,7 @@ lemma add_correctness2:
 proof -
   obtain tw where "init_sim (0, w) add tw" and  "tw, i + 1, add \<Rightarrow>\<^sub>S tw'"
     using premises_sim_fin_obt[OF assms(1)] by auto
-  hence "i + 1 < fst tw'"
+  hence "i + 1 = fst tw'"
     using world_maxtime_lt_fst_tres  by blast
   have "conc_stmt_wf add"
     unfolding conc_stmt_wf_def add_def by auto

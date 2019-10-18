@@ -101,6 +101,14 @@ lemma weaken_postcondition:
   "\<turnstile> [P] ss [\<lambda>tw. Q1 tw \<and> Q2 tw] \<Longrightarrow> \<turnstile> [P] ss [Q1]"
   by (rule Conseq2) auto
 
+lemma Conj_univ_qtfd:
+  "\<turnstile> [P] ss [\<lambda>tw. \<forall>i\<in>S tw. Q (i, snd tw)] \<Longrightarrow> \<turnstile> [P] ss [\<lambda>tw. \<forall>i\<in>S tw. R (i, snd tw)] \<Longrightarrow> \<turnstile> [P] ss [\<lambda>tw. \<forall>i\<in>S tw. Q (i, snd tw) \<and> R (i, snd tw)]"
+  apply (rule Conseq2[where P="P" and Q="\<lambda>tw. (\<forall>i\<in>S tw. Q (i, snd tw)) \<and> (\<forall>i\<in>S tw. R (i, snd tw))"])
+    apply (simp)
+   apply (rule Conj)
+    apply assumption+
+  by simp
+
 lemma compositional_conj:
   assumes "\<turnstile> [P1] ss [Q1]" and "\<turnstile> [P2] ss [Q2]"
   shows "\<turnstile> [\<lambda>tw. P1 tw \<and> P2 tw] ss [\<lambda>tw. Q1 tw \<and> Q2 tw]"
@@ -3042,6 +3050,14 @@ Single:  "\<turnstile> [\<lambda>tw. P tw \<and> \<not> disjnt sl (event_of tw)]
 | Conseq': "\<lbrakk>\<forall>w. P' w \<longrightarrow> P w; \<turnstile> \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<turnstile> \<lbrace>P'\<rbrace> c \<lbrace>Q'\<rbrace>"
 | Conj2: "\<turnstile> \<lbrace>P\<rbrace> s \<lbrace>Q1\<rbrace> \<Longrightarrow> \<turnstile> \<lbrace>P\<rbrace> s \<lbrace>Q2\<rbrace> \<Longrightarrow> \<turnstile> \<lbrace>P\<rbrace> s \<lbrace>\<lambda>tw. Q1 tw \<and> Q2 tw\<rbrace>"
 
+lemma Conj2_univ_qtfd:
+  "\<turnstile> \<lbrace>P\<rbrace> ss \<lbrace>\<lambda>tw. \<forall>i\<in>S tw. Q (i, snd tw)\<rbrace> \<Longrightarrow> \<turnstile> \<lbrace>P\<rbrace> ss \<lbrace>\<lambda>tw. \<forall>i\<in>S tw. R (i, snd tw)\<rbrace> \<Longrightarrow> 
+   \<turnstile> \<lbrace>P\<rbrace> ss \<lbrace>\<lambda>tw. \<forall>i\<in>S tw. Q (i, snd tw) \<and> R (i, snd tw)\<rbrace>"
+  apply (rule Conseq'[where P="P" and Q="\<lambda>tw. (\<forall>i\<in>S tw. Q (i, snd tw)) \<and> (\<forall>i \<in> S tw. R (i, snd tw))"])
+    apply simp
+   apply (rule Conj2)
+  by auto
+  
 lemma strengthen_pre_conc_hoare:
   assumes "\<forall>w. P' w \<longrightarrow> P w" and "\<turnstile> \<lbrace>P\<rbrace> s \<lbrace>Q\<rbrace>"
   shows "\<turnstile> \<lbrace>P'\<rbrace> s \<lbrace>Q\<rbrace>"
@@ -4192,33 +4208,32 @@ inductive world_sim_fin :: "nat \<times> 'signal worldline_init \<Rightarrow> na
    \<Longrightarrow> tw, T, cs \<Rightarrow>\<^sub>S (t', w')"
 
 lemma
-  assumes "T < fst tw"
+  assumes "T = fst tw"
   shows "tw, T, cs \<Rightarrow>\<^sub>S tw"
 proof -
   obtain t \<sigma> \<gamma> \<theta> def \<tau> where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)"
     by (meson destruct_worldline_def)
   hence "fst tw = t"
     unfolding destruct_worldline_def Let_def by auto
-  with assms have "T < t"
+  with assms have "T = t"
     by auto
-  hence sim: "T, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> (t, \<sigma>, \<theta>, \<tau>)"
-    by (intro b_simulate_fin.intros(3)) auto
-  define w' where "w' = worldline_raw (max (T + 1) t) \<sigma> \<theta> def \<tau>"
+  hence sim: "T, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> (T, \<sigma>, \<theta>, \<tau>)"
+    by (intro b_simulate_fin.intros(4)) auto
+  define w' where "w' = worldline_raw (max T t) \<sigma> \<theta> def \<tau>"
   have "tw = worldline2 t \<sigma> \<theta> def \<tau>" and " context_invariant t \<sigma> \<gamma> \<theta> def \<tau>"
     using worldline2_constructible[OF des] by auto
   hence "snd tw = worldline_raw t \<sigma> \<theta> def \<tau>"
     unfolding worldline2_def by auto
   also have "... = w'"
-    unfolding w'_def worldline_raw_def using `T < t`
+    unfolding w'_def worldline_raw_def using `T = t`
     by fastforce
   finally have "snd tw = w'"
     by auto
   moreover have "max T t = t"
-    using `T < t` by auto
+    using `T = t` by auto
   ultimately show ?thesis
     using des sim w'_def
-    by (metis \<open>tw = worldline2 t \<sigma> \<theta> def \<tau>\<close> comp_apply fst_conv snd_conv world_sim_fin.intros
-    worldline2_def)
+    by (simp add: \<open>T = t\<close> \<open>tw = worldline2 t \<sigma> \<theta> def \<tau>\<close> world_sim_fin.intros worldline2_def)
 qed
 
 inductive_cases world_sim_fin: "tw, T, cs \<Rightarrow>\<^sub>S tw'"
@@ -4239,7 +4254,7 @@ lemma premises_of_world_sim_fin':
 
 lemma world_maxtime_lt_fst_tres:
   assumes "tw, T, cs \<Rightarrow>\<^sub>S tw'"
-  shows "T < fst tw'"
+  shows "T = fst tw'"
 proof -
   obtain t \<sigma> \<gamma> \<theta> def \<tau> tres where "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)" and
                               "T, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> tres" and
@@ -4650,7 +4665,7 @@ inductive
   conc_sim :: "'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"
   ("\<turnstile>\<^sub>s (\<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>)" 50)
   where
-While: "\<turnstile> \<lbrace>\<lambda>tw. P tw\<rbrace> cs \<lbrace> \<lambda>tw. P (next_time_world tw, snd tw)\<rbrace>  \<Longrightarrow> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>P\<rbrace>" |
+While: "\<turnstile> \<lbrace>\<lambda>tw. P tw\<rbrace> cs \<lbrace> \<lambda>tw. \<forall>i\<in>{get_time tw<..next_time_world tw}. P (i, snd tw)\<rbrace>  \<Longrightarrow> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>P\<rbrace>" |
 Conseq_sim: "\<forall>tw. P' tw \<longrightarrow> P tw \<Longrightarrow> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace> \<Longrightarrow> \<forall>tw. Q tw \<longrightarrow> Q' tw \<Longrightarrow> \<turnstile>\<^sub>s \<lbrace>P'\<rbrace> cs \<lbrace>Q'\<rbrace>"
 
 lemma worldline_next_config:
@@ -5097,7 +5112,7 @@ lemma b_conc_exec_mono_wrt_history:
   by (induction rule:b_conc_exec.inducts)(meson b_conc_exec.intros beval_cong b_seq_exec_mono_wrt_history)+
 
 lemma while_soundness2:
-  assumes "\<Turnstile> \<lbrace>\<lambda>tw. P tw \<rbrace> cs \<lbrace>\<lambda>tw. P (next_time_world tw, snd tw)\<rbrace>"
+  assumes "\<Turnstile> \<lbrace>\<lambda>tw. P tw \<rbrace> cs \<lbrace>\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. P (i, snd tw)\<rbrace>"
   assumes "tw, T, cs \<Rightarrow>\<^sub>S tw'"
   assumes "P tw"
   assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs"
@@ -5126,7 +5141,7 @@ proof -
     hence "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
       unfolding context_invariant_def by auto
     have "snd tw = worldline_raw t \<sigma> \<theta> def \<tau>"
-      using 1(5-6) unfolding worldline2_def by auto
+      using 1(6-7) unfolding worldline2_def by auto
     obtain theta where dw_def: "destruct_worldline tw = (t, \<sigma>, \<gamma>, theta, def, \<tau>)" and
                     "\<And>k s. signal_of (def s) \<theta> s k = signal_of (def s) theta s k"
       using destruct_worldline_correctness4[OF \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> \<open>\<forall>s. non_stuttering
@@ -5137,19 +5152,35 @@ proof -
     then obtain tw_conc where "tw, cs \<Rightarrow>\<^sub>c tw_conc" and "worldline2 t \<sigma> theta def \<tau>' = tw_conc"
       using \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, theta, def, \<tau>)\<close>
       using world_conc_exec.intros by blast
-    with `P tw`  have "P (next_time_world tw_conc, snd tw_conc)"
-      using 1(9) unfolding conc_hoare_valid_def by presburger
     have "fst tw = fst tw_conc"
       using fst_world_conc_exec `tw, cs \<Rightarrow>\<^sub>c tw_conc` by metis
+    have "\<forall>s. non_stuttering (to_trans_raw_sig \<tau>') \<sigma> s"
+      by (meson "1.prems"(6) "1.prems"(7) "1.prems"(8) \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>t , \<sigma> , \<gamma> , theta, def
+      \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'\<close> b_conc_exec_preserves_non_stuttering)
+    have "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>'"
+      using b_conc_exec_preserves_context_invariant[OF 1(3) `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>` `nonneg_delay_conc cs`]
+      by auto
+    hence "\<And>n. n \<le> t \<Longrightarrow> \<tau>' n = 0"
+      unfolding context_invariant_def by auto
+    hence "derivative_raw (snd tw_conc) (get_time tw_conc) = \<tau>'"
+      using derivative_raw_of_worldline2[OF _ \<open>\<forall>a. non_stuttering (to_trans_raw_sig \<tau>') \<sigma> a\<close>]
+      \<open>worldline2 t \<sigma> theta def \<tau>' = tw_conc\<close> by auto
+    have "next_time_world tw_conc = next_time t \<tau>'"
+      unfolding next_time_world_def Let_def
+      by (metis \<open>derivative_raw (snd tw_conc) (get_time tw_conc) = \<tau>'\<close> \<open>get_time tw = get_time
+      tw_conc\<close> dw_def fst_conv fst_destruct_worldline)
+    with `P tw`  have "P (next_time_world tw_conc, snd tw_conc)"
+      using 1(10) \<open>next_time t \<tau>' \<le> maxtime\<close> unfolding conc_hoare_valid_def
+      by (meson \<open>tw , cs \<Rightarrow>\<^sub>c tw_conc\<close> dual_order.refl greaterThanAtMost_iff next_time_world_at_least)
     have "world_conc_exec tw cs tw_conc"
-      using world_conc_exec_rem_curr_trans_eq_only_if[OF 1(11-12)] `tw, cs \<Rightarrow>\<^sub>c tw_conc` by auto
+      using world_conc_exec_rem_curr_trans_eq_only_if[OF 1(12-13)] `tw, cs \<Rightarrow>\<^sub>c tw_conc` by auto
     have " \<tau> t = 0"
       by (auto simp add: `\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0`)
     hence "t < next_time t \<tau>'"
       using  nonneg_delay_conc_next_time_strict[OF _ `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` `nonneg_delay_conc cs` `conc_stmt_wf cs`]
       \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> dual_order.order_iff_strict  by blast
     have ci: "context_invariant (next_time t \<tau>') (next_state t \<tau>' \<sigma>) (next_event t \<tau>' \<sigma>) (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) def (\<tau>'(next_time t \<tau>' := 0))"
-      using context_invariant[OF 1(7) 1(3) `t < next_time t \<tau>'`]  by auto
+      using context_invariant[OF 1(8) 1(3) `t < next_time t \<tau>'`]  by auto
     have "context_invariant t \<sigma> \<gamma> theta def \<tau>"
       using worldline2_constructible using dw_def by blast
     have "worldline2 t \<sigma> \<theta> def \<tau>' = tw_conc"
@@ -5159,14 +5190,6 @@ proof -
       by auto
     have "snd tw_conc = worldline_raw t \<sigma> \<theta> def \<tau>'"
       using `worldline2 t \<sigma> \<theta> def \<tau>' = tw_conc` unfolding worldline2_def by auto
-    have "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>'"
-      using b_conc_exec_preserves_context_invariant[OF 1(3) `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>` `nonneg_delay_conc cs`]
-      by auto
-    hence "\<And>n. n \<le> t \<Longrightarrow> \<tau>' n = 0"
-      unfolding context_invariant_def by auto
-    have "\<forall>s. non_stuttering (to_trans_raw_sig \<tau>') \<sigma> s"
-      by (meson "1.prems"(6) "1.prems"(7) "1.prems"(8) \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>t , \<sigma> , \<gamma> , theta, def
-      \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'\<close> b_conc_exec_preserves_non_stuttering)
     have "next_time_world tw_conc = next_time t \<tau>'"
       unfolding next_time_world_def Let_def `snd tw_conc = worldline_raw t \<sigma> \<theta> def \<tau>'`
       using derivative_raw_of_worldline `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>'` `\<forall>s. non_stuttering (to_trans_raw_sig \<tau>') \<sigma> s`
@@ -5291,10 +5314,10 @@ proof -
       finally show ?thesis by auto
     qed
     show ?case
-      using 1(5)[OF twc ci 1(8-9) _ 1(11-12) ns ne] `P (next_time_world tw_conc, snd tw_conc)`
+      using 1(6)[OF twc ci 1(9-10) _ 1(12-13) ns ne] `P (next_time_world tw_conc, snd tw_conc)`
       by auto
   next
-    case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+    case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
     hence "\<forall>n. t \<le> n \<longrightarrow>  \<theta> n = 0"
       unfolding context_invariant_def by auto
     have "worldline2 t \<sigma> \<theta> def \<tau> = (t, def, worldline_of_history def (\<theta>(t := Some \<circ> \<sigma>)))"
@@ -5326,7 +5349,7 @@ proof -
           have *: "keys (to_trans_raw_sig  (\<theta>(t := Some \<circ> \<sigma>)) s') = insert t (keys (to_trans_raw_sig \<theta> s'))"
             by (auto simp add: to_trans_raw_sig_def keys_def zero_option_def)
           have "(\<forall>n\<ge>t. \<theta> n = 0)"
-            using 2(4) unfolding context_invariant_def by auto
+            using 3(4) unfolding context_invariant_def by auto
           hence **: " \<forall>k\<in> (keys (to_trans_raw_sig \<theta> s')). k < t"
             unfolding to_trans_raw_sig_def
             by (metis domIff dom_def keys_def leI zero_fun_def zero_option_def)
@@ -5346,7 +5369,7 @@ proof -
               unfolding inf_time_def  by auto
           qed
           moreover have "the ((to_trans_raw_sig (\<theta>(t := Some \<circ> \<sigma>)) s') t) = \<sigma> s'"
-            using 2(2) unfolding to_trans_raw_sig_def by auto
+            using 3(2) unfolding to_trans_raw_sig_def by auto
           ultimately have "signal_of (\<sigma> s') \<tau> s' t' = signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t'"
             using inf_none unfolding to_signal_def comp_def
             by (simp add: inf_time_def)
@@ -5373,7 +5396,7 @@ proof -
         using tw_def by auto
       obtain theta where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, theta, def, \<tau>)"
         and sig_eq: "\<And>k s. signal_of (def s) \<theta> s k = signal_of (def s) theta s k"
-        using "2.prems"(1) "2.prems"(2) "2.prems"(8) destruct_worldline_correctness4 by blast
+        using 3 destruct_worldline_correctness4 by blast
       have "b_conc_exec t \<sigma> \<gamma> \<theta> def cs \<tau> \<tau>"
         using `quiet \<tau> \<gamma>`  by (metis b_conc_exec_empty_event quiet_def)
       moreover have "b_conc_exec t \<sigma> \<gamma> theta def cs \<tau> \<tau>"
@@ -5382,16 +5405,16 @@ proof -
         using `tw, cs \<Rightarrow>\<^sub>c tw'` des `tw = worldline2 t \<sigma> \<theta> def \<tau>`
         by (smt b_conc_exec_deterministic fst_conv snd_conv world_conc_exec_cases worldline2_constructible)
       have "derivative_raw (snd tw') (fst tw') = \<tau>"
-        unfolding `tw' = tw` using `tw = worldline2 t \<sigma> \<theta> def \<tau>` 2(4) unfolding context_invariant_def
-        by (simp add: "2.prems"(8) derivative_raw_of_worldline2)
+        unfolding `tw' = tw` using `tw = worldline2 t \<sigma> \<theta> def \<tau>` 3(4) unfolding context_invariant_def
+        by (simp add: "3.prems"(8) derivative_raw_of_worldline2)
       thus "next_time_world tw' = fst tw + 1 \<and> snd tw = snd tw'"
-        using 2(2) unfolding next_time_world_def Let_def `fst tw' = t` quiet_def next_time_def
+        using 3(2) unfolding next_time_world_def Let_def `fst tw' = t` quiet_def next_time_def
         using \<open>fst tw' = t\<close> \<open>tw' = tw\<close> by auto
     qed
     obtain \<theta>' where des: "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>', def, \<tau>)" and
       "\<And>s k. signal_of (def s) \<theta> s k = signal_of (def s) \<theta>' s k"
       using `tw = worldline2 t \<sigma> \<theta> def \<tau>`
-      by (meson "2.prems"(2) "2.prems"(8) destruct_worldline_correctness4)
+      by (meson "3.prems"(2) "3.prems"(8) destruct_worldline_correctness4)
     moreover have "tw , cs \<Rightarrow>\<^sub>c tw"
     proof (intro world_conc_exec.intros)
       show "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>', def, \<tau>)"
@@ -5406,8 +5429,8 @@ proof -
         using des worldline2_constructible by blast
     qed
     ultimately have "P (fst tw + 1, snd tw)"
-      using 2(6) `P tw` tw_def unfolding conc_hoare_valid_def
-      by (metis "*")
+      using 3(6) `P tw` tw_def \<open>t < maxtime\<close> unfolding conc_hoare_valid_def
+      by (simp add: "*")
     { fix time
       assume "time > fst tw"
       have "\<forall>tw'. (time, snd tw), cs \<Rightarrow>\<^sub>c tw' \<longrightarrow> next_time_world tw' = time + 1 \<and> snd tw = snd tw'"
@@ -5428,7 +5451,7 @@ proof -
             have "snd tw = (def, worldline_of_history def (\<theta>(t:= Some o \<sigma>)))"
               using tw_def by auto
             have "\<theta> time = 0"
-              using `time > fst tw` \<open>\<forall>n \<ge> t. \<theta> n = 0\<close> "2.prems"(1) by (simp add: "2.prems"(1))
+              using `time > fst tw` \<open>\<forall>n \<ge> t. \<theta> n = 0\<close> by (simp add: "3.prems"(1))
             { fix s
               have "wline_of tw s time = signal_of (def s) (\<theta> (t:=Some o \<sigma>)) s time"
                 using \<open>tw = (t, def, worldline_of_history def (\<theta>(t:= Some o \<sigma>)))\<close>
@@ -5468,11 +5491,11 @@ proof -
               using derivative_raw_alt_def[where tw="(time, snd tw)"] \<open>\<tau> = 0\<close>
               by (metis comp_apply fst_conv snd_conv)
             have "fst tw = t"
-              by (simp add: "2.prems"(1))
+              by (simp add: "3.prems"(1))
             hence "\<And>s k . signal_of (def s) (derivative_hist_raw (snd tw) time) s (time - 1) =
                           signal_of (def s) (derivative_hist_raw (snd tw) time ) s t"
               using `time > fst tw`
-              by (smt "2.prems"(1) Suc_diff_1 Suc_lessI \<open>\<tau> = 0\<close> diff_less fst_conv le_add2
+              by (smt "3.prems"(1) Suc_diff_1 Suc_lessI \<open>\<tau> = 0\<close> diff_less fst_conv le_add2
               le_add_same_cancel2 le_less_trans nat_neq_iff order.strict_implies_order
               signal_of_derivative_hist_raw signal_of_empty snd_conv worldline2_def
               worldline_raw_def zero_less_one)
@@ -5542,10 +5565,10 @@ proof -
         hence "(time, snd tw) = tw'"
           using world_conc_exec_deterministic  by (metis \<open>(time, snd tw) , cs \<Rightarrow>\<^sub>c tw'\<close>)
         hence "derivative_raw (snd tw') (fst tw') = \<tau>"
-          by (metis "2.prems"(8) \<open>(time, snd tw) = worldline2 time \<sigma> theta def \<tau>\<close> \<open>\<tau> = 0\<close> \<open>time =
+          by (metis "3.prems"(8) \<open>(time, snd tw) = worldline2 time \<sigma> theta def \<tau>\<close> \<open>\<tau> = 0\<close> \<open>time =
           get_time tw'\<close> derivative_raw_of_worldline2 zero_fun_def)
         thus " next_time_world tw' = time + 1 \<and> snd tw = snd tw'"
-          using 2(2) unfolding next_time_world_def Let_def
+          using 3(2) unfolding next_time_world_def Let_def
           using \<open>(time, snd tw) = tw'\<close> \<open>\<tau> = 0\<close> by force
       qed }
     hence "\<And>time. time > fst tw \<Longrightarrow> \<forall>tw'. (time, snd tw), cs \<Rightarrow>\<^sub>c tw' \<longrightarrow> next_time_world tw' = time + 1 \<and> snd tw = snd tw'"
@@ -5556,7 +5579,7 @@ proof -
     proof -
       fix time
       have "\<tau> = 0"
-        by (meson "2.hyps"(2) quiet_def)
+        by (meson "3.hyps"(2) quiet_def)
       assume "get_time tw \<le> time"
       hence "get_time tw = time \<or> get_time tw < time"
         by auto
@@ -5576,7 +5599,7 @@ proof -
             have "snd tw = (def, worldline_of_history def (\<theta>(t:= Some o \<sigma>)))"
               using tw_def by auto
             have "\<theta> time = 0"
-              using `time > fst tw` \<open>\<forall>n \<ge> t. \<theta> n = 0\<close> "2.prems"(1) by (simp add: "2.prems"(1))
+              using `time > fst tw` \<open>\<forall>n \<ge> t. \<theta> n = 0\<close> by (simp add: "3.prems"(1))
             { fix s
               have "wline_of tw s time = signal_of (def s) (\<theta> (t:=Some o \<sigma>)) s time"
                 using \<open>tw = (t, def, worldline_of_history def (\<theta>(t:= Some o \<sigma>)))\<close>
@@ -5616,11 +5639,11 @@ proof -
               using derivative_raw_alt_def[where tw="(time, snd tw)"] \<open>\<tau> = 0\<close>
               by (metis comp_apply fst_conv snd_conv)
             have "fst tw = t"
-              by (simp add: "2.prems"(1))
+              by (simp add: "3.prems"(1))
             hence "\<And>s k . signal_of (def s) (derivative_hist_raw (snd tw) time) s (time - 1) =
                           signal_of (def s) (derivative_hist_raw (snd tw) time ) s t"
               using `time > fst tw`
-              by (smt "2.prems"(1) Suc_diff_1 Suc_lessI \<open>\<tau> = 0\<close> diff_less fst_conv le_add2
+              by (smt "3.prems"(1) Suc_diff_1 Suc_lessI \<open>\<tau> = 0\<close> diff_less fst_conv le_add2
               le_add_same_cancel2 le_less_trans nat_neq_iff order.strict_implies_order
               signal_of_derivative_hist_raw signal_of_empty snd_conv worldline2_def
               worldline_raw_def zero_less_one)
@@ -5686,9 +5709,18 @@ proof -
       ultimately show "\<exists>tw'. (time, snd tw), cs \<Rightarrow>\<^sub>c tw'"
         by auto
     qed
+    have pseudo_ind: "\<And>time. fst tw \<le> time \<Longrightarrow> time < maxtime \<Longrightarrow> P (time, snd tw) \<Longrightarrow> P (time + 1, snd tw)"
+      using 3(6) unfolding conc_hoare_valid_def 
+      using always_progress ** 
+      by (metis greaterThanAtMost_iff next_time_world_at_least order_refl)
+    define distance where "distance = maxtime - fst tw"
+    hence pseudo_ind': "\<And>time. fst tw \<le> time \<Longrightarrow> time < fst tw + distance \<Longrightarrow> P (time, snd tw) \<Longrightarrow> P (time + 1, snd tw)"
+      using pseudo_ind by auto
+    have "maxtime - 1 < fst tw + distance"
+      unfolding distance_def using "3.hyps"(1) by linarith
     have "P (maxtime, snd tw)"
-      using \<open>t \<le> maxtime\<close>
-    proof (induction "maxtime - fst tw" arbitrary:maxtime)
+      using \<open>t < maxtime\<close> \<open>maxtime - 1 < fst tw + distance\<close>
+    proof (induction "maxtime - fst tw" arbitrary: maxtime)
       case 0
       then show ?case using `P tw`  using tw_def by auto
     next
@@ -5697,8 +5729,8 @@ proof -
         by auto
       hence "P (maxtime - 1, snd tw)"
         using Suc
-        by (metis One_nat_def diff_diff_cancel diff_is_0_eq' dual_order.order_iff_strict fst_conv
-        leI tw_def)
+        by (metis (no_types, lifting) "3.prems"(5) Suc_diff_1 add_less_cancel_left diff_diff_cancel
+        diff_is_0_eq' gr_implies_not_zero less_Suc_eq not_le plus_1_eq_Suc snd_conv tw_def)
       have "maxtime - 1 \<ge> fst tw"
         using Suc by auto
       have "\<forall>tw'. (maxtime - 1, snd tw), cs \<Rightarrow>\<^sub>c tw' \<longrightarrow> next_time_world tw' = maxtime \<and> snd tw = snd tw'"
@@ -5706,57 +5738,159 @@ proof -
         by (metis Suc.hyps(2) Suc_eq_plus1 Suc_inject \<open>x = maxtime - 1 - fst tw\<close> add_eq_if diff_0_eq_0)
       have "\<exists>tw'. (maxtime - 1, snd tw) , cs \<Rightarrow>\<^sub>c tw'"
         using always_progress \<open>get_time tw \<le> maxtime - 1\<close> by blast
-      with 2(6) show ?case
-        using `P (maxtime - 1, snd tw)` unfolding conc_hoare_valid_def
-        by (metis (full_types) \<open>\<forall>tw'. (maxtime - 1, snd tw) , cs \<Rightarrow>\<^sub>c tw' \<longrightarrow> next_time_world tw' = maxtime \<and> snd tw = snd tw'\<close>)
+      have "get_time tw \<le> maxtime - 1"
+        unfolding tw_def using \<open>get_time tw \<le> maxtime - 1\<close> tw_def by blast
+      thus ?case
+        using pseudo_ind'[OF _ `maxtime - 1 < get_time tw + distance`] 
+        by (metis Suc.prems(1) Suc_diff_1 Suc_eq_plus1 \<open>P (maxtime - 1, snd tw)\<close> gr_implies_not_zero
+        nat_neq_iff)
     qed
-    hence "P (maxtime + 1, snd tw)"
-      using ** "2.hyps"(1) "2.prems"(4) always_progress unfolding conc_hoare_valid_def
-      by (metis eq_fst_iff tw_def)
-    moreover have "snd tw =  worldline_raw (maxtime + 1) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0"
+    moreover have "snd tw =  worldline_raw (maxtime) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0"
       unfolding tw_def snd_conv
     proof (rule, rule_tac[2] ext, rule_tac[2] ext)
       fix s' t'
-      have "t' < maxtime + 1 \<or> maxtime + 1 \<le> t'"
+      have "t' < maxtime \<or> maxtime \<le> t'"
         by auto
       moreover
-      { assume "t' < maxtime + 1"
-        hence "snd (worldline_raw (maxtime + 1) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t' = signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t'"
+      { assume "t' < maxtime"
+        hence "snd (worldline_raw (maxtime) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t' = signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t'"
           unfolding worldline_raw_def by auto
         also have "... = worldline_of_history def (\<theta>(t := Some \<circ> \<sigma>)) s' t'"
           unfolding worldline_of_history_def by auto
-        finally have "worldline_of_history def (\<theta>(t:= Some o \<sigma>)) s' t' = snd (worldline_raw (maxtime + 1) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t'"
+        finally have "worldline_of_history def (\<theta>(t:= Some o \<sigma>)) s' t' = snd (worldline_raw (maxtime) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t'"
           by auto }
       moreover
-      { assume " maxtime + 1 \<le> t'"
-        hence "snd (worldline_raw (maxtime + 1) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t' = signal_of (\<sigma> s') 0 s' t'"
+      { assume " maxtime  \<le> t'"
+        hence "snd (worldline_raw (maxtime) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t' = signal_of (\<sigma> s') 0 s' t'"
           unfolding worldline_raw_def by auto
         also have "... = \<sigma> s'"
           by (meson signal_of_empty)
         also have "... = signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t"
           by (metis fun_upd_same trans_some_signal_of)
         also have "... = signal_of (def s') (\<theta>(t := Some o \<sigma>)) s' t'"
-          using \<open>\<forall>n. t \<le> n \<longrightarrow>  \<theta> n = 0\<close> \<open>t \<le> maxtime\<close> \<open>maxtime + 1 \<le> t'\<close>
+          using \<open>\<forall>n. t \<le> n \<longrightarrow>  \<theta> n = 0\<close> \<open>t < maxtime\<close> \<open>maxtime \<le> t'\<close>
           by (intro sym[OF signal_of_less_ind'])(simp add: zero_fun_def, linarith)
         also have "... = worldline_of_history def (\<theta>(t:= Some o \<sigma>)) s' t'"
           unfolding worldline_of_history_def by auto
-        finally have "worldline_of_history def (\<theta>(t:= Some o \<sigma>)) s' t' = snd (worldline_raw (maxtime + 1) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t'"
+        finally have "worldline_of_history def (\<theta>(t:= Some o \<sigma>)) s' t' = snd (worldline_raw (maxtime) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t'"
           by auto }
-      ultimately show "snd (def, worldline_of_history def (\<theta>(t := Some \<circ> \<sigma>))) s' t' = snd (worldline_raw (maxtime + 1) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t'"
+      ultimately show "snd (def, worldline_of_history def (\<theta>(t := Some \<circ> \<sigma>))) s' t' = snd (worldline_raw (maxtime) \<sigma> (\<theta>(t := Some \<circ> \<sigma>)) def 0) s' t'"
         by auto
     qed (simp add: worldline_raw_def)
     ultimately show ?case
-      using "2.prems"(3) snd_conv tw_def
-      by (simp add: \<open>tw' = (get_time (maxtime + 1, \<sigma>, \<theta>(t := Some \<circ> \<sigma>), 0), worldline_raw (get_time
-      (maxtime + 1, \<sigma>, \<theta>(t := Some \<circ> \<sigma>), 0)) (get_state (maxtime + 1, \<sigma>, \<theta>(t := Some \<circ> \<sigma>), 0))
-      (get_beh (maxtime + 1, \<sigma>, \<theta>(t := Some \<circ> \<sigma>), 0)) def (get_trans (maxtime + 1, \<sigma>, \<theta>(t := Some \<circ>
-      \<sigma>), 0)))\<close>)
+      by (simp add: \<open>tw' = (get_time (maxtime, \<sigma>, \<theta>(t := Some \<circ> \<sigma>), 0), worldline_raw (get_time
+      (maxtime, \<sigma>, \<theta>(t := Some \<circ> \<sigma>), 0)) (get_state (maxtime, \<sigma>, \<theta>(t := Some \<circ> \<sigma>), 0)) (get_beh
+      (maxtime, \<sigma>, \<theta>(t := Some \<circ> \<sigma>), 0)) def (get_trans (maxtime, \<sigma>, \<theta>(t := Some \<circ> \<sigma>), 0)))\<close>)
   next
-    case (3 t maxtime \<sigma> \<gamma> \<theta> cs \<tau>)
+    case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
     hence "tw' = tw"
       by (simp add: worldline2_def)
     then show ?case
       using `P tw` by auto
+  next
+    case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+    hence "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
+      unfolding context_invariant_def by auto
+    have "snd tw = worldline_raw t \<sigma> \<theta> def \<tau>"
+      using 2 unfolding worldline2_def by auto
+    obtain theta where dw_def: "destruct_worldline tw = (t, \<sigma>, \<gamma>, theta, def, \<tau>)" and
+                    "\<And>k s. signal_of (def s) \<theta> s k = signal_of (def s) theta s k"
+      using destruct_worldline_correctness4[OF \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>\<close> \<open>\<forall>s. non_stuttering
+      (to_trans_raw_sig \<tau>) \<sigma> s\<close>]  using "2.prems"(1) by blast
+    hence "b_conc_exec t \<sigma> \<gamma> theta def cs \<tau> \<tau>'"
+      using b_conc_exec_mono_wrt_history[OF \<open> t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'\<close>]
+      by blast
+    then obtain tw_conc where "tw, cs \<Rightarrow>\<^sub>c tw_conc" and "worldline2 t \<sigma> theta def \<tau>' = tw_conc"
+      using \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, theta, def, \<tau>)\<close>
+      using world_conc_exec.intros by blast
+    have "fst tw = fst tw_conc"
+      using fst_world_conc_exec `tw, cs \<Rightarrow>\<^sub>c tw_conc` by metis
+    have "\<forall>s. non_stuttering (to_trans_raw_sig \<tau>') \<sigma> s"
+      by (meson 2 \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>t , \<sigma> , \<gamma> , theta, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'\<close> 
+          b_conc_exec_preserves_non_stuttering)
+    have "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>'"
+      using b_conc_exec_preserves_context_invariant[OF 2(3) `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>` `nonneg_delay_conc cs`]
+      by auto
+    hence "\<And>n. n \<le> t \<Longrightarrow> \<tau>' n = 0"
+      unfolding context_invariant_def by auto
+    hence "derivative_raw (snd tw_conc) (get_time tw_conc) = \<tau>'"
+      using derivative_raw_of_worldline2[OF _ \<open>\<forall>a. non_stuttering (to_trans_raw_sig \<tau>') \<sigma> a\<close>]
+      \<open>worldline2 t \<sigma> theta def \<tau>' = tw_conc\<close> by auto
+    have "next_time_world tw_conc = next_time t \<tau>'"
+      unfolding next_time_world_def Let_def
+      by (metis \<open>derivative_raw (snd tw_conc) (get_time tw_conc) = \<tau>'\<close> \<open>get_time tw = get_time
+      tw_conc\<close> dw_def fst_conv fst_destruct_worldline)
+    hence "P (maxtime, snd tw_conc)"
+      using 2(8) `P tw` `maxtime < next_time t \<tau>'` \<open>tw, cs \<Rightarrow>\<^sub>c tw_conc\<close> `t < maxtime` 
+      unfolding conc_hoare_valid_def 
+      by (metis (full_types) \<open>worldline2 t \<sigma> theta def \<tau>' = tw_conc\<close> dual_order.order_iff_strict
+      fst_conv greaterThanAtMost_iff worldline2_def)
+    have tw'_def: "tw' = (maxtime, worldline_raw maxtime \<sigma> (\<theta>(t := Some o \<sigma>)) def \<tau>')"
+      using 2 by (metis comp_apply fst_conv snd_conv)
+    have "worldline2 t \<sigma> \<theta> def \<tau>' = tw_conc"
+      unfolding sym[OF `worldline2 t \<sigma> theta def \<tau>' = tw_conc`] worldline2_def worldline_raw_def
+      `\<And>k s. signal_of (def s) \<theta> s k = signal_of (def s) theta s k` by auto
+    hence "snd tw_conc = worldline_raw t \<sigma> \<theta> def \<tau>'"
+      unfolding worldline2_def by auto
+    also have "... = worldline_raw maxtime \<sigma> (\<theta>(t := Some o \<sigma>)) def \<tau>'"
+      unfolding worldline_raw_def
+    proof (rule+)
+      fix s' t'
+      have "t' < t \<or> t \<le> t' \<and> t' < next_time t \<tau>' \<or> next_time t \<tau>' \<le> t'"
+        using `t < maxtime` by auto
+      moreover
+      { assume "t' < t"
+        hence "(if t' < t then signal_of (def s') \<theta> s' t' else signal_of (\<sigma> s') \<tau>' s' t') = 
+                                                                         signal_of (def s') \<theta> s' t'"
+          by auto
+        also have "... = signal_of (def s') (\<theta>(t := Some o \<sigma>)) s' t'"
+          by (smt \<open>t' < t\<close> dual_order.strict_trans2 fun_upd_def le_eq_less_or_eq
+          min.strict_order_iff signal_of_equal_when_trans_equal_upto)
+        also have "... = (if t' < maxtime then signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t' else signal_of (\<sigma> s') \<tau>' s' t')"
+          using `t' < t` `t < maxtime` by auto
+        finally have "(if t' < t then signal_of (def s') \<theta> s' t' else signal_of (\<sigma> s') \<tau>' s' t') =
+       (if t' < maxtime then signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t' else signal_of (\<sigma> s') \<tau>' s' t')"
+          by auto }
+      moreover
+      { assume "t \<le> t' \<and> t' < next_time t \<tau>' "
+        hence "(if t' < t then signal_of (def s') \<theta> s' t' else signal_of (\<sigma> s') \<tau>' s' t') = 
+                                                                          signal_of (\<sigma> s') \<tau>' s' t'"
+          by auto
+        also have "... = \<sigma> s'"
+          using \<open>t \<le> t' \<and> t' < next_time t \<tau>' \<close> \<open>maxtime < next_time t \<tau>'\<close> 
+          by (metis (mono_tags) dual_order.strict_trans dual_order.strict_trans2 next_time_at_least2
+          signal_of_def zero_fun_def)
+        also have "... = the ((\<theta>(t := Some o \<sigma>)) t s')"
+          by simp
+        also have "... = signal_of (def s') (\<theta>(t := Some o \<sigma>)) s' t"
+          by (metis \<open>\<sigma> s' = the ((\<theta>(t := Some \<circ> \<sigma>)) t s')\<close> fun_upd_same trans_some_signal_of)
+        also have "... = signal_of (def s') (\<theta>(t := Some o \<sigma>)) s' t'"
+          apply (rule signal_of_less_ind[THEN sym])
+          apply (metis \<open>context_invariant t \<sigma> \<gamma> \<theta> def \<tau>'\<close> context_invariant_def fun_upd_apply less_imp_le_nat nat_neq_iff)
+          by (auto simp add: `t \<le> t' \<and> t' < next_time t \<tau>' `)      
+        also have "... = (if t' < maxtime then signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t' else signal_of (\<sigma> s') \<tau>' s' t') "
+          using `t \<le> t' \<and> t' < next_time t \<tau>' `  using calculation by auto
+        finally have "(if t' < t then signal_of (def s') \<theta> s' t' else signal_of (\<sigma> s') \<tau>' s' t') =
+       (if t' < maxtime then signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t' else signal_of (\<sigma> s') \<tau>' s' t')"
+          by auto }
+      moreover
+      { assume "next_time t \<tau>' \<le> t'"
+        hence "(if t' < t then signal_of (def s') \<theta> s' t' else signal_of (\<sigma> s') \<tau>' s' t') = 
+                                                                          signal_of (\<sigma> s') \<tau>' s' t'"
+          using `t < maxtime`  "2.hyps"(4) by auto
+        also have "... =  (if t' < maxtime then signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t' else signal_of (\<sigma> s') \<tau>' s' t') "
+          using "2.hyps"(4) \<open>next_time t \<tau>' \<le> t'\<close> by auto
+        finally have "(if t' < t then signal_of (def s') \<theta> s' t' else signal_of (\<sigma> s') \<tau>' s' t') =
+       (if t' < maxtime then signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t' else signal_of (\<sigma> s') \<tau>' s' t')"
+          by auto }
+      ultimately show "(if t' < t then signal_of (def s') \<theta> s' t' else signal_of (\<sigma> s') \<tau>' s' t') =
+       (if t' < maxtime then signal_of (def s') (\<theta>(t := Some \<circ> \<sigma>)) s' t' else signal_of (\<sigma> s') \<tau>' s' t')"
+        by auto 
+    qed
+    hence "snd tw_conc = snd tw'"
+      by (simp add: calculation tw'_def)      
+    then show ?case 
+      using \<open>P (maxtime, snd tw_conc)\<close> tw'_def by auto
   qed
 qed
 
@@ -5767,7 +5901,7 @@ lemma conc_sim_soundness:
   using assms
 proof (induction rule:conc_sim.induct)
   case (While P cs)
-  hence " \<Turnstile> \<lbrace>\<lambda>tw. P tw\<rbrace> cs \<lbrace>\<lambda>tw. P (next_time_world tw, snd tw)\<rbrace>"
+  hence " \<Turnstile> \<lbrace>\<lambda>tw. P tw\<rbrace> cs \<lbrace>\<lambda>tw. \<forall>i\<in>{get_time tw<..next_time_world tw}. P (i, snd tw)\<rbrace>"
     using soundness_conc_hoare[OF While(1)] by auto
   then show ?case
     unfolding sim_hoare_valid_def using while_soundness2[OF _ _ _ While(2) While(3)] by auto

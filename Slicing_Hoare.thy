@@ -218,6 +218,19 @@ lemma slicer_seq_hoare_next_time:
   apply (rule Assign2_altI)
   using inv_next_time type_correctness_length[OF assms] by blast
 
+lemma aux:
+  "\<And>tw. inv (next_time_world tw, snd tw) \<Longrightarrow> \<forall>j \<in> {fst tw <.. next_time_world tw}. inv (j, snd tw)"
+  unfolding inv_def Let_def by simp
+
+lemma slicer_seq_hoare_next_time_post:
+  assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bslice IN 3 2) 1)"
+  shows "\<turnstile> [\<lambda>tw. inv tw \<and> wityping \<Gamma> (snd tw)]  
+              Bassign_trans OUT (Bslice IN 3 2) 1 
+           [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. inv (j, snd tw)]"
+  apply (rule Conseq2[rotated])
+    apply (rule slicer_seq_hoare_next_time[OF assms])
+  by (auto simp add: aux)
+
 lemma slicer_seq_hoare_next_time0:
   assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bslice IN 3 2) 1)"
   shows "\<turnstile> [\<lambda>tw. fst tw = 0 \<and> wityping \<Gamma> (snd tw)] Bassign_trans OUT (Bslice IN 3 2) 1 [\<lambda>tw. inv (next_time_world tw, snd tw)]"
@@ -230,64 +243,64 @@ lemma slicer_conc_hoare:
   unchanged_until_next_time_world)
 
 lemma slicer_conc_hoare2:
-  "\<And>tw. inv tw \<and> inv' tw \<and> disjnt {IN} (event_of tw) \<Longrightarrow> inv' (next_time_world tw, snd tw)"
+  "\<And>tw. inv tw \<and> inv' tw \<and> disjnt {IN} (event_of tw) \<Longrightarrow> \<forall>j \<in> {fst tw <.. next_time_world tw}. inv' (j, snd tw)"
   unfolding inv_def inv'_def
-  by (smt Suc_diff_1 comp_apply diff_less disjnt_insert1 event_of_alt_def gr_implies_not_zero
-  le_Suc_eq le_less_trans mem_Collect_eq next_time_world_at_least not_less order.strict_iff_order
-  prod.sel(1) snd_conv unchanged_until_next_time_world zero_less_one)
+  by (smt Suc_diff_1 comp_apply diff_less disjnt_insert1 dual_order.strict_trans1 event_of_alt_def
+  fst_conv gr_implies_not_zero greaterThanAtMost_iff le_Suc_eq mem_Collect_eq nat_neq_iff
+  order.strict_iff_order snd_conv unchanged_until_next_time_world zero_less_one)
 
 lemma inv'_next_time:
   fixes tw
   assumes "beval_world_raw2 tw (Bslice IN 3 2) x" and "type_of x = Lty ki 2"
   defines "tw' \<equiv> tw[OUT, 1 :=\<^sub>2 x]"
-  shows   "inv' (next_time_world tw', snd tw')"
+  shows   "\<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv' (j, snd tw')"
   unfolding inv'_def
-proof (rule, rule, rule)
-  fix i
-  assume "disjnt {IN} (event_of (next_time_world tw', snd tw'))"
-  hence "IN \<notin> event_of (next_time_world tw', snd tw')"
+proof (rule, rule, rule, rule)
+  fix i j
+  assume "j \<in> {fst tw' <.. next_time_world tw'}"
+  assume "disjnt {IN} (event_of (j, snd tw'))"
+  hence "IN \<notin> event_of (j, snd tw')"
     by auto
-  assume "fst (next_time_world tw', snd tw') \<le> i"
-  hence "next_time_world tw' \<le> i"
+  assume "fst (j, snd tw') \<le> i"
+  hence "j \<le> i"
     by auto
-  let ?ins = "lof_wline (next_time_world tw', snd tw') IN (next_time_world tw')"
+  let ?ins = "lof_wline (j, snd tw') IN j"
   let ?idx = "length ?ins - 1"
 
-  let ?t' = "next_time_world tw'"
-  have "fst tw' < ?t'"
-    using next_time_world_at_least by blast
+  have "fst tw' < j"
+    using \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> by auto
   moreover have "fst tw = fst tw'"
     unfolding tw'_def unfolding worldline_upd2_def by auto
-  ultimately have "fst tw < ?t'"
+  ultimately have "fst tw < j"
     by auto
-  have "wline_of tw' IN ?t' = wline_of tw IN (fst tw)"
+  have "wline_of tw' IN j = wline_of tw IN (fst tw)"
   proof -
-    have "wline_of tw' IN ?t' = wline_of tw' IN (?t' - 1)"
-      using \<open>IN \<notin> event_of (?t', snd tw')\<close> unfolding event_of_alt_def
-      using \<open>get_time tw < next_time_world tw'\<close> by auto
+    have "wline_of tw' IN j = wline_of tw' IN (j - 1)"
+      using \<open>IN \<notin> event_of (j, snd tw')\<close> unfolding event_of_alt_def
+      using \<open>get_time tw < j\<close> by auto
     also have "... = wline_of tw' IN (fst tw')"
       using unchanged_until_next_time_world
-      by (metis (no_types, lifting) Suc_diff_1 \<open>get_time tw' < next_time_world tw'\<close> diff_less
-      gr_implies_not_zero le_0_eq less_Suc_eq_le not_less zero_less_one)
+      by (metis (no_types, lifting) Suc_diff_1 \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close>
+      gr_implies_not_zero greaterThanAtMost_iff le_0_eq less_Suc_eq_le not_less)
     also have "... = wline_of tw' IN (fst tw)"
       by (simp add: \<open>get_time tw = get_time tw'\<close>)
     also have "... = wline_of tw IN (fst tw)"
       unfolding tw'_def worldline_upd2_def worldline_upd_def by simp
-    finally show "wline_of tw' IN ?t' = wline_of tw IN (fst tw)"
+    finally show "wline_of tw' IN j = wline_of tw IN (fst tw)"
       by auto
   qed
-  moreover have "?ins = lof_wline tw' IN ?t'"
+  moreover have "?ins = lof_wline tw' IN j"
     by auto
   ultimately have "?ins = lof_wline tw IN (fst tw)"
     by auto
-  have "\<And>i. ?t' \<le> i \<Longrightarrow> lof_wline tw' OUT (i + 1) = nths ?ins {?idx - 3 .. ?idx - 2}"
+  have "\<And>i. j \<le> i \<Longrightarrow> lof_wline tw' OUT (i + 1) = nths ?ins {?idx - 3 .. ?idx - 2}"
   proof -
     fix i
     have assms2: "beval_world_raw (snd tw) (fst tw) (Bslice IN 3 2) x"
       using assms unfolding beval_world_raw2_def by auto
-    assume "?t' \<le> i"
+    assume "j \<le> i"
     hence "lof_wline tw' OUT (i + 1) = lval_of x"
-      using `fst tw < ?t'`
+      using `fst tw < j`
       unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
     have "\<not> is_Bv (wline_of tw IN (fst tw))"
       by (rule beval_world_raw_cases[OF assms2], erule beval_cases)
@@ -303,54 +316,56 @@ proof (rule, rule, rule)
     thus "lof_wline tw' OUT (i + 1) = nths ?ins {?idx - 3 .. ?idx - 2}"
       using \<open>lof_wline tw' OUT (i + 1) = lval_of x\<close> by auto
   qed
-  thus "let ins = lof_wline (next_time_world tw', snd tw') IN (get_time (next_time_world tw', snd tw')); idx = length ins - 1
-         in lof_wline (next_time_world tw', snd tw') OUT (i + 1) = nths ins {idx - 3..idx - 2}"
-    by (simp add: \<open>next_time_world tw' \<le> i\<close>)
+  thus "let ins = lof_wline (j, snd tw') IN (get_time (j, snd tw')); idx = length ins - 1 in lof_wline (j, snd tw') OUT (i + 1) = nths ins {idx - 3..idx - 2}"
+    by (simp add: \<open>j \<le> i\<close>)
 qed
 
 lemma slicer_seq_hoare_next_time1:
   assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bslice IN 3 2) 1)"
-  shows "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw)] Bassign_trans OUT (Bslice IN 3 2) 1 [\<lambda>tw. inv' (next_time_world tw, snd tw)]"
+  shows "\<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw)] 
+              Bassign_trans OUT (Bslice IN 3 2) 1 
+           [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. inv' (j, snd tw)]"
   apply (rule Assign2_altI)
   using inv'_next_time type_correctness_length[OF assms] by blast
 
 lemma slicer_conc_hoare3:
   assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bslice IN 3 2) 1)"
-  shows "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv' tw\<rbrace> slicer \<lbrace>\<lambda>tw. inv (next_time_world tw, snd tw) \<and> inv' (next_time_world tw, snd tw)\<rbrace>"
+  shows "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace> 
+              slicer 
+           \<lbrace>\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. inv (j, snd tw) \<and> inv' (j, snd tw)\<rbrace>"
   unfolding slicer_def
   apply (rule Single)
-   apply (rule Conj)
-  apply (rule strengthen_precondition)
-    apply (rule strengthen_precondition)
-    apply (rule slicer_seq_hoare_next_time[OF assms])
-   apply (rule strengthen_precondition)
-   apply (rule strengthen_precondition)
-   apply (rule strengthen_precondition2)
-   apply (rule slicer_seq_hoare_next_time1[OF assms])
-  using slicer_conc_hoare slicer_conc_hoare2 by blast
+   apply (rule Conj_univ_qtfd)
+  apply (rule Conseq2[rotated])
+      apply (rule slicer_seq_hoare_next_time_post[OF assms], simp, simp)
+   apply (rule Conseq2[rotated])
+     apply (rule slicer_seq_hoare_next_time1[OF assms], simp, simp)
+  using slicer_conc_hoare aux slicer_conc_hoare2 by blast
 
 lemma slicer_conc_hoare4:
   assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bslice IN 3 2) 1)"
-  shows "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv' tw\<rbrace> slicer \<lbrace>\<lambda>tw. (inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)) \<and> inv' (next_time_world tw, snd tw)\<rbrace>"
-  apply (rule Conj2)
-   apply (rule Conj2)
-    apply (rule weaken_post_conc_hoare[OF _ slicer_conc_hoare3[OF assms]])
-    apply blast
-   apply (rule strengthen_pre_conc_hoare[rotated])
+  shows "\<turnstile> \<lbrace>\<lambda>tw. (inv tw \<and> inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace> 
+                slicer 
+           \<lbrace>\<lambda>tw. \<forall>i\<in>{get_time tw<..next_time_world tw}. (Slicing_Hoare.inv (i, snd tw) \<and> inv' (i, snd tw)) \<and> wityping \<Gamma> (snd tw)\<rbrace>"
+  apply (rule Conj2_univ_qtfd[where R="\<lambda>tw. wityping \<Gamma> (snd tw)", unfolded snd_conv])
+   apply (rule slicer_conc_hoare3[OF assms])
+  apply (rule strengthen_pre_conc_hoare[rotated])
+  apply (rule weaken_post_conc_hoare[rotated])
     apply (unfold slicer_def, rule single_conc_stmt_preserve_wityping_hoare[OF assms], blast)
-  apply (fold slicer_def, rule weaken_post_conc_hoare[OF _ slicer_conc_hoare3[OF assms]], blast)
-  done
+  by auto
 
 lemma slicer_conc_sim':
   assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bslice IN 3 2) 1)"
-  shows   "\<turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv' tw\<rbrace> slicer \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv' tw\<rbrace>"
-  apply (rule While)
+  shows   "\<turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv tw \<and> inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace> 
+                  slicer 
+              \<lbrace>\<lambda>tw. (inv tw \<and> inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace>"
+  apply (rule While)    
   apply (unfold snd_conv, rule slicer_conc_hoare4[OF assms])
   done
 
 lemma slicer_conc_sim2':
   assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bslice IN 3 2) 1)"
-  shows   "\<turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv' tw\<rbrace> slicer \<lbrace>inv\<rbrace>"
+  shows   "\<turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv tw \<and> inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace> slicer \<lbrace>inv\<rbrace>"
   using slicer_conc_sim' Conseq_sim assms by smt
 
 lemma init_sat_slicer_inv:
@@ -370,9 +385,10 @@ lemma init_sat_slicer_inv2:
   unfolding slicer_def
   apply (rule AssignI)
   apply (rule SingleI)
-  unfolding snd_conv apply (rule slicer_seq_hoare_next_time1[OF assms])
-  done
-
+  apply (rule Conseq2[rotated])
+    apply (rule slicer_seq_hoare_next_time1[OF assms])
+  by (auto simp add: next_time_world_at_least)
+  
 lemma init_sat_slicer_inv_comb:
   assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bslice IN 3 2) 1)"
   shows   "init_sim_hoare (\<lambda>tw. fst tw = 0 \<and> wityping \<Gamma> (snd tw)) slicer (\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv' tw)"
@@ -390,7 +406,7 @@ lemma slicer_correctness:
 proof -
   obtain tw where "init_sim (0, w) slicer tw" and  "tw, i + 1, slicer \<Rightarrow>\<^sub>S tw'"
     using premises_sim_fin_obt[OF assms(1)] by auto
-  hence "i + 1 < fst tw'"
+  hence "i + 1 = fst tw'"
     using world_maxtime_lt_fst_tres  by blast
   have "conc_stmt_wf slicer"
     unfolding conc_stmt_wf_def slicer_def by auto
@@ -407,13 +423,13 @@ proof -
     by auto
   moreover have "seq_wt \<Gamma> (Bassign_trans OUT (Bslice IN 3 2) 1)"
     using assms(3) unfolding slicer_def by auto
-  moreover hence "\<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv tw \<and> wityping \<Gamma> (snd tw)) \<and> inv' tw\<rbrace> slicer \<lbrace>inv\<rbrace>"
+  moreover hence "\<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (Slicing_Hoare.inv tw \<and> inv' tw) \<and> wityping \<Gamma> (snd tw)\<rbrace> slicer \<lbrace>Slicing_Hoare.inv\<rbrace>"
     using conc_sim_soundness[OF slicer_conc_sim2'] \<open>conc_stmt_wf slicer\<close> \<open>nonneg_delay_conc slicer\<close>
     by auto
   ultimately have "inv tw'"
     using \<open>tw, i + 1, slicer \<Rightarrow>\<^sub>S tw'\<close> unfolding sim_hoare_valid_def by blast
-  with \<open>i + 1 < fst tw'\<close> show ?thesis
-    unfolding inv_def by auto
+  with \<open>i + 1 = fst tw'\<close> show ?thesis
+    unfolding inv_def by (metis less_add_one)
 qed
 
 end

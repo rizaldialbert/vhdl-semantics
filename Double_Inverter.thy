@@ -270,6 +270,18 @@ proof (intro Assign2_altI, rule, rule, rule)
     unfolding tw1_def tw2_def t'_def by auto
 qed
 
+lemma aux1:
+  "\<And>tw. inv_first (next_time_world tw, snd tw) \<Longrightarrow> \<forall>j \<in> {fst tw <.. next_time_world tw}. inv_first (j, snd tw)"
+  unfolding inv_first_def by simp
+
+lemma seq_part_when_not_disjnt2_post:
+  "\<turnstile> [\<lambda>tw. (inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)]
+        Bassign_trans TEMP (Bsig IN) 1
+     [\<lambda>tw.  \<forall>j \<in> {fst tw <.. next_time_world tw}. inv_first (j, snd tw)]"
+  apply (rule Conseq2[rotated])
+    apply (rule seq_part_when_not_disjnt2)
+  by (auto simp add: aux1)
+
 lemma seq_part_when_not_disjnt3:
   "\<turnstile> [\<lambda>tw. (inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)]
         Bassign_trans TEMP (Bsig IN) 1
@@ -332,9 +344,9 @@ qed
 lemma seq_part_when_not_disjnt4:
   "\<turnstile> [\<lambda>tw. (inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)]
         Bassign_trans TEMP (Bsig IN) 1
-     [\<lambda>tw. inv_first_hold (next_time_world tw, snd tw)]"
-proof (intro Assign2_altI, rule, rule, rule)
-  fix tw v
+     [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. inv_first_hold (j, snd tw)]"
+proof (intro Assign2_altI, rule, rule, rule, rule)
+  fix tw v j
   assume "((inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)) \<and> beval_world_raw2 tw (Bsig IN) v"
   hence "inv_first tw" and "inv_second tw" and "inv_first_hold tw" and "inv_second_hold tw" and "\<not> disjnt {IN} (event_of tw)"
     and " beval_world_raw2 tw (Bsig IN) v"
@@ -342,11 +354,11 @@ proof (intro Assign2_altI, rule, rule, rule)
   define tw1 where "tw1 = tw [TEMP, 1 :=\<^sub>2 v]"
   then obtain v' where "beval_world_raw2 tw1 (Bsig TEMP) v'"
     by (meson beval_world_raw2_Bsig)
+  assume "j \<in> {fst tw1 <.. next_time_world tw1}"
   define tw2 where "tw2 = tw1[OUT, 1 :=\<^sub>2 v']"
-  define t' where "t' = next_time_world tw1"
 
-  have "fst tw < t'"
-    unfolding t'_def   by (metis fst_conv next_time_world_at_least tw1_def worldline_upd2_def)
+  have "fst tw < j"
+    by (metis \<open>j \<in> {get_time tw1<..next_time_world tw1}\<close> greaterThanAtMost_iff snd_conv snd_swap swap_simp tw1_def worldline_upd2_def)
   have "fst tw = fst tw1"
     by (simp add: tw1_def worldline_upd2_def)
   also have "... = fst tw2"
@@ -358,35 +370,45 @@ proof (intro Assign2_altI, rule, rule, rule)
   have "fst tw1 < next_time_world tw2"
     by (simp add: \<open>get_time tw1 = get_time tw2\<close> \<open>get_time tw2 < next_time_world tw2\<close>)
 
-  have 5: "inv_first_hold (t', snd tw1)"
+  have 5: "inv_first_hold (j, snd tw1)"
     unfolding inv_first_hold_def
   proof (rule, rule, rule)
     fix i
-    assume "disjnt {IN} (event_of (t', snd tw1))"
-    assume "fst (t', snd tw1) \<le> i"
-    hence "t' \<le> i"
+    assume "disjnt {IN} (event_of (j, snd tw1))"
+    assume "fst (j, snd tw1) \<le> i"
+    hence "j \<le> i"
       by auto
     hence "wline_of tw1 TEMP (i + 1) = wline_of tw IN (fst tw)"
-      using `fst tw < t'`
+      using `fst tw < j`
       by (smt \<open>beval_world_raw2 tw (Bsig IN) v\<close> add_less_cancel_right beval_world_raw2_Bsig
       beval_world_raw2_def beval_world_raw_deterministic less_le_trans o_apply order.asym snd_conv
       tw1_def worldline_upd2_def worldline_upd_def)
     also have "... = wline_of tw1 IN (fst tw)"
       by (metis less_add_one tw1_def worldline_upd2_before_dly)
-    also have "... = wline_of tw1 IN (t' - 1)"
-      unfolding t'_def `fst tw < t'` using unchanged_until_next_time_world
-      by (metis Suc_diff_1 \<open>get_time tw < t'\<close> \<open>get_time tw = get_time tw1\<close> diff_less
-      gr_implies_not_zero le_Suc_eq less_imp_le_nat nat_neq_iff t'_def zero_less_one)
-    also have "... = wline_of tw1 IN t'"
-      using \<open>disjnt {IN} (event_of (t', snd tw1))\<close> unfolding event_of_alt_def
-      using \<open>get_time tw < t'\<close> by auto
-    finally show "wline_of (t', snd tw1) TEMP (i + 1) = wline_of (t', snd tw1) IN (get_time (t', snd tw1))"
+    also have "... = wline_of tw1 IN (j - 1)"
+      using `fst tw < j` unchanged_until_next_time_world
+      by (metis (no_types, lifting) \<open>get_time tw = get_time tw1\<close> \<open>j \<in> {get_time
+      tw1<..next_time_world tw1}\<close> add_diff_cancel_left' diff_add diff_is_0_eq' diff_zero discrete
+      greaterThanAtMost_iff not_less)
+    also have "... = wline_of tw1 IN j"
+      using \<open>disjnt {IN} (event_of (j, snd tw1))\<close> unfolding event_of_alt_def
+      using \<open>get_time tw < j\<close> by auto
+    finally show "wline_of (j, snd tw1) TEMP (i + 1) = wline_of (j, snd tw1) IN (get_time (j, snd tw1))"
       by auto
   qed
-  thus " inv_first_hold (next_time_world tw[ TEMP, 1 :=\<^sub>2 v], snd tw[ TEMP, 1 :=\<^sub>2 v])"
-    unfolding tw1_def t'_def by auto
+  thus " inv_first_hold (j, snd tw[ TEMP, 1 :=\<^sub>2 v])"
+    unfolding tw1_def by auto
 qed
 
+lemma seq_part_when_not_disjnt_2post_4:
+  "\<turnstile> [\<lambda>tw. (inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)]
+        Bassign_trans TEMP (Bsig IN) 1
+     [\<lambda>tw. \<forall>j \<in> {fst tw <.. next_time_world tw}. inv_first (j, snd tw) \<and> inv_first_hold (j, snd tw)]"
+  apply (rule Conj_univ_qtfd)
+   apply (rule seq_part_when_not_disjnt2_post)
+  apply (rule seq_part_when_not_disjnt4)
+  done
+  
 lemma seq_part_when_not_disjnt5:
   "\<turnstile> [\<lambda>tw. (inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)]
         Bassign_trans TEMP (Bsig IN) 1
@@ -502,13 +524,21 @@ proof (intro Assign2_altI, rule, rule, rule)
     by (metis beval_world_raw2_Bsig beval_world_raw2_def beval_world_raw_deterministic)
 qed
 
+lemma seq_part_when_not_disjnt5_post:
+  "\<turnstile> [\<lambda>tw. (inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)]
+        Bassign_trans TEMP (Bsig IN) 1
+     [\<lambda>tw.  let x = wline_of tw TEMP (fst tw); tw' = tw[OUT,1 :=\<^sub>2 x] in \<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv_first (j, snd tw')]"
+  apply (rule Conseq2[rotated])
+    apply (rule seq_part_when_not_disjnt5)
+  by (auto simp add: Let_def aux1)
+
 lemma seq_part_when_not_disjnt6:
   "\<turnstile> [\<lambda>tw. (inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)]
         Bassign_trans TEMP (Bsig IN) 1
-     [\<lambda>tw. let x = wline_of tw TEMP (fst tw) in
-                         inv_first_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 x],  snd tw[ OUT, 1 :=\<^sub>2 x])]"
+     [\<lambda>tw. let x = wline_of tw TEMP (fst tw); tw' = tw [OUT, 1 :=\<^sub>2 x] in
+                         \<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv_first_hold (j,  snd tw')]"
 proof (intro Assign2_altI, rule, rule, rule)
-  fix tw v
+  fix tw v 
   assume "((inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)) \<and> beval_world_raw2 tw (Bsig IN) v"
   hence "inv_first tw" and "inv_second tw" and "inv_first_hold tw" and "inv_second_hold tw" and "\<not> disjnt {IN} (event_of tw)"
     and " beval_world_raw2 tw (Bsig IN) v"
@@ -517,77 +547,89 @@ proof (intro Assign2_altI, rule, rule, rule)
   then obtain v' where "beval_world_raw2 tw1 (Bsig TEMP) v'"
     by (meson beval_world_raw2_Bsig)
   define tw2 where "tw2 = tw1[OUT, 1 :=\<^sub>2 v']"
-  define t' where "t' = next_time_world tw1"
-  have "fst tw < t'"
-    unfolding t'_def   by (metis fst_conv next_time_world_at_least tw1_def worldline_upd2_def)
-  have "fst tw = fst tw1"
-    by (simp add: tw1_def worldline_upd2_def)
-  also have "... = fst tw2"
-    by (simp add: tw1_def tw2_def worldline_upd2_def)
-  also have "... < next_time_world tw2"
-    using next_time_world_at_least by  metis
-  finally have "fst tw < next_time_world tw2"
-    by auto
-  have "fst tw1 < next_time_world tw2"
-    by (simp add: \<open>get_time tw1 = get_time tw2\<close> \<open>get_time tw2 < next_time_world tw2\<close>)
-
-  have 3: "inv_first_hold (next_time_world tw2, snd tw2)"
-    unfolding inv_first_hold_def
-  proof (rule, rule, rule)
-    fix i
-    assume "disjnt {IN} (event_of (next_time_world tw2, snd tw2))"
-    assume "fst (next_time_world tw2, snd tw2) \<le> i"
-    hence "next_time_world tw2 \<le> i" and "fst tw1 < i"
-      using \<open>fst tw1 < next_time_world tw2\<close>  by auto
-    hence "wline_of tw2 TEMP (i + 1) = wline_of tw1 TEMP (i + 1)"
-      by (simp add: tw2_def worldline_upd2_def worldline_upd_def)
-    also have "... = wline_of tw IN (fst tw)"
-        unfolding tw1_def
-        by (smt \<open>beval_world_raw2 tw (Bsig IN) v\<close> \<open>get_time tw = get_time tw1\<close> \<open>get_time tw1 < i\<close>
-        beval_world_raw2_Bsig beval_world_raw2_def beval_world_raw_deterministic discrete
-        dual_order.strict_trans2 less_add_one o_apply order.asym snd_conv worldline_upd2_def
-        worldline_upd_def)
-    also have "... = wline_of tw2 IN (fst tw2)"
-      by (metis \<open>get_time tw = get_time tw1\<close> \<open>get_time tw1 = get_time tw2\<close> less_add_one tw1_def tw2_def worldline_upd2_before_dly)
-    also have "... = wline_of tw2 IN (next_time_world tw2 - 1)"
-      using unchanged_until_next_time_world
-      by (metis Suc_diff_1 \<open>get_time tw2 < next_time_world tw2\<close> diff_less gr_implies_not_zero le_Suc_eq less_imp_le_nat nat_neq_iff zero_less_one)
-    also have "... = wline_of tw2 IN (next_time_world tw2)"
-      using \<open>disjnt {IN} (event_of (next_time_world tw2, snd tw2))\<close>
-      unfolding event_of_alt_def  using \<open>get_time tw2 < next_time_world tw2\<close> by auto
-    finally have "wline_of tw2 TEMP (i + 1) = wline_of tw2 IN (next_time_world tw2)"
+  { fix j
+    assume "j \<in> {fst tw2 <.. next_time_world tw2}"
+    have "fst tw < j"
+      by (metis \<open>j \<in> {get_time tw2<..next_time_world tw2}\<close> greaterThanAtMost_iff snd_conv snd_swap
+      swap_simp tw1_def tw2_def worldline_upd2_def)
+    have "fst tw = fst tw1"
+      by (simp add: tw1_def worldline_upd2_def)
+    also have "... = fst tw2"
+      by (simp add: tw1_def tw2_def worldline_upd2_def)
+    also have "... < next_time_world tw2"
+      using next_time_world_at_least by  metis
+    finally have "fst tw < next_time_world tw2"
       by auto
-    thus "wline_of (next_time_world tw2, snd tw2) TEMP (i + 1) =
-          wline_of (next_time_world tw2, snd tw2) IN (get_time (next_time_world tw2, snd tw2))"
-      by auto
-  qed
-  thus " let xa = wline_of tw[ TEMP, 1 :=\<^sub>2 v] TEMP (get_time tw[ TEMP, 1 :=\<^sub>2 v])
-       in inv_first_hold (next_time_world tw[ TEMP, 1 :=\<^sub>2 v][ OUT, 1 :=\<^sub>2 xa], snd tw[ TEMP, 1 :=\<^sub>2 v][ OUT, 1 :=\<^sub>2 xa])"
+    have "fst tw1 < next_time_world tw2"
+      by (simp add: \<open>get_time tw1 = get_time tw2\<close> \<open>get_time tw2 < next_time_world tw2\<close>)
+  
+    have 3: "inv_first_hold (j, snd tw2)"
+      unfolding inv_first_hold_def
+    proof (rule, rule, rule)
+      fix i
+      assume "disjnt {IN} (event_of (j, snd tw2))"
+      assume "fst (j, snd tw2) \<le> i"
+      hence "j \<le> i" and "fst tw1 < i"
+        using \<open>get_time (j, snd tw2) \<le> i\<close> \<open>get_time tw < j\<close> \<open>get_time tw = get_time tw1\<close> by auto
+      hence "wline_of tw2 TEMP (i + 1) = wline_of tw1 TEMP (i + 1)"
+        by (simp add: tw2_def worldline_upd2_def worldline_upd_def)
+      also have "... = wline_of tw IN (fst tw)"
+          unfolding tw1_def
+          by (smt \<open>beval_world_raw2 tw (Bsig IN) v\<close> \<open>get_time tw = get_time tw1\<close> \<open>get_time tw1 < i\<close>
+          beval_world_raw2_Bsig beval_world_raw2_def beval_world_raw_deterministic discrete
+          dual_order.strict_trans2 less_add_one o_apply order.asym snd_conv worldline_upd2_def
+          worldline_upd_def)
+      also have "... = wline_of tw2 IN (fst tw2)"
+        by (metis \<open>get_time tw = get_time tw1\<close> \<open>get_time tw1 = get_time tw2\<close> less_add_one tw1_def tw2_def worldline_upd2_before_dly)
+      also have "... = wline_of tw2 IN (j - 1)"
+        using unchanged_until_next_time_world
+        by (metis (no_types, lifting) \<open>j \<in> {get_time tw2<..next_time_world tw2}\<close>
+        cancel_comm_monoid_add_class.diff_cancel diff_add diff_is_0_eq discrete greaterThanAtMost_iff
+        le_0_eq le_Suc_eq le_add_diff_inverse less_imp_le_nat nat_neq_iff plus_1_eq_Suc)
+      also have "... = wline_of tw2 IN j"
+        using \<open>disjnt {IN} (event_of (j, snd tw2))\<close>
+        unfolding event_of_alt_def  using \<open>get_time tw2 < next_time_world tw2\<close> 
+        using \<open>j \<in> {get_time tw2<..next_time_world tw2}\<close> by auto
+      finally have "wline_of tw2 TEMP (i + 1) = wline_of tw2 IN j"
+        by auto
+      thus " wline_of (j, snd tw2) TEMP (i + 1) = wline_of (j, snd tw2) IN (get_time (j, snd tw2))"
+        by auto
+    qed }
+  hence "\<And>v' j. beval_world_raw2 tw1 (Bsig TEMP) v' \<Longrightarrow> j \<in> {fst tw1[OUT, 1 :=\<^sub>2 v'] <.. next_time_world tw1[OUT, 1 :=\<^sub>2 v']} \<Longrightarrow> inv_first_hold (j, snd tw1[OUT, 1 :=\<^sub>2 v'])"
+    by (metis (full_types) \<open>beval_world_raw2 tw1 (Bsig TEMP) v'\<close> beval_world_raw2_def beval_world_raw_deterministic tw2_def)
+  thus " let va = wline_of tw[ TEMP, 1 :=\<^sub>2 v] TEMP (get_time tw[ TEMP, 1 :=\<^sub>2 v]); tw' = tw[ TEMP, 1 :=\<^sub>2 v][ OUT, 1 :=\<^sub>2 va]
+       in \<forall>j\<in>{get_time tw'<..next_time_world tw'}. inv_first_hold (j, snd tw')"
     using \<open>beval_world_raw2 tw1 (Bsig TEMP) v'\<close> unfolding tw1_def tw2_def
     by (metis beval_world_raw2_Bsig beval_world_raw2_def beval_world_raw_deterministic)
 qed
 
+lemma seq_part_when_not_disjnt_5post_6:
+  "\<turnstile> [\<lambda>tw. (inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)]
+        Bassign_trans TEMP (Bsig IN) 1
+     [\<lambda>tw. let x = wline_of tw TEMP (fst tw); tw' = tw [OUT, 1 :=\<^sub>2 x] in
+                         \<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv_first (j, snd tw') \<and> inv_first_hold (j,  snd tw')]"
+  apply (intro Assign2_altI, rule, rule, rule)
+  by (metis (no_types, lifting) BassignE_hoare2 seq_part_when_not_disjnt5_post seq_part_when_not_disjnt6)
+
 lemma seq_part_when_not_disjnt:
   " \<turnstile> [\<lambda>tw. (inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw) \<and> \<not> disjnt {IN} (event_of tw)]
         Bassign_trans TEMP (Bsig IN) 1
-      [\<lambda>tw. (let x = wline_of tw TEMP (fst tw) in inv_first (next_time_world tw[ OUT, 1 :=\<^sub>2 x], snd tw[ OUT, 1 :=\<^sub>2 x]))
-          \<and> inv_first (next_time_world tw, snd tw)
-          \<and> inv_second tw
-          \<and> (let x = wline_of tw TEMP (fst tw) in inv_first_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 x], snd tw[ OUT, 1 :=\<^sub>2 x]))
-          \<and> inv_first_hold (next_time_world tw, snd tw)
-          \<and> inv_second_hold tw]"
-  using seq_part_when_not_disjnt1 seq_part_when_not_disjnt2 seq_part_when_not_disjnt3
-        seq_part_when_not_disjnt4 seq_part_when_not_disjnt5 seq_part_when_not_disjnt6
+      [\<lambda>tw. (\<forall>j\<in>{get_time tw<..next_time_world tw}. inv_first (j, snd tw) \<and> inv_first_hold (j, snd tw)) 
+          \<and> (let v = wline_of tw TEMP (get_time tw); tw' = tw[ OUT, 1 :=\<^sub>2 v] in \<forall>j\<in>{get_time tw'<..next_time_world tw'}. inv_first (j, snd tw') \<and> inv_first_hold (j, snd tw')) 
+          \<and> inv_second tw \<and> inv_second_hold tw]"
+  using seq_part_when_not_disjnt1 seq_part_when_not_disjnt_2post_4 seq_part_when_not_disjnt3
+         seq_part_when_not_disjnt5_post seq_part_when_not_disjnt_5post_6
   by (intro Conj)
 
 lemma inv_first_disjnt_next_time_no_process_later:
   assumes "inv_first tw" and "inv_first_hold tw" and "disjnt {IN} (event_of tw)"
-  shows "inv_first (next_time_world tw, snd tw)"
+  shows "\<forall>j \<in> {fst tw <.. next_time_world tw}. inv_first (j, snd tw)"
   unfolding inv_first_def
-proof (rule, rule)
-  fix i
-  assume " i < get_time (next_time_world tw, snd tw)"
-  hence "i < next_time_world tw"
+proof (rule, rule, rule)
+  fix i j
+  assume "j \<in> {fst tw <.. next_time_world tw}"
+  assume " i < get_time (j, snd tw)"
+  hence "i < j"
     by auto
   hence "i < fst tw \<or> fst tw \<le> i"
     by auto
@@ -602,26 +644,28 @@ proof (rule, rule)
     ultimately have "wline_of tw TEMP (i + 1) = wline_of tw IN (fst tw)"
       by auto
     also have "... = wline_of tw IN i"
-      by (metis \<open>get_time tw \<le> i\<close> \<open>i < next_time_world tw\<close> unchanged_until_next_time_world)
+      by (metis (no_types, lifting) \<open>get_time tw \<le> i\<close> \<open>i < j\<close> \<open>j \<in> {get_time tw<..next_time_world
+      tw}\<close> discrete greaterThanAtMost_iff le_trans unchanged_until_next_time_world)
     finally have "wline_of tw TEMP (i + 1) = wline_of tw IN i"
       by auto }
   ultimately have "wline_of tw TEMP (i + 1) = wline_of tw IN i"
     by auto
-  thus "wline_of (next_time_world tw, snd tw) TEMP (i + 1) = wline_of (next_time_world tw, snd tw) IN i"
+  thus "wline_of (j, snd tw) TEMP (i + 1) = wline_of (j, snd tw) IN i"
     by auto
 qed
 
 lemma inv_first_disjnt_next_time:
   assumes "inv_first tw" and "inv_first_hold tw" and "disjnt {IN} (event_of tw)"
-  shows "let v = wline_of tw TEMP (fst tw) in inv_first (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v])"
+  shows "let v = wline_of tw TEMP (fst tw); tw' = tw [OUT, 1 :=\<^sub>2 v] in \<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv_first (j, snd tw')"
   unfolding inv_first_def Let_def
-proof (rule, rule)
-  fix i
-  define v where "v = wline_of tw TEMP (fst tw)"
-  assume "i<get_time (next_time_world tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)], snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)])"
-  hence "i < next_time_world tw[ OUT, 1 :=\<^sub>2 v]"
-    unfolding v_def by auto
-  let ?tw = "tw[OUT, 1 :=\<^sub>2 v]"
+proof (rule, rule, rule)
+  fix i j :: nat
+  let ?v = "wline_of tw TEMP (fst tw)"
+  assume "i < get_time (j, snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)])"
+  hence "i < j"
+    by auto
+  let ?tw = "tw[OUT, 1 :=\<^sub>2 ?v]"
+  assume "j \<in> {fst ?tw <.. next_time_world ?tw}"
   have "fst ?tw < next_time_world ?tw"
     using next_time_world_at_least by metis
   moreover have "fst ?tw = fst tw"
@@ -644,255 +688,260 @@ proof (rule, rule)
   moreover
   { assume "fst tw \<le> i"
     have "wline_of ?tw TEMP (i + 1) = wline_of tw TEMP (i + 1)"
-      using \<open>i < next_time_world ?tw\<close> \<open>fst tw < next_time_world ?tw\<close>
+      using \<open>i < j\<close> \<open>fst tw < next_time_world ?tw\<close>
       by (simp add: worldline_upd2_def worldline_upd_def)
     also have "... = wline_of tw IN i"
       using assms(2-3) unfolding inv_first_hold_def
-      by (smt \<open>get_time tw \<le> i\<close> \<open>get_time tw[ OUT, 1 :=\<^sub>2 v] = get_time tw\<close> \<open>i < next_time_world tw[
-      OUT, 1 :=\<^sub>2 v]\<close> comp_apply sig.distinct(3) snd_conv unchanged_until_next_time_world
-      worldline_upd2_def worldline_upd_def)
+      by (smt \<open>get_time tw \<le> i\<close> \<open>get_time tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)] = get_time
+      tw\<close> \<open>i < j\<close> \<open>j \<in> {get_time tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]<..next_time_world
+      tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]}\<close> antisym_conv calculation comp_apply
+      greaterThanAtMost_iff le_eq_less_or_eq le_trans less_imp_le_nat nat_neq_iff sig.distinct(3)
+      snd_conv snd_conv unchanged_until_next_time_world worldline_upd2_def worldline_upd_def)
     also have "... = wline_of ?tw IN i"
       by (simp add: worldline_upd2_def worldline_upd_def)
     finally have "wline_of ?tw TEMP (i + 1) = wline_of ?tw IN i"
       by auto }
   ultimately have "wline_of ?tw TEMP (i + 1) = wline_of ?tw IN i"
     by auto
-  thus "wline_of (next_time_world tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)], snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]) TEMP (i + 1) =
-        wline_of (next_time_world tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)], snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]) IN i"
-    by (simp add: v_def)
+  thus "wline_of (j, snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]) TEMP (i + 1) = wline_of (j, snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]) IN i"
+    by auto
 qed
 
 lemma inv_first_hold_disjnt_next_time_no_process_later:
   assumes "inv_first_hold tw" and "disjnt {IN} (event_of tw)"
-  shows "inv_first_hold (next_time_world tw, snd tw)"
+  shows "\<forall>j \<in> {fst tw <.. next_time_world tw}. inv_first_hold (j, snd tw)"
   unfolding inv_first_hold_def
-proof (rule, rule, rule)
-  fix i
-  assume "disjnt {IN} (event_of (next_time_world tw, snd tw))"
-  assume "fst (next_time_world tw, snd tw) \<le> i"
-  hence "next_time_world tw \<le> i"
+proof (rule, rule, rule, rule)
+  fix i j
+  assume "j \<in> {fst tw <.. next_time_world tw}"
+  assume "disjnt {IN} (event_of (j, snd tw))"
+  assume "fst (j, snd tw) \<le> i"
+  hence "j \<le> i"
     by auto
-  moreover have "fst tw < next_time_world tw"
-    using next_time_world_at_least by metis
+  moreover have "fst tw < j"
+    using \<open>j \<in> {get_time tw<..next_time_world tw}\<close> greaterThanAtMost_iff by blast
   ultimately have "fst tw \<le> i"
     by auto
   moreover have "(\<forall>i \<ge> fst tw. wline_of tw TEMP (i + 1) = wline_of tw IN (fst tw))"
     using assms unfolding inv_first_hold_def by auto
   ultimately have "wline_of tw TEMP (i + 1) = wline_of tw IN (fst tw)"
     by auto
-  also have "... = wline_of tw IN (next_time_world tw - 1)"
+  also have "... = wline_of tw IN (j - 1)"
     using unchanged_until_next_time_world
-    by (metis Suc_diff_1 Suc_leI \<open>get_time tw < next_time_world tw\<close> diff_less le_0_eq
-    less_imp_le_nat not_less zero_less_one)
-  also have "... = wline_of tw IN (next_time_world tw)"
-    using \<open>disjnt {IN} (event_of (next_time_world tw, snd tw))\<close>
-    unfolding event_of_alt_def  using \<open>get_time tw < next_time_world tw\<close> by auto
-  finally have "wline_of tw TEMP (i + 1) = wline_of tw IN (next_time_world tw)"
+    by (metis (no_types, lifting) \<open>j \<in> {get_time tw<..next_time_world tw}\<close> add_diff_cancel_left'
+    diff_add diff_is_0_eq' discrete greaterThanAtMost_iff le_numeral_extra(4) not_less)
+  also have "... = wline_of tw IN (j)"
+    using \<open>disjnt {IN} (event_of (j, snd tw))\<close>
+    unfolding event_of_alt_def  using \<open>get_time tw < j\<close> by auto
+  finally have "wline_of tw TEMP (i + 1) = wline_of tw IN (j)"
     by auto
-  thus "wline_of (next_time_world tw, snd tw) TEMP (i + 1) =
-                        wline_of (next_time_world tw, snd tw) IN (get_time (next_time_world tw, snd tw))"
+  thus "wline_of (j, snd tw) TEMP (i + 1) =
+                        wline_of (j, snd tw) IN (get_time (j, snd tw))"
     by auto
 qed
 
 lemma inv_first_hold_disjnt_next_time:
   assumes "inv_first_hold tw" and "disjnt {IN} (event_of tw)"
-  shows "let v = wline_of tw TEMP (fst tw) in inv_first_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v])"
+  shows "let v = wline_of tw TEMP (fst tw); tw' = tw [OUT, 1 :=\<^sub>2 v] in \<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv_first_hold (j, snd tw')"
   unfolding inv_first_hold_def Let_def
-proof (rule, rule, rule)
-  define v where "v = wline_of tw TEMP (fst tw)"
-  let ?tw = "tw[OUT, 1 :=\<^sub>2 v]"
-  fix i
-  assume "disjnt {IN} (event_of (next_time_world ?tw, snd ?tw))"
-  assume "fst (next_time_world ?tw, snd ?tw) \<le> i"
-  hence "next_time_world ?tw \<le> i"
+proof (rule, rule, rule, rule)
+  let ?v = "wline_of tw TEMP (fst tw)"
+  let ?tw = "tw[OUT, 1 :=\<^sub>2 ?v]"
+  fix i j 
+  assume "j \<in> {fst ?tw <.. next_time_world ?tw}"
+  assume "disjnt {IN} (event_of (j, snd ?tw))"
+  assume "fst (j, snd ?tw) \<le> i"
+  hence "j \<le> i"
     by auto
-  moreover have "fst ?tw < next_time_world ?tw"
-    using next_time_world_at_least by metis
+  moreover have "fst ?tw < j"
+    using \<open>j \<in> {get_time tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]<..next_time_world tw[ OUT,
+    1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]}\<close> greaterThanAtMost_iff by blast
   moreover have "fst tw = fst ?tw"
     by (simp add: worldline_upd2_def)
-  ultimately have "fst tw < next_time_world ?tw"
+  ultimately have "fst tw < j"
     by auto
   have "wline_of ?tw TEMP (i + 1) = wline_of tw TEMP (i + 1)"
     by (simp add: worldline_upd2_def worldline_upd_def)
   also have "... = wline_of tw IN (fst tw)"
-    using assms(1-2) \<open>fst tw < next_time_world ?tw\<close> \<open>next_time_world ?tw \<le> i\<close>
-    unfolding inv_first_hold_def by auto
+    using assms(1-2) \<open>fst tw < j\<close> \<open>j \<le> i\<close> unfolding inv_first_hold_def by auto
   also have "... = wline_of ?tw IN (fst tw)"
     by (metis less_add_one worldline_upd2_before_dly)
   also have "... = wline_of ?tw IN (fst ?tw)"
-    by (simp add: \<open>get_time tw = get_time tw[ OUT, 1 :=\<^sub>2 v]\<close>)
-  also have "... = wline_of ?tw IN (next_time_world ?tw - 1)"
+    using \<open>get_time tw = get_time tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]\<close> by auto
+  also have "... = wline_of ?tw IN (j - 1)"
     using unchanged_until_next_time_world
-    by (smt \<open>get_time tw < next_time_world ?tw\<close> \<open>get_time tw = get_time ?tw\<close> diff_add diff_is_0_eq'
-    discrete le_0_eq le_numeral_extra(4) less_le not_less)
-  also have "... = wline_of ?tw IN (next_time_world ?tw)"
-    using \<open>disjnt {IN} (event_of (next_time_world ?tw, snd ?tw))\<close>
-    unfolding event_of_alt_def
-    using \<open>get_time tw < next_time_world tw[ OUT, 1 :=\<^sub>2 v]\<close> by auto
-  finally have "wline_of ?tw TEMP (i + 1) = wline_of ?tw IN (next_time_world ?tw)"
+    by (smt \<open>j \<in> {get_time tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]<..next_time_world tw[
+    OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]}\<close> diff_add discrete dual_order.strict_iff_order
+    greaterThanAtMost_iff less_one not_less)
+  also have "... = wline_of ?tw IN j"
+    using \<open>disjnt {IN} (event_of (j, snd ?tw))\<close>
+    unfolding event_of_alt_def using \<open>get_time tw < j\<close> by auto
+  finally have "wline_of ?tw TEMP (i + 1) = wline_of ?tw IN j"
     by auto
-  thus "wline_of (next_time_world tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)], snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]) TEMP (i + 1) =
-         wline_of (next_time_world tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)], snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]) IN
-          (get_time (next_time_world tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)], snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]))"
-    unfolding v_def by auto
+  thus "wline_of (j, snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]) TEMP (i + 1) =
+           wline_of (j, snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]) IN (get_time (j, snd tw[ OUT, 1 :=\<^sub>2 wline_of tw TEMP (get_time tw)]))"
+    by auto
 qed
 
 lemma conc_next_time:
   "\<turnstile> \<lbrace>\<lambda>tw. inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw\<rbrace>
         process {IN} : Bassign_trans TEMP (Bsig IN) 1
-     \<lbrace>\<lambda>tw. (let v = wline_of tw TEMP (fst tw) in inv_first (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v]))
-         \<and> inv_first (next_time_world tw, snd tw)
-         \<and> inv_second tw
-         \<and> (let v = wline_of tw TEMP (fst tw) in inv_first_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v]))
-         \<and> inv_first_hold (next_time_world tw, snd tw) \<and> inv_second_hold tw\<rbrace>"
+     \<lbrace>\<lambda>tw. (\<forall>j\<in>{get_time tw<..next_time_world tw}. inv_first (j, snd tw) \<and> inv_first_hold (j, snd tw)) \<and>
+             (let v = wline_of tw TEMP (get_time tw); tw' = tw[ OUT, 1 :=\<^sub>2 v]
+              in \<forall>j\<in>{get_time tw'<..next_time_world tw'}. inv_first (j, snd tw') \<and> inv_first_hold (j, snd tw')) \<and>
+             inv_second tw \<and> inv_second_hold tw\<rbrace>"
   apply (rule Single)
    apply (rule seq_part_when_not_disjnt)
   using inv_first_disjnt_next_time inv_first_hold_disjnt_next_time
     inv_first_disjnt_next_time_no_process_later inv_first_hold_disjnt_next_time_no_process_later
-  by auto
+  by meson
 
 lemma snd_seq_part_when_not_disjnt:
-  "\<turnstile> [\<lambda>tw. ((let v = wline_of tw TEMP (fst tw) in inv_first (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v])) \<and>
-              inv_first (next_time_world tw, snd tw) \<and>
-              inv_second tw \<and>
-            (let v = wline_of tw TEMP (fst tw) in inv_first_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v])) \<and>
-              inv_first_hold (next_time_world tw, snd tw) \<and> inv_second_hold tw) \<and>
+  "\<turnstile> [\<lambda>tw. ((\<forall>j\<in>{get_time tw<..next_time_world tw}. inv_first (j, snd tw) \<and> inv_first_hold (j, snd tw)) \<and>
+              (let v = wline_of tw TEMP (get_time tw); tw' = tw[ OUT, 1 :=\<^sub>2 v]
+               in \<forall>j\<in>{get_time tw'<..next_time_world tw'}. inv_first (j, snd tw') \<and> inv_first_hold (j, snd tw')) \<and>
+              inv_second tw \<and> inv_second_hold tw) \<and>
              \<not> disjnt {TEMP} (event_of tw)]
        Bassign_trans OUT (Bsig TEMP) 1
-       [\<lambda>tw. inv_first (next_time_world tw, snd tw) \<and>
-             inv_second (next_time_world tw, snd tw) \<and> inv_first_hold (next_time_world tw, snd tw) \<and> inv_second_hold (next_time_world tw, snd tw)]"
-proof (rule Assign2_altI, rule, rule, rule)
-  fix tw v
-  assume asm: "(((let v = wline_of tw TEMP (get_time tw) in inv_first (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v])) \<and>
-         inv_first (next_time_world tw, snd tw) \<and>
-         inv_second tw \<and>
-         (let v = wline_of tw TEMP (get_time tw) in inv_first_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v])) \<and>
-         inv_first_hold (next_time_world tw, snd tw) \<and> inv_second_hold tw) \<and>
-        \<not> disjnt {TEMP} (event_of tw)) \<and>
-       beval_world_raw2 tw (Bsig TEMP) v"
-  define tw' where "tw' = tw[ OUT, 1 :=\<^sub>2 v]"
-  define t' where "t' = next_time_world tw'"
+       [\<lambda>tw. (\<forall>j\<in>{get_time tw<..next_time_world tw}. inv_first (j, snd tw) \<and> inv_first_hold (j, snd tw)) \<and>
+             (\<forall>j\<in>{get_time tw<..next_time_world tw}. inv_second (j, snd tw) \<and> inv_second_hold (j, snd tw))]"
+proof (rule Assign2_altI, rule, rule, rule, rule, rule_tac[!] ballI)
+  fix tw v j 
+  assume asm: "(  ( (\<forall>j\<in>{get_time tw<..next_time_world tw}. inv_first (j, snd tw) \<and> inv_first_hold (j, snd tw)) 
+                  \<and> (let v = wline_of tw TEMP (get_time tw); tw' = tw[ OUT, 1 :=\<^sub>2 v] in \<forall>j\<in>{get_time tw'<..next_time_world tw'}. inv_first (j, snd tw') \<and> inv_first_hold (j, snd tw')) 
+                  \<and>  inv_second tw \<and> inv_second_hold tw
+                  ) 
+               \<and> \<not> disjnt {TEMP} (event_of tw)) 
+               \<and> beval_world_raw2 tw (Bsig TEMP) v"
+  let ?tw' = "tw[ OUT, 1 :=\<^sub>2 v]"
+  assume "j \<in> {get_time ?tw' <..next_time_world ?tw'}"
 
-  hence 0: "inv_first (t', snd tw')" and "inv_second tw" and 1: "inv_first_hold (t', snd tw')" and "inv_second_hold tw"
+  hence 0: "inv_first (j, snd ?tw')" and "inv_second tw" and 1: "inv_first_hold (j, snd ?tw')" and "inv_second_hold tw"
     and "\<not> disjnt {TEMP} (event_of tw)" and "beval_world_raw2 tw (Bsig TEMP) v"
     using asm beval_world_raw2_def beval_world_raw_deterministic
-    unfolding t'_def tw'_def by (metis beval_world_raw2_Bsig)+
+    by (metis beval_world_raw2_Bsig)+
 
   \<comment> \<open>general facts\<close>
-  have "fst tw' < t'"
-    using next_time_world_at_least unfolding t'_def by metis
-  moreover have "fst tw = fst tw'"
-    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-  ultimately have "fst tw < t'"
+  have "fst ?tw' < j"
+    using next_time_world_at_least
+    using \<open>j \<in> {get_time tw[ OUT, 1 :=\<^sub>2 v]<..next_time_world tw[ OUT, 1 :=\<^sub>2 v]}\<close>
+    greaterThanAtMost_iff by blast
+  moreover have "fst tw = fst ?tw'"
+    unfolding worldline_upd2_def worldline_upd_def by auto
+  ultimately have "fst tw < j"
     by auto
 
-  have 2: "inv_second (t', snd tw')"
+  have 2: "inv_second (j, snd ?tw')"
     unfolding inv_second_def
   proof (rule, rule)
     fix i
-    assume "i < fst (t', snd tw')"
-    hence "i < t'"
+    assume "i < fst (j, snd ?tw')"
+    hence "i < j"
       by auto
-    have "i < fst tw \<or> fst tw \<le> i \<or> i < t' - 1 \<or> i = t' - 1"
-      using \<open>fst tw < t'\<close> by linarith
+    have "i < fst tw \<or> fst tw \<le> i \<or> i < j - 1 \<or> i = j - 1"
+      using \<open>fst tw < j\<close> by linarith
     moreover
     { assume "i < fst tw"
-      hence "wline_of tw' OUT (i + 1) = wline_of tw OUT (i + 1)"
-        by (metis add_mono1 tw'_def worldline_upd2_before_dly)
+      hence "wline_of ?tw' OUT (i + 1) = wline_of tw OUT (i + 1)"
+        by (metis add_mono1 worldline_upd2_before_dly)
       also have "... = wline_of tw TEMP i"
         using \<open>inv_second tw\<close> \<open>i < fst tw\<close> unfolding inv_second_def by auto
-      also have "... = wline_of tw' TEMP i"
-        by (simp add: tw'_def worldline_upd2_def worldline_upd_def)
-      finally have "wline_of tw' OUT (i + 1) = wline_of tw' TEMP i"
+      also have "... = wline_of ?tw' TEMP i"
+        by (simp add: worldline_upd2_def worldline_upd_def)
+      finally have "wline_of ?tw' OUT (i + 1) = wline_of ?tw' TEMP i"
         by auto }
     moreover
-    { assume "fst tw \<le> i \<and> i < t' - 1"
-      hence "fst tw' \<le> i \<and> i < t' - 1"
-        by (simp add: \<open>get_time tw = get_time tw'\<close>)
-      hence "wline_of tw' OUT (i + 1) = wline_of tw' OUT (fst tw' + 1)"
-        by (metis (no_types, lifting) One_nat_def Suc_less_eq \<open>get_time tw' < t'\<close> add.right_neutral
-        add_Suc_right le_Suc_eq less_diff_conv not_less t'_def unchanged_until_next_time_world)
-      also have "... = wline_of tw' OUT (fst tw + 1)"
-        using \<open>get_time tw = get_time tw'\<close> by auto
+    { assume "fst tw \<le> i \<and> i < j - 1"
+      hence "fst ?tw' \<le> i \<and> i < j - 1"
+        by (simp add: \<open>get_time tw = get_time ?tw'\<close>)
+      hence "wline_of ?tw' OUT (i + 1) = wline_of ?tw' OUT (fst ?tw' + 1)"
+        by (smt \<open>j \<in> {get_time tw[ OUT, 1 :=\<^sub>2 v]<..next_time_world tw[ OUT, 1 :=\<^sub>2 v]}\<close>
+        dual_order.strict_trans1 greaterThanAtMost_iff le_add1 less_diff_conv not_less
+        unchanged_until_next_time_world)
+      also have "... = wline_of ?tw' OUT (fst tw + 1)"
+        using \<open>get_time tw = get_time ?tw'\<close> by auto
       also have "... = wline_of tw TEMP (fst tw) "
-        unfolding tw'_def
         by (metis \<open>beval_world_raw2 tw (Bsig TEMP) v\<close> beval_world_raw2_Bsig beval_world_raw2_def
         beval_world_raw_deterministic worldline_upd2_at_dly)
-      also have "... = wline_of tw' TEMP (fst tw')"
-        by (metis \<open>get_time tw = get_time tw'\<close> less_add_one tw'_def worldline_upd2_before_dly)
-      also have "... = wline_of tw' TEMP i"
-        using \<open>get_time tw' \<le> i \<and> i < t' - 1\<close> \<open>i < t'\<close> t'_def unchanged_until_next_time_world
-        by metis
-      finally have "wline_of tw' OUT (i + 1) = wline_of tw' TEMP i"
+      also have "... = wline_of ?tw' TEMP (fst ?tw')"
+        by (metis \<open>get_time tw = get_time ?tw'\<close> less_add_one worldline_upd2_before_dly)
+      also have "... = wline_of ?tw' TEMP i"
+        using \<open>get_time ?tw' \<le> i \<and> i < j - 1\<close> \<open>i < j\<close> unchanged_until_next_time_world
+        by (metis (no_types, lifting) \<open>j \<in> {get_time tw[ OUT, 1 :=\<^sub>2 v]<..next_time_world tw[ OUT, 1
+        :=\<^sub>2 v]}\<close> dual_order.strict_trans1 greaterThanAtMost_iff)
+      finally have "wline_of ?tw' OUT (i + 1) = wline_of ?tw' TEMP i"
         by auto }
     moreover
-    { assume "i = t' - 1"
-      hence "wline_of tw' OUT (i + 1) = wline_of tw' OUT t'"
-        using \<open>i < t'\<close> by auto
+    { assume "i = j - 1"
+      hence "wline_of ?tw' OUT (i + 1) = wline_of ?tw' OUT j"
+        using \<open>i < j\<close> by auto
       also have "... = wline_of tw TEMP (fst tw)"
-        unfolding tw'_def using \<open>fst tw < t'\<close>
+        using \<open>fst tw < j\<close>
         by (smt \<open>beval_world_raw2 tw (Bsig TEMP) v\<close> beval_world_raw2_Bsig beval_world_raw2_def
         beval_world_raw_deterministic discrete leD o_apply snd_conv worldline_upd2_def
         worldline_upd_def)
-      also have "... = wline_of tw' TEMP (fst tw')"
-        by (metis \<open>get_time tw = get_time tw'\<close> less_add_one tw'_def worldline_upd2_before_dly)
-      also have "... = wline_of tw' TEMP i"
-        by (metis \<open>get_time tw = get_time tw'\<close> \<open>i < get_time tw \<Longrightarrow> wline_of tw' OUT (i + 1) =
-        wline_of tw' TEMP i\<close> \<open>i < t'\<close> calculation not_less t'_def unchanged_until_next_time_world)
-      finally have "wline_of tw' OUT (i + 1) = wline_of tw' TEMP i"
+      also have "... = wline_of ?tw' TEMP (fst ?tw')"
+        by (metis \<open>get_time tw = get_time ?tw'\<close> less_add_one worldline_upd2_before_dly)
+      also have "... = wline_of ?tw' TEMP i"
+        by (metis (no_types, lifting) Nat.le_diff_conv2 \<open>i < j\<close> \<open>i = j - 1\<close> \<open>j \<in> {get_time tw[ OUT,
+        1 :=\<^sub>2 v]<..next_time_world tw[ OUT, 1 :=\<^sub>2 v]}\<close> discrete greaterThanAtMost_iff le_add2
+        le_trans unchanged_until_next_time_world)
+      finally have "wline_of ?tw' OUT (i + 1) = wline_of ?tw' TEMP i"
         by auto }
-    ultimately have "wline_of tw' OUT (i + 1) = wline_of tw' TEMP i"
-      using \<open>i < t'\<close> by fastforce
-    thus "wline_of (t', snd tw') OUT (i + 1) = wline_of (t', snd tw') TEMP i"
+    ultimately have "wline_of ?tw' OUT (i + 1) = wline_of ?tw' TEMP i"
+      using \<open>i < j\<close> by fastforce
+    thus "wline_of (j, snd ?tw') OUT (i + 1) = wline_of (j, snd ?tw') TEMP i"
       by auto
   qed
 
-  have 3: "inv_second_hold (t', snd tw')"
+  have 3: "inv_second_hold (j, snd ?tw')"
     unfolding inv_second_hold_def
   proof (rule, rule, rule)
     fix i
-    assume "disjnt {TEMP} (event_of (t', snd tw'))"
-    assume "fst (t', snd tw') \<le> i"
-    hence "t' \<le> i"
+    assume "disjnt {TEMP} (event_of (j, snd ?tw'))"
+    assume "fst (j, snd ?tw') \<le> i"
+    hence "j \<le> i"
       by auto
-    hence "beval_world_raw2 tw (Bsig TEMP) (wline_of tw' OUT (i + 1))"
-      using `fst tw < t'` unfolding tw'_def worldline_upd2_def worldline_upd_def
+    hence "beval_world_raw2 tw (Bsig TEMP) (wline_of ?tw' OUT (i + 1))"
+      using `fst tw < j` unfolding worldline_upd2_def worldline_upd_def
       using \<open>beval_world_raw2 tw (Bsig TEMP) v\<close> by auto
     also have "... = wline_of tw TEMP (fst tw)"
       by (metis beval_world_raw2_Bsig beval_world_raw2_def beval_world_raw_deterministic calculation)
-    also have "... = wline_of tw' TEMP (fst tw')"
-      by (metis \<open>get_time tw = get_time tw'\<close> less_add_one tw'_def worldline_upd2_before_dly)
-    also have "... = wline_of tw' TEMP (t' - 1)"
-      using unchanged_until_next_time_world \<open>fst tw < t'\<close>
-      by (metis Suc_diff_1 \<open>get_time tw = get_time tw'\<close> diff_less gr_implies_not_zero le_Suc_eq
-      less_imp_le_nat nat_neq_iff t'_def zero_less_one)
-    also have "... = wline_of tw' TEMP t'"
-      using \<open>disjnt {TEMP} (event_of (t', snd tw'))\<close> unfolding event_of_alt_def
-      using \<open>get_time tw < t'\<close> by auto
-    finally have "wline_of tw' OUT (i + 1) = wline_of tw' TEMP t'"
-      using \<open>wline_of tw TEMP (get_time tw) = wline_of tw' TEMP (get_time tw')\<close> \<open>wline_of tw' OUT (i
-      + 1) = wline_of tw TEMP (get_time tw)\<close> \<open>wline_of tw' TEMP (get_time tw') = wline_of tw' TEMP
-      (t' - 1)\<close> \<open>wline_of tw' TEMP (t' - 1) = wline_of tw' TEMP t'\<close> by auto
-    thus "wline_of (t', snd tw') OUT (i + 1) = wline_of (t', snd tw') TEMP (get_time (t', snd tw'))"
+    also have "... = wline_of ?tw' TEMP (fst ?tw')"
+      by (metis \<open>get_time tw = get_time ?tw'\<close> less_add_one worldline_upd2_before_dly)
+    also have "... = wline_of ?tw' TEMP (j - 1)"
+      using unchanged_until_next_time_world \<open>fst tw < j\<close>
+      by (metis (no_types, hide_lams) \<open>get_time tw[ OUT, 1 :=\<^sub>2 v] < j\<close> \<open>j \<in> {get_time tw[ OUT, 1
+      :=\<^sub>2 v]<..next_time_world tw[ OUT, 1 :=\<^sub>2 v]}\<close> add_leE add_le_imp_le_diff discrete
+      greaterThanAtMost_iff less_diff_conv2 not_less)
+    also have "... = wline_of ?tw' TEMP j"
+      using \<open>disjnt {TEMP} (event_of (j, snd ?tw'))\<close> unfolding event_of_alt_def
+      using \<open>get_time tw < j\<close> by auto
+    finally have "wline_of ?tw' OUT (i + 1) = wline_of ?tw' TEMP j"
+      using \<open>wline_of tw TEMP (get_time tw) = wline_of ?tw' TEMP (get_time ?tw')\<close> \<open>wline_of ?tw' OUT (i
+      + 1) = wline_of tw TEMP (get_time tw)\<close> \<open>wline_of ?tw' TEMP (get_time ?tw') = wline_of ?tw' TEMP
+      (j - 1)\<close> \<open>wline_of ?tw' TEMP (j - 1) = wline_of ?tw' TEMP j\<close> by auto
+    thus "wline_of (j, snd ?tw') OUT (i + 1) = wline_of (j, snd ?tw') TEMP (get_time (j, snd ?tw'))"
       by auto
   qed
 
-  show "inv_first (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v]) \<and>
-       inv_second (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v]) \<and>
-       inv_first_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v]) \<and> inv_second_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v])"
-    using 0 1 2 3 unfolding t'_def tw'_def by auto
+  show " inv_first (j, snd tw[ OUT, 1 :=\<^sub>2 v]) \<and> inv_first_hold (j, snd tw[ OUT, 1 :=\<^sub>2 v])" and 
+       " inv_second (j, snd tw[ OUT, 1 :=\<^sub>2 v]) \<and> inv_second_hold (j, snd tw[ OUT, 1 :=\<^sub>2 v])"
+    using 0 1 2 3   by auto
 qed
 
 lemma inv_second_next_time_world:
   assumes "inv_second tw" and "inv_second_hold tw" and " disjnt {TEMP} (event_of tw)"
-  shows "inv_second (next_time_world tw, snd tw)"
+  shows "\<forall>j \<in> {fst tw <.. next_time_world tw}. inv_second (j, snd tw)"
   unfolding inv_second_def
-proof (rule, rule)
+proof (rule, rule, rule)
+  fix j
+  assume "j \<in> {fst tw <.. next_time_world tw}"
   have *: "(\<forall>i \<ge> fst tw. wline_of tw OUT (i + 1) = wline_of tw TEMP (fst tw))"
     using assms(2-3) unfolding inv_second_hold_def by auto
   fix i
-  assume "i < fst (next_time_world tw, snd tw)"
-  hence "i < next_time_world tw"
+  assume "i < fst (j, snd tw)"
+  hence "i < j"
     by auto
   hence "i < fst tw \<or> fst tw \<le> i"
     by auto
@@ -905,76 +954,84 @@ proof (rule, rule)
     with * have "wline_of tw OUT (i + 1) = wline_of tw TEMP (fst tw)"
       by blast
     also have "... = wline_of tw TEMP i"
-      using \<open>i < next_time_world tw\<close> unchanged_until_next_time_world
-      using \<open>get_time tw \<le> i\<close> by metis
+      using \<open>i < j\<close> unchanged_until_next_time_world
+      using \<open>get_time tw \<le> i\<close> 
+      by (metis (mono_tags, hide_lams) \<open>j \<in> {get_time tw<..next_time_world tw}\<close> dual_order.trans
+      greaterThanAtMost_iff not_less)
     finally have "wline_of tw OUT (i + 1) = wline_of tw TEMP i"
       by auto }
   ultimately have "wline_of tw OUT (i + 1) = wline_of tw TEMP i"
     by auto
-  thus " wline_of (next_time_world tw, snd tw) OUT (i + 1) = wline_of (next_time_world tw, snd tw) TEMP i"
+  thus " wline_of (j, snd tw) OUT (i + 1) = wline_of (j, snd tw) TEMP i"
     by auto
-qed
+qed 
 
 lemma inv_second_hold_next_time_world:
   assumes "inv_second_hold tw" and "disjnt {TEMP} (event_of tw)"
-  shows " inv_second_hold (next_time_world tw, snd tw)"
+  shows " \<forall>j \<in> {fst tw <.. next_time_world tw}. inv_second_hold (j, snd tw)"
   unfolding inv_second_hold_def
-proof (rule, rule, rule)
+proof (rule, rule, rule, rule)
+  fix j
+  assume "j \<in> {fst tw <.. next_time_world tw}"
   have *: "(\<forall>i \<ge> fst tw. wline_of tw OUT (i + 1) = wline_of tw TEMP (fst tw))"
     using assms(1-2) unfolding inv_second_hold_def by auto
   fix i
-  assume "disjnt {TEMP} (event_of (next_time_world tw, snd tw))"
-  assume "get_time (next_time_world tw, snd tw) \<le> i"
-  hence "next_time_world tw \<le> i"
+  assume "disjnt {TEMP} (event_of (j, snd tw))"
+  assume "get_time (j, snd tw) \<le> i"
+  hence "j \<le> i"
     by auto
   hence "fst tw \<le> i"
-    using next_time_world_at_least  by (metis dual_order.trans order.strict_iff_order)
+    using \<open>j \<in> {get_time tw<..next_time_world tw}\<close> by auto
   hence "wline_of tw OUT (i + 1) = wline_of tw TEMP (fst tw)"
     using * by blast
-  also have "... = wline_of tw TEMP (next_time_world tw - 1)"
+  also have "... = wline_of tw TEMP (j - 1)"
     using unchanged_until_next_time_world
-    by (metis (no_types, lifting) Suc_diff_1 diff_less dual_order.strict_iff_order le_0_eq le_Suc_eq
-    next_time_world_at_least not_less zero_less_one)
-  also have "... = wline_of tw TEMP (next_time_world tw)"
-    using \<open>disjnt {TEMP} (event_of (next_time_world tw, snd tw))\<close>
+    by (smt One_nat_def \<open>j \<in> {get_time tw<..next_time_world tw}\<close> add_diff_cancel_left' diff_add
+    diff_is_0_eq' discrete greaterThanAtMost_iff not_less plus_1_eq_Suc)
+  also have "... = wline_of tw TEMP (j)"
+    using \<open>disjnt {TEMP} (event_of (j, snd tw))\<close>
     unfolding event_of_alt_def
     by (smt comp_apply diff_0_eq_0 disjnt_insert1 fst_conv mem_Collect_eq snd_conv)
-  finally have "wline_of tw OUT (i + 1) = wline_of tw TEMP (next_time_world tw)"
+  finally have "wline_of tw OUT (i + 1) = wline_of tw TEMP (j)"
     by auto
-  thus "wline_of (next_time_world tw, snd tw) OUT (i + 1) =
-        wline_of (next_time_world tw, snd tw) TEMP (get_time (next_time_world tw, snd tw))"
+  thus "wline_of (j, snd tw) OUT (i + 1) =
+        wline_of (j, snd tw) TEMP (get_time (j, snd tw))"
     by auto
 qed
 
 lemma conc_next_time_second:
-  "\<turnstile> \<lbrace>\<lambda>tw. (let v = wline_of tw TEMP (fst tw) in inv_first (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v])) \<and>
-            inv_first (next_time_world tw, snd tw) \<and>
-            inv_second tw \<and>
-           (let v = wline_of tw TEMP (fst tw) in inv_first_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd tw[ OUT, 1 :=\<^sub>2 v])) \<and>
-            inv_first_hold (next_time_world tw, snd tw) \<and> inv_second_hold tw\<rbrace>
+  "\<turnstile> \<lbrace>\<lambda>tw. (\<forall>j\<in>{get_time tw<..next_time_world tw}. inv_first (j, snd tw) \<and> inv_first_hold (j, snd tw)) \<and>
+            (let v = wline_of tw TEMP (get_time tw); tw' = tw[ OUT, 1 :=\<^sub>2 v]
+             in \<forall>j\<in>{get_time tw'<..next_time_world tw'}. inv_first (j, snd tw') \<and> inv_first_hold (j, snd tw')) \<and>
+            inv_second tw \<and> inv_second_hold tw\<rbrace>
         process {TEMP} : Bassign_trans OUT (Bsig TEMP) 1
-       \<lbrace>\<lambda>tw. inv_first (next_time_world tw, snd tw) \<and>
-             inv_second (next_time_world tw, snd tw) \<and> inv_first_hold (next_time_world tw, snd tw) \<and> inv_second_hold (next_time_world tw, snd tw)\<rbrace>"
+       \<lbrace>\<lambda>tw. (\<forall>i\<in>{get_time tw<..next_time_world tw}. inv_first (i, snd tw) \<and> inv_first_hold (i, snd tw)) \<and>
+             (\<forall>i\<in>{get_time tw<..next_time_world tw}. inv_second (i, snd tw) \<and> inv_second_hold (i, snd tw))\<rbrace>"
   apply (rule Single)
   apply (rule snd_seq_part_when_not_disjnt)
   using inv_second_hold_next_time_world inv_second_next_time_world
   by auto
 
-lemma conc_next_time_combined:
+lemma pre_conc_next_time_combined:
   "\<turnstile> \<lbrace>\<lambda>tw. inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw\<rbrace>
         two_inverter
-     \<lbrace>\<lambda>tw. inv_first (next_time_world tw, snd tw)  \<and> inv_second (next_time_world tw, snd tw)
-         \<and> inv_first_hold (next_time_world tw, snd tw)  \<and> inv_second_hold (next_time_world tw, snd tw)\<rbrace>"
+     \<lbrace>\<lambda>tw. (\<forall>i\<in>{fst tw<..next_time_world tw}. inv_first (i, snd tw)  \<and> inv_first_hold  (i, snd tw))
+         \<and> (\<forall>i\<in>{fst tw<..next_time_world tw}. inv_second (i, snd tw) \<and> inv_second_hold (i, snd tw))\<rbrace>"
   unfolding two_inverter_def
-  apply (rule Parallel[where R="\<lambda>tw. (let v = wline_of tw TEMP (fst tw) in inv_first (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd  tw[ OUT, 1 :=\<^sub>2 v]))
-                                   \<and> inv_first (next_time_world tw, snd tw)
-                                   \<and> inv_second tw
-                                   \<and> (let v = wline_of tw TEMP (fst tw) in inv_first_hold (next_time_world tw[ OUT, 1 :=\<^sub>2 v], snd  tw[ OUT, 1 :=\<^sub>2 v]))
-                                   \<and> inv_first_hold (next_time_world tw, snd tw)
-                                   \<and> inv_second_hold tw"])
+  apply (rule Parallel[where R="\<lambda>tw. (\<forall>j \<in> {fst tw <.. next_time_world tw}. inv_first (j, snd tw) \<and> inv_first_hold (j, snd tw))
+                                   \<and> (let v = wline_of tw TEMP (fst tw); tw' = tw[OUT, 1 :=\<^sub>2 v] in (\<forall>j \<in> {fst tw' <.. next_time_world tw'}. inv_first (j, snd tw') \<and> inv_first_hold (j, snd tw')))
+                                   \<and> inv_second tw \<and> inv_second_hold tw"])
   apply (rule conc_next_time)
   apply (rule conc_next_time_second)
   by (auto simp add: conc_stmt_wf_def)
+
+lemma conc_next_time_combined:
+  "\<turnstile> \<lbrace>\<lambda>tw. inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw\<rbrace>
+        two_inverter
+     \<lbrace>\<lambda>tw. \<forall>i\<in>{get_time tw<..next_time_world tw}. inv_first (i, snd tw) \<and> inv_second (i, snd tw) \<and> inv_first_hold (i, snd tw) \<and> inv_second_hold (i, snd tw)\<rbrace>"
+  apply (rule Conseq'[rotated])
+  apply (rule pre_conc_next_time_combined)
+  by auto
 
 theorem sim_correctness_two_inverter:
   " \<turnstile>\<^sub>s \<lbrace>\<lambda>tw. inv_first tw \<and> inv_second tw \<and> inv_first_hold tw \<and> inv_second_hold tw\<rbrace>
@@ -1357,7 +1414,7 @@ lemma
 proof -
   obtain tw where "init_sim (0, w) two_inverter tw" and  "tw, i + 1, two_inverter \<Rightarrow>\<^sub>S tw'"
     using premises_sim_fin_obt[OF assms] by auto
-  hence "i + 1 < fst tw'"
+  hence "i + 1 = fst tw'"
     using world_maxtime_lt_fst_tres  by blast
   have "conc_stmt_wf two_inverter"
     unfolding conc_stmt_wf_def two_inverter_def by auto
@@ -1375,8 +1432,8 @@ proof -
     using \<open>tw, i + 1, two_inverter \<Rightarrow>\<^sub>S tw'\<close> unfolding sim_hoare_valid_def by blast
   hence "\<forall>i < fst tw'.  wline_of tw' TEMP (i + 1) = wline_of tw' IN i"
     unfolding inv_first_def by auto
-  with \<open>i + 1 < fst tw'\<close> show ?thesis
-    by auto
+  with \<open>i + 1 = fst tw'\<close> show ?thesis
+    by (metis less_add_one)
 qed
 
 lemma
@@ -1385,7 +1442,7 @@ lemma
 proof -
   obtain tw where "init_sim (0, w) two_inverter tw" and  "tw, i + 1, two_inverter \<Rightarrow>\<^sub>S tw'"
     using premises_sim_fin_obt[OF assms] by auto
-  hence "i + 1 < fst tw'"
+  hence "i + 1 = fst tw'"
     using world_maxtime_lt_fst_tres  by blast
   have "conc_stmt_wf two_inverter"
     unfolding conc_stmt_wf_def two_inverter_def by auto
@@ -1403,8 +1460,8 @@ proof -
     using \<open>tw, i + 1, two_inverter \<Rightarrow>\<^sub>S tw'\<close> unfolding sim_hoare_valid_def by blast
   hence "\<forall>i < fst tw'.  wline_of tw' OUT (i + 1) = wline_of tw' TEMP i"
     unfolding inv_second_def by auto
-  with \<open>i + 1 < fst tw'\<close> show ?thesis
-    by auto
+  with \<open>i + 1 = fst tw'\<close> show ?thesis
+    by (metis less_add_one)
 qed
 
 end
