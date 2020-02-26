@@ -132,8 +132,7 @@ proof (rule)
           using \<open>fst tw \<le> i \<and> i < j - 1\<close> unfolding tw'_def worldline_upd2_def worldline_upd_def
           by auto
         also have "... = wline_of tw IN1 (fst tw)"
-          by (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-             (metis assms(3) beval_world_raw2_Bsig beval_world_raw2_def beval_world_raw_deterministic)
+          by (metis assms(3) beval_world_raw2_Bsig beval_world_raw2_def beval_world_raw_deterministic)
         also have " ... = (if bval_of_wline tw SEL (fst tw) then wline_of tw IN1 (fst tw) else wline_of tw IN0 (fst tw))"
           using \<open>bval_of_wline tw SEL (fst tw)\<close> by auto
         \<comment> \<open>notice the change from @{term "tw"} to @{term "tw'"}\<close>

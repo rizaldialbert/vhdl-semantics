@@ -1083,7 +1083,6 @@ lemma purge_trans_post_preserve_non_stuttering:
   defines "\<tau>'  \<equiv> purge_raw \<tau> t dly sig (\<sigma> sig) cur_val"
   defines "\<tau>'' \<equiv> trans_post_raw sig cur_val (\<sigma> sig) \<tau>' t dly"
   assumes "\<forall>n. n \<le> t \<longrightarrow>  \<tau> n = 0"
-  assumes "0 < dly"
   shows "non_stuttering (to_trans_raw_sig \<tau>'') \<sigma> sig"
 proof (cases "cur_val = \<sigma> sig")
   case False
@@ -1277,8 +1276,8 @@ proof (cases "cur_val = \<sigma> sig")
           Some time \<and> time \<le> t + dly\<close> local.lookup)
       next
         show "\<forall>j>time. j \<le> t + (dly - 1) \<longrightarrow> \<tau>' j sig = None"
-          by (metis (mono_tags, lifting) Suc_diff_1 add_Suc_right assms(5) fun_upd_triv
-          le_imp_less_Suc local.lookup override_on_apply_in override_on_apply_notin
+          by (smt Suc_diff_1 \<open>t < time\<close> \<open>time < t + dly\<close> add_Suc_right fun_upd_triv le_imp_less_Suc
+          less_add_same_cancel1 less_trans lookup override_on_apply_in override_on_apply_notin
           time_greatest')
       qed
       thus "\<not> post_necessary_raw (dly - 1) \<tau>' t sig cur_val (\<sigma> sig)"
@@ -1292,10 +1291,11 @@ proof (cases "cur_val = \<sigma> sig")
         using \<open>inf_time (to_trans_raw_sig \<tau>) sig (t + dly) = Some time \<and> time \<le> t + dly\<close> by auto
       hence "\<forall>i\<le>t + (dly - 1). \<tau>' i sig = None"
         using assms(4)
-        by (metis (no_types, lifting) Suc_diff_1 \<open>\<tau> t sig = None\<close> \<open>inf_time (to_trans_raw_sig \<tau>)
-        sig (t + dly) = Some time \<and> time \<le> t + dly\<close> \<open>time = t + dly\<close> \<tau>'_def add_Suc_right
-        add_diff_cancel_right' assms(5) fun_upd_same greaterThanLessThan_iff le_diff_conv
-        le_imp_less_Suc not_less override_on_apply_in purge_preserve_trans_removal_nonstrict)
+        by (smt Suc_diff_1 \<open>\<tau> t sig = None\<close> \<open>inf_time (to_trans_raw_sig \<tau>) sig (t + dly) = Some time
+        \<and> time \<le> t + dly\<close> \<open>t < time\<close> \<open>time = t + dly\<close> \<tau>'_def add_Suc_right add_diff_cancel_left'
+        add_diff_cancel_right' fun_upd_eqD fun_upd_triv greaterThanLessThan_iff le_diff_conv
+        le_imp_less_Suc not_less override_on_apply_in purge_preserve_trans_removal_nonstrict
+        zero_less_diff)
       hence "(\<forall>i\<le>t + (dly - 1). \<tau>' i sig = None) \<and> cur_val \<noteq> \<sigma> sig"
         using False by blast
       thus "post_necessary_raw (dly - 1) \<tau>' t sig cur_val (\<sigma> sig)"
@@ -1414,7 +1414,7 @@ proof (cases "cur_val = \<sigma> sig")
           hence "k \<le> t"
             by auto
           hence "\<tau>'' k sig = \<tau>' k sig"
-            unfolding \<tau>''_new_def post_raw_def  using assms(5) by auto
+            unfolding \<tau>''_new_def post_raw_def  using "*" by auto
           also have "... = \<tau> k sig"
             unfolding lookup using `k \<le> t`
             by (metis \<tau>'_def local.lookup purge_raw_before_now_unchanged)
@@ -1746,7 +1746,6 @@ lemma trans_post_preserves_non_stuttering:
   assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> s"
   assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
   assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
-  assumes "nonneg_delay cs"
   assumes "cs = Bassign_trans sig e dly"
   shows "non_stuttering (to_trans_raw_sig \<tau>') \<sigma> s"
   using assms
@@ -1756,14 +1755,12 @@ proof (induction cs arbitrary: \<tau> \<tau>')
 next
   case (Bassign_trans sig e dly)
   obtain x where "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b x"
-    using Bassign_trans.prems(5) assms(2) assms(5) by (metis seq_cases_trans)
+    by (meson Bassign_trans.prems(2) seq_cases_trans)
   hence \<tau>'_def: "\<tau>' = trans_post_raw sig x (\<sigma> sig) \<tau> t dly"
     using Bassign_trans.prems(2) beval_raw_deterministic by (metis seq_cases_trans)
   have prev_zero: "\<And>n. n < t \<Longrightarrow> to_trans_raw_sig \<tau> s n = 0"
     using Bassign_trans(3) unfolding to_trans_raw_sig_def
     by (auto simp add: zero_fun_def zero_option_def)
-  have "0 < dly"
-    using Bassign_trans by auto
   have "sig \<noteq> s \<or> sig = s" by auto
   moreover
   { assume "sig \<noteq> s"
@@ -1786,9 +1783,66 @@ next
     { assume nec: "post_necessary_raw (dly-1) \<tau> t sig x (\<sigma> sig)"
       hence lookup: "\<tau>' = post_raw sig x \<tau> (t + dly)"
         unfolding \<tau>'_def by (auto simp add: trans_post_raw_def)
-      hence ?case
-        using post_raw_preserves_non_stuttering[OF Bassign_trans(1)]
-        using Bassign_trans.prems(3) \<open>0 < dly\<close> \<open>sig = s\<close> calculation(2) by blast }
+      have "0 < dly \<or> dly = 0"
+        by auto
+      moreover
+      { assume "0 < dly "
+        hence ?case
+          using post_raw_preserves_non_stuttering[OF Bassign_trans(1)]
+          using Bassign_trans.prems(3) \<open>0 < dly\<close> \<open>sig = s\<close>  using lookup nec by blast }
+      moreover
+      { assume "dly = 0"
+        hence nec': "post_necessary_raw 0 \<tau> t sig x (\<sigma> sig)" and lookup': "\<tau>' = post_raw sig x \<tau> t"
+          using nec lookup by auto
+        have keys': "keys (to_trans_raw_sig \<tau>' s) = {t}"
+        proof 
+          { fix k
+            assume "k \<in> keys (to_trans_raw_sig \<tau>' s)"
+            hence "to_trans_raw_sig \<tau>' s k \<noteq> 0"
+              unfolding keys_def by auto
+            have "\<not> k < t"
+            proof (rule ccontr)
+              assume "\<not> \<not> k < t" hence "k < t" by auto
+              hence "to_trans_raw_sig \<tau>' s k = 0"
+                using prev_zero unfolding lookup' post_raw_def by (simp add: to_trans_raw_sig_def)
+              with `to_trans_raw_sig \<tau>' s k \<noteq> 0` show False by auto
+            qed
+            moreover have "\<not> k > t"
+            proof (rule ccontr)
+              assume "\<not> \<not> k > t" hence "k > t" by auto
+              hence "to_trans_raw_sig \<tau>' s k = 0"
+                unfolding lookup' post_raw_def
+              proof -
+                have "k \<noteq> t"
+                  using \<open>t < k\<close> by blast
+              then show "to_trans_raw_sig (\<lambda>n. if n = t then \<tau> n(sig \<mapsto> x) else if t < n then (\<tau> n)(sig := None) else \<tau> n) s k = 0"
+                by (simp add: \<open>sig = s\<close> \<open>t < k\<close> to_trans_raw_sig_def zero_option_def)
+              qed
+              with `to_trans_raw_sig \<tau>' s k \<noteq> 0` show False 
+                by auto
+            qed
+            ultimately have "k = t"
+              by auto }
+          thus "keys (to_trans_raw_sig \<tau>' s) \<subseteq> {t}"
+            by auto
+          have "t \<in> keys (to_trans_raw_sig \<tau>' s)"
+            unfolding lookup' post_raw_def 
+            by (simp add: \<open>sig = s\<close> keys_def to_trans_raw_sig_def zero_option_def)
+          thus "{t} \<subseteq> keys (to_trans_raw_sig \<tau>' s)"
+            by auto
+        qed
+        have least: "(LEAST k. k \<in> {t}) = t"
+          by (meson LeastI_ex singleton_iff)
+        have "(\<exists>i val'. i \<le> t \<and> \<tau> i sig = Some val' \<and> val' \<noteq> x \<and> (\<forall>j>i. j \<le> t \<longrightarrow> \<tau> j sig = None)) \<or> (\<forall>i\<le>t. \<tau> i sig = None) \<and> x \<noteq> \<sigma> sig"
+          using nec' unfolding post_necessary_raw_correctness2 by auto
+        hence "(\<forall>i\<le>t. \<tau> i sig = None) \<and> x \<noteq> \<sigma> sig"
+          by (metis Bassign_trans.prems(3) add.right_neutral option.distinct(1) zero_fun_def
+          zero_option_def)
+        hence " \<sigma> s \<noteq> the (to_trans_raw_sig \<tau>' s (LEAST k. k \<in> {t}))"
+          unfolding lookup' post_raw_def least to_trans_raw_sig_def \<open>sig = s\<close> by auto
+        hence ?case
+          unfolding non_stuttering_def keys' by blast }
+      ultimately have ?case by auto }
     ultimately have ?case by auto }
   ultimately show ?case by auto
 next
@@ -1844,8 +1898,6 @@ next
     by (meson b_seq_exec.intros(5) trans_post_preserves_non_stuttering)
 next
   case (6 t \<sigma> \<gamma> \<theta> def e x sig \<tau> dly \<tau>')
-  hence "0 < dly"
-    by simp
   hence \<tau>'_def': "\<tau>' = trans_post_raw sig x (\<sigma> sig) (purge_raw \<tau> t dly sig (\<sigma> sig) x) t dly"
     using 6  by (simp add: inr_post_raw_def)
   let ?\<tau> = "purge_raw \<tau> t dly sig (\<sigma> sig) x"
@@ -1868,10 +1920,8 @@ next
       by auto
     hence 2: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs2, ?\<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       using \<tau>'_def' by (meson "6.hyps"(1) b_seq_exec.intros(5))
-    have 4: "nonneg_delay cs2"
-      by (simp add: \<open>0 < dly\<close> cs2_def)
     hence ?case
-      using "6.prems"(1) "6.prems"(2) \<open>0 < dly\<close> \<tau>'_def' calculation
+      using "6.prems"(1) "6.prems"(2)  \<tau>'_def' calculation
       purge_trans_post_preserve_non_stuttering by force }
   ultimately show ?case
     by auto

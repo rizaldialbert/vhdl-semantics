@@ -182,7 +182,9 @@ proof -
 qed
 
 lemma pre_nand_seq_hoare_next_time:
-  "\<turnstile> [\<lambda>tw. nand_inv tw \<and> wityping \<Gamma> (snd tw)] (Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1) [\<lambda>tw. nand_inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)]"
+  "\<turnstile> [\<lambda>tw. nand_inv tw \<and> wityping \<Gamma> (snd tw)] 
+        (Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1) 
+     [\<lambda>tw. nand_inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)]"
   apply (rule Conseq2[where Q="\<lambda>tw. nand_inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule Assign2, simp)
   using nand_inv_next_time beval_world_raw2_type worldline_upd_preserve_wityping
   by (metis scalar_type_nand3_axioms scalar_type_nand3_def snd_conv worldline_upd2_def)
@@ -201,13 +203,17 @@ lemma nand_seq_hoare_next_time:
   by (simp add: nand_seq_hoare_next_time_aux) auto
 
 lemma pre_nand_seq_hoare_next_time0:
-  " \<turnstile> [\<lambda>tw. get_time tw = 0 \<and> wityping \<Gamma> (snd tw)] Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 [\<lambda>tw. nand_inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)]"
+  " \<turnstile> [\<lambda>tw. get_time tw = 0 \<and> wityping \<Gamma> (snd tw)] 
+        Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 
+      [\<lambda>tw. nand_inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)]"
   apply (rule Conseq2[where P="\<lambda>tw. nand_inv tw \<and> wityping \<Gamma> (snd tw)" and Q="\<lambda>tw. nand_inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)"])
   using pre_nand_seq_hoare_next_time unfolding nand_inv_def  using gr_implies_not_zero
   by auto
 
 lemma nand_seq_hoare_next_time0:
-  " \<turnstile> [\<lambda>tw. get_time tw = 0 \<and> wityping \<Gamma> (snd tw)] Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 [\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. nand_inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)]"
+  " \<turnstile> [\<lambda>tw. get_time tw = 0 \<and> wityping \<Gamma> (snd tw)] 
+          Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 
+      [\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. nand_inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)]"
   apply (rule Conseq2[rotated])
     apply (rule pre_nand_seq_hoare_next_time0)
   by (simp add: nand_seq_hoare_next_time_aux) auto

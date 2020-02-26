@@ -2512,8 +2512,6 @@ next
             using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5'' `conc_wt \<Gamma> nand3` `styping \<Gamma> \<sigma>''`
                   `ttyping \<Gamma> \<theta>''` `ttyping \<Gamma> (\<tau>''(next_time 0 \<tau>'' := 0))` ` \<Gamma> C = Bty` `styping \<Gamma> def`]
             by blast
-(*           have "next_time 0 \<tau>'' \<le> i"
-            using `next_time 0 \<tau>'' < Suc i`  using less_Suc_eq_le sorry *)
           moreover have "next_time 0 \<tau>'' \<le> i \<Longrightarrow> signal_of (\<sigma>'' A) \<tau>'' A i = signal_of (\<sigma>' A) \<tau>'' A i"
           proof (cases "inf_time (to_trans_raw_sig \<tau>'') A i = None")
             case True
@@ -2631,7 +2629,7 @@ next
           finally have hel2: "signal_of (\<sigma>' B) \<tau>'' B i = signal_of (def B) \<tau> B i"
             by auto
           with ** have ?thesis
-            using hel hel2  using le_less_linear  
+            using hel hel2  using le_less_linear
             sorry }
         ultimately show ?thesis by auto
       next
