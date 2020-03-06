@@ -275,6 +275,22 @@ proof -
     by auto
 qed
 
+lemma signal_of_derivative_hist_raw3:
+  assumes "0 \<le> t'" 
+  shows   "signal_of (fst w s') (derivative_hist_raw w 0) s' t' = fst w s'"
+proof -
+  have "derivative_hist_raw w 0 = (\<lambda>n. Map.empty)"
+    unfolding derivative_hist_raw_def by auto
+  hence "inf_time (to_trans_raw_sig (derivative_hist_raw w 0)) s' t' = inf_time (to_trans_raw_sig (\<lambda>n. Map.empty)) s' t'"
+    by auto
+  also have "... = inf_time (\<lambda>n. Map.empty) s' t'"
+    unfolding to_trans_raw_sig_def by auto
+  also have "... = None"
+    using inf_time_none_iff by force
+  finally show ?thesis
+    unfolding to_signal_def comp_def by auto
+qed
+
 lemma signal_of_derivative_raw_t:
   assumes "\<sigma> s' = snd w s' t"
   shows "signal_of (\<sigma> s') (derivative_raw w t) s' t = snd w s' t"

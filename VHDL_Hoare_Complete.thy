@@ -19,6 +19,10 @@ definition worldline_upd2 ::
   "nat \<times> 'signal worldline_init \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> nat \<times> 'signal worldline_init" ("_[ _, _ :=\<^sub>2 _]")
   where "worldline_upd2 \<equiv> \<lambda>tw sig dly val. (fst tw, worldline_upd (snd tw) sig (fst tw + dly) val)"
 
+lemma fst_worldline_upd2 [simp]:
+  "fst (tw[sig, t :=\<^sub>2 v]) = fst tw"
+  unfolding worldline_upd2_def by auto
+
 abbreviation wline_of where "wline_of (tw :: nat \<times> 'signal worldline_init) \<equiv> (snd o snd) tw"
 
 lemma worldline_upd2_before_dly:
@@ -2614,6 +2618,7 @@ inductive_cases world_seq_exec_alt_cases [elim!] :
   "world_seq_exec_alt tw (Bguarded g ss1 ss2) ss"
   "world_seq_exec_alt tw (Bassign_trans sig exp dly) ss"
   "world_seq_exec_alt tw (Bassign_inert sig exp dly) ss"
+  "world_seq_exec_alt tw (Bcase exp ((Explicit exp', ss) # choices)) tw'"
 
 lemma world_seq_exec_bcase_empty:
   "tw, Bcase exp [] \<Rightarrow>\<^sub>s tw"
@@ -8255,6 +8260,46 @@ lemma single_conc_stmt_preserve_wityping_init_hoare:
   apply (rule seq_stmt_preserve_wityping_hoare)
   using assms conc_wt.cases apply fastforce
   done
+
+lemma conc_stmt_preserve_wityping_hoare:
+  assumes "conc_wt \<Gamma> cs" and "conc_stmt_wf cs"
+  shows " \<turnstile> \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace> cs \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>"
+  using assms
+proof (induction rule: conc_wt.inducts)
+  case (1 \<Gamma> ss sl)
+  then show ?case 
+    using single_conc_stmt_preserve_wityping_hoare  by blast
+next
+  case (2 \<Gamma> cs1 cs2)
+  show ?case 
+    apply (rule Parallel[OF 2(3) 2(4)])
+    using 2  by (simp add: conc_stmt_wf_def)+
+qed
+
+lemma conc_stmt_preserve_wityping_hoare_semantic:
+  assumes "conc_wt \<Gamma> cs" and "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  shows " \<Turnstile> \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace> cs \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>"
+  using soundness_conc_hoare[OF conc_stmt_preserve_wityping_hoare] assms by blast
+
+lemma init_preserve_wityping:
+  assumes "conc_wt \<Gamma> cs" and "conc_stmt_wf cs"
+  shows "\<turnstile>\<^sub>I \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>  cs \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>"
+  using assms
+proof (induction rule:conc_wt.inducts)
+  case (1 \<Gamma> ss sl)
+  then show ?case 
+    using single_conc_stmt_preserve_wityping_init_hoare by auto
+next
+  case (2 \<Gamma> cs1 cs2)
+  show ?case 
+    apply (rule ParallelI[OF 2(3) 2(4)])
+    using 2 by (simp add: conc_stmt_wf_def)+
+qed
+
+lemma init_preserve_wityping_semantic:
+  assumes "conc_wt \<Gamma> cs" and "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  shows "\<Turnstile>\<^sub>I \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>  cs \<lbrace>\<lambda>tw. wityping \<Gamma> (snd tw)\<rbrace>"
+  using soundness_init_hoare[OF init_preserve_wityping[OF assms(1-2)] assms(2-3)] by auto
 
 lemma single_conc_stmt_preserve_wityping_init_sim_hoare:
   assumes "seq_wt \<Gamma> ss"

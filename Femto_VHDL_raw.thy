@@ -4278,8 +4278,8 @@ inductive bexp_wt :: "'s tyenv \<Rightarrow> 's bexp \<Rightarrow> ty \<Rightarr
 | "bexp_wt \<Gamma> exp1 type \<Longrightarrow> bexp_wt \<Gamma> exp2 type \<Longrightarrow> bexp_wt \<Gamma> (Bnor exp1 exp2) type"
 | "bexp_wt \<Gamma> exp1 type \<Longrightarrow> bexp_wt \<Gamma> exp2 type \<Longrightarrow> bexp_wt \<Gamma> (Bxor exp1 exp2) type"
 | "bexp_wt \<Gamma> exp1 type \<Longrightarrow> bexp_wt \<Gamma> exp2 type \<Longrightarrow> bexp_wt \<Gamma> (Bxnor exp1 exp2) type"
-| "bexp_wt \<Gamma> (Bsig sig) (Lty ki len) \<Longrightarrow> r \<le> l \<Longrightarrow> l - r + 1 \<le> len \<Longrightarrow> l < len
-                                                  \<Longrightarrow>  bexp_wt \<Gamma> (Bslice sig l r) (Lty ki (l - r + 1))"
+| "bexp_wt \<Gamma> (Bsig sig) (Lty ki len) \<Longrightarrow> res = l - r + 1 \<Longrightarrow> r \<le> l \<Longrightarrow> res \<le> len \<Longrightarrow> l < len
+                                                  \<Longrightarrow>  bexp_wt \<Gamma> (Bslice sig l r) (Lty ki res)"
 | "bexp_wt \<Gamma> (Bsig sig) (Lty ki len) \<Longrightarrow> idx < len \<Longrightarrow> bexp_wt \<Gamma> (Bindex sig idx) Bty"
 | "bexp_wt \<Gamma> exp1 (Lty Uns len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Uns len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> bexp_wt \<Gamma> (Badd exp1 exp2)  (Lty Uns (max len1 len2))"
 | "bexp_wt \<Gamma> exp1 (Lty Sig len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Sig len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> bexp_wt \<Gamma> (Badd exp1 exp2)  (Lty Sig (max len1 len2))"
@@ -4292,7 +4292,7 @@ inductive bexp_wt :: "'s tyenv \<Rightarrow> 's bexp \<Rightarrow> ty \<Rightarr
 | "bexp_wt \<Gamma> exp  (Lty Uns len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftr exp n)  (Lty Uns len)"
 | "bexp_wt \<Gamma> exp  (Lty Sig len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftr exp n)  (Lty Sig len)"
 | "bexp_wt \<Gamma> g Bty \<Longrightarrow> bexp_wt \<Gamma> th ty \<Longrightarrow> bexp_wt \<Gamma> el ty \<Longrightarrow> bexp_wt \<Gamma> (Bwhen th g el) ty"
-| "bexp_wt \<Gamma> (Bliteral sign val) (Lty sign (length val))"
+| "n = length val \<Longrightarrow> bexp_wt \<Gamma> (Bliteral sign val) (Lty sign n)"
 
 inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
                                   "bexp_wt \<Gamma> (Band  exp1 exp2) type"
@@ -4502,7 +4502,7 @@ next
   then show ?case
     using signal_of_preserve_well_typedness by fastforce
 next
-  case (13 \<Gamma> sig ki len r l)
+  case (13 \<Gamma> sig ki len res l r)
   obtain v' where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig sig \<longrightarrow>\<^sub>b v'"
     by (meson "13.prems"(4) beval_cases(13))
   hence "type_of v' = Lty ki len"
@@ -4523,13 +4523,11 @@ next
       by (metis \<open>{len - l - 1..len - r - 1} - {i. i < len} = {}\<close> card_empty diff_zero)
   qed
   also have "... = l - r + 1"
-    using 13(2-4)  by auto
+    using 13(2-4)   using "13.hyps"(5) by auto
   finally have "length (nths (lval_of v') {len - l - 1 .. len - r - 1}) = l - r + 1"
     by auto
   thus ?case
-    by (smt "13.hyps"(2) "13.hyps"(4) "13.prems"(4) Suc_diff_Suc \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> Bsig sig \<longrightarrow>\<^sub>b
-    v'\<close> \<open>type_of v' = Lty ki len\<close> add_diff_cancel_left' beval_cases(1) beval_cases(13) le_less_trans
-    plus_1_eq_Suc ty.inject type_of.simps(2) val.sel(3))
+    by (smt "13.hyps"(2) "13.hyps"(3) "13.hyps"(5) "13.prems"(4) Suc_diff_Suc \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> Bsig sig \<longrightarrow>\<^sub>b v'\<close> \<open>type_of v' = Lty ki len\<close> beval_cases(1) beval_cases(13) diff_Suc_1 le_less_trans ty.inject type_of.simps(2) val.sel(3))
 qed (fastforce)+
 
 lemma post_raw_preserve_type_correctness:
