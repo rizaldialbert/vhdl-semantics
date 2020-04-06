@@ -153,7 +153,7 @@ sensitivity list --- a set of signals which, if any of them changes, will trigge
 the process it guards.\<close>
 
 datatype 'signal conc_stmt =
-      Bpar "'signal conc_stmt" "'signal conc_stmt" ( "_ || _" [81, 82]80)
+      Bpar "'signal conc_stmt" "'signal conc_stmt" ( infixr "||" 80)
     | Bsingle "'signal set" (get_seq: "'signal seq_stmt") (" process _ : _" [81, 82]80)
 
 fun nonneg_delay_conc :: "'signal conc_stmt \<Rightarrow> bool" where
@@ -4268,7 +4268,7 @@ type_synonym 's tyenv = "'s \<Rightarrow> ty"
 inductive bexp_wt :: "'s tyenv \<Rightarrow> 's bexp \<Rightarrow> ty \<Rightarrow> bool" where
   "bexp_wt \<Gamma> Btrue Bty"
 | "bexp_wt \<Gamma> Bfalse Bty"
-| "bexp_wt \<Gamma> (Bsig sig) (\<Gamma> sig)"
+| "ty = \<Gamma> sig \<Longrightarrow> bexp_wt \<Gamma> (Bsig sig) ty"
 | "bexp_wt \<Gamma> (Bsig_event sig) Bty"
 | "bexp_wt \<Gamma> (Bsig_delayed sig dly) (\<Gamma> sig)"
 | "bexp_wt \<Gamma> exp type  \<Longrightarrow> bexp_wt \<Gamma> (Bnot exp) type"
@@ -4281,18 +4281,18 @@ inductive bexp_wt :: "'s tyenv \<Rightarrow> 's bexp \<Rightarrow> ty \<Rightarr
 | "bexp_wt \<Gamma> (Bsig sig) (Lty ki len) \<Longrightarrow> res = l - r + 1 \<Longrightarrow> r \<le> l \<Longrightarrow> res \<le> len \<Longrightarrow> l < len
                                                   \<Longrightarrow>  bexp_wt \<Gamma> (Bslice sig l r) (Lty ki res)"
 | "bexp_wt \<Gamma> (Bsig sig) (Lty ki len) \<Longrightarrow> idx < len \<Longrightarrow> bexp_wt \<Gamma> (Bindex sig idx) Bty"
-| "bexp_wt \<Gamma> exp1 (Lty Uns len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Uns len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> bexp_wt \<Gamma> (Badd exp1 exp2)  (Lty Uns (max len1 len2))"
-| "bexp_wt \<Gamma> exp1 (Lty Sig len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Sig len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> bexp_wt \<Gamma> (Badd exp1 exp2)  (Lty Sig (max len1 len2))"
-| "bexp_wt \<Gamma> exp1 (Lty Uns len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Uns len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> bexp_wt \<Gamma> (Bmult exp1 exp2) (Lty Uns (len1 + len2))"
-| "bexp_wt \<Gamma> exp1 (Lty Sig len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Sig len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> bexp_wt \<Gamma> (Bmult exp1 exp2) (Lty Sig (len1 + len2))"
-| "bexp_wt \<Gamma> exp1 (Lty Uns len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Uns len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> bexp_wt \<Gamma> (Bsub exp1 exp2)  (Lty Uns (max len1 len2))"
-| "bexp_wt \<Gamma> exp1 (Lty Sig len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Sig len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> bexp_wt \<Gamma> (Bsub exp1 exp2)  (Lty Sig (max len1 len2))"
+| "bexp_wt \<Gamma> exp1 (Lty Uns len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Uns len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> ty = Lty Uns (max len1 len2) \<Longrightarrow> bexp_wt \<Gamma> (Badd exp1 exp2)  ty"
+| "bexp_wt \<Gamma> exp1 (Lty Sig len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Sig len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> ty = Lty Sig (max len1 len2) \<Longrightarrow> bexp_wt \<Gamma> (Badd exp1 exp2)  ty"
+| "bexp_wt \<Gamma> exp1 (Lty Uns len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Uns len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> ty = Lty Uns (len1 + len2) \<Longrightarrow> bexp_wt \<Gamma> (Bmult exp1 exp2)   ty"
+| "bexp_wt \<Gamma> exp1 (Lty Sig len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Sig len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> ty = Lty Sig (len1 + len2) \<Longrightarrow> bexp_wt \<Gamma> (Bmult exp1 exp2)   ty"
+| "bexp_wt \<Gamma> exp1 (Lty Uns len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Uns len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> ty = Lty Uns (max len1 len2) \<Longrightarrow> bexp_wt \<Gamma> (Bsub exp1 exp2)  ty"
+| "bexp_wt \<Gamma> exp1 (Lty Sig len1) \<Longrightarrow> bexp_wt \<Gamma> exp2 (Lty Sig len2) \<Longrightarrow> 0 < len1 \<Longrightarrow> 0 < len2 \<Longrightarrow> ty = Lty Sig (max len1 len2) \<Longrightarrow> bexp_wt \<Gamma> (Bsub exp1 exp2)  ty"
 | "bexp_wt \<Gamma> exp  (Lty Uns len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftl exp n)  (Lty Uns len)"
 | "bexp_wt \<Gamma> exp  (Lty Sig len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftl exp n)  (Lty Sig len)"
 | "bexp_wt \<Gamma> exp  (Lty Uns len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftr exp n)  (Lty Uns len)"
 | "bexp_wt \<Gamma> exp  (Lty Sig len ) \<Longrightarrow> 0 < len \<Longrightarrow> bexp_wt \<Gamma> (Bshiftr exp n)  (Lty Sig len)"
 | "bexp_wt \<Gamma> g Bty \<Longrightarrow> bexp_wt \<Gamma> th ty \<Longrightarrow> bexp_wt \<Gamma> el ty \<Longrightarrow> bexp_wt \<Gamma> (Bwhen th g el) ty"
-| "n = length val \<Longrightarrow> bexp_wt \<Gamma> (Bliteral sign val) (Lty sign n)"
+| "n = length val \<Longrightarrow> ty = Lty sign n \<Longrightarrow> bexp_wt \<Gamma> (Bliteral sign val) ty"
 
 inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
                                   "bexp_wt \<Gamma> (Band  exp1 exp2) type"
@@ -4417,48 +4417,49 @@ lemma beval_raw_preserve_well_typedness:
   shows "type_of v = type"
   using assms
 proof (induction arbitrary: v rule:bexp_wt.inducts)
-  case (19 \<Gamma> exp1 len1 exp2 len2)
+  case (19 \<Gamma> exp1 len1 exp2 len2 ty)   
   obtain v1 v2 where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp1 \<longrightarrow>\<^sub>b v1" and "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp2 \<longrightarrow>\<^sub>b v2"
-    using beval_cases(17)[OF 19(10)] by fastforce+
+    using beval_cases(17) "19.prems"(4) by blast
   hence "type_of v1 = Lty Uns len1" and "type_of v2 = Lty Uns len2"
     using 19 by auto
   show ?case
-    apply (rule beval_cases(17)[OF 19(10)])
-    using 19 size_bin_to_bl_aux  apply (metis add.right_neutral list.size(3) ty.inject type_of.simps(2))
+    apply (rule beval_cases(17)[OF 19(11)])
+    using 19 size_bin_to_bl_aux  
+    apply (metis add.right_neutral list.size(3) ty.inject type_of.simps(2))
     using 19 by (metis signedness.distinct(5) ty.inject type_of.simps(2))
 next
-  case (20 \<Gamma> exp1 len1 exp2 len2)
+  case (20 \<Gamma> exp1 len1 exp2 len2 ty)
   obtain v1 v2 where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp1 \<longrightarrow>\<^sub>b v1" and "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp2 \<longrightarrow>\<^sub>b v2"
-    using beval_cases(17)[OF 20(10)] by fastforce+
+    using beval_cases(17)[OF 20(11)] by fastforce+
   hence "type_of v1 = Lty Sig len1" and "type_of v2 = Lty Sig len2"
     using 20 by auto
   show ?case
-    apply (rule beval_cases(17)[OF 20(10)])
+    apply (rule beval_cases(17)[OF 20(11)])
     using 20 size_bin_to_bl_aux  apply (metis signedness.simps(6) ty.inject type_of.simps(2))
     using 20  by (metis add.right_neutral list.size(3) size_bin_to_bl_aux ty.inject type_of.simps(2))
 next
-  case (17 \<Gamma> exp1 len1 exp2 len2)
+  case (17 \<Gamma> exp1 len1 exp2 len2 ty)
   obtain v1 v2 where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp1 \<longrightarrow>\<^sub>b v1" and "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp2 \<longrightarrow>\<^sub>b v2"
-    using beval_cases(16)[OF 17(10)] by fastforce+
+    using beval_cases(16)[OF 17(11)] by fastforce+
   hence "type_of v1 = Lty Uns len1" and "type_of v2 = Lty Uns len2"
     using 17 by auto
   show ?case
-    apply(rule beval_cases(16)[OF 17(10)])
+    apply(rule beval_cases(16)[OF 17(11)])
     using 17 size_bin_to_bl_aux  apply (metis add.right_neutral list.size(3) ty.inject type_of.simps(2))
     using 17 by fastforce
 next
-  case (18 \<Gamma> exp1 len1 exp2 len2)
+  case (18 \<Gamma> exp1 len1 exp2 len2 ty)
   obtain v1 v2 where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp1 \<longrightarrow>\<^sub>b v1" and "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp2 \<longrightarrow>\<^sub>b v2"
-    using beval_cases(16)[OF 18(10)] by fastforce+
+    using beval_cases(16)[OF 18(11)] by fastforce+
   hence "type_of v1 = Lty Sig len1" and "type_of v2 = Lty Sig len2"
     using 18 by auto
   show ?case
-    apply(rule beval_cases(16)[OF 18(10)])
+    apply(rule beval_cases(16)[OF 18(11)])
     using 18 size_bin_to_bl_aux apply fastforce
     using 18 size_bin_to_bl_aux
     by (metis add.right_neutral list.size(3) ty.inject type_of.simps(2))
 next
-  case (15 \<Gamma> exp1 len1 exp2 len2)
+  case (15 \<Gamma> exp1 len1 exp2 len2 ty)
   then  obtain v1 where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp1 \<longrightarrow>\<^sub>b v1" and "type_of v1 = Lty Uns len1"
     by auto
   then obtain bs1 where "v1 = Lv Uns bs1"
@@ -4476,9 +4477,9 @@ next
   hence "?v = v"
     using "15.prems"(4) beval_raw_deterministic by blast
   then show ?case
-    using size_bin_to_bl by auto
+    using size_bin_to_bl   "15.hyps"(5) by auto 
 next
-  case (16 \<Gamma> exp1 len1 exp2 len2)
+  case (16 \<Gamma> exp1 len1 exp2 len2 ty)
   then  obtain v1 where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> exp1 \<longrightarrow>\<^sub>b v1" and "type_of v1 = Lty Sig len1"
     by auto
   then obtain bs1 where "v1 = Lv Sig bs1"
@@ -4496,7 +4497,7 @@ next
   hence "?v = v"
     using "16.prems"(4) beval_raw_deterministic by blast
   then show ?case
-    using size_bin_to_bl by auto
+    using size_bin_to_bl "16.hyps"(5) by auto
 next
   case (5 \<Gamma> sig dly)
   then show ?case
@@ -4981,7 +4982,7 @@ next
   case (2 \<Gamma>)
   then show ?case by (auto intro!: beval_raw.intros)
 next
-  case (3 \<Gamma> sig)
+  case (3 ty \<Gamma> sig)
   hence "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig sig \<longrightarrow>\<^sub>b \<sigma> sig"
     by (auto intro!: beval_raw.intros)
   with 3 have "\<sigma> sig = Bv True \<or> \<sigma> sig = Bv False"

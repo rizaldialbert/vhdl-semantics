@@ -43,6 +43,12 @@ lemma worldline_upd2_at_dly_nonsig:
   shows "s \<noteq> sig \<Longrightarrow> wline_of tw' s (fst tw + dly) = wline_of tw s (fst tw + dly)"
   unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
 
+lemma worldline_upd2_after_dly:
+  fixes tw val dly sig
+  defines "tw' \<equiv> tw[sig, dly :=\<^sub>2 val]"
+  shows "\<And>s i. fst tw + dly < i \<Longrightarrow> wline_of (fst tw + dly, snd tw') sig i = val"
+  unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+
 definition worldline_inert_upd2 ::
   "nat \<times> 'signal worldline_init \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> nat \<times> 'signal worldline_init" ("_\<lbrakk> _, _ :=\<^sub>2 _\<rbrakk>")
   where "worldline_inert_upd2 \<equiv> \<lambda>tw sig dly v. (fst tw, worldline_inert_upd (snd tw) sig (fst tw) dly v)"

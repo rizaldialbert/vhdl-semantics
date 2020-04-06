@@ -1364,7 +1364,7 @@ fun wp3_fun :: "'signal tyenv \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'sign
 | "wp3_fun \<Gamma> (Bcase exp ((Explicit exp', ss) # choices)) Q = 
         (\<lambda>tw. if eval_world_raw2 tw exp = eval_world_raw2 tw exp' then wp3_fun \<Gamma> ss Q tw  else wp3_fun \<Gamma> (Bcase exp choices) Q tw)"
 
-| "wp3_fun \<Gamma> (Bcase exp ((Others, ss) # choices)) Q = wp3 \<Gamma> ss Q"
+| "wp3_fun \<Gamma> (Bcase exp ((Others, ss) # choices)) Q = wp3_fun \<Gamma> ss Q"
 
 | "wp3_fun \<Gamma> (Bcase exp []) Q = (\<lambda>tw. Q tw \<and> wityping \<Gamma> (snd tw))"
 

@@ -393,4 +393,141 @@ next
     by auto
 qed
 
+text \<open>Equivalence between @{term "sbl_to_bin"} and @{term "sbintrunc"} + @{term "bl_to_bin"}\<close>
+
+lemma sbl_to_bin_alt_def:
+  "sbl_to_bin bs = sbintrunc (length bs - 1) (bl_to_bin bs)"
+proof (induction bs)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons a bs)
+  have " sbl_to_bin (a # bs) =  bl_to_bin (a # bs) - (int \<circ> of_bool) a * 2 ^ (length (bs) + 1)"
+    unfolding sbl_to_bin.simps by auto
+  have "a = True \<or> a = False"
+    by auto
+  moreover
+  { assume "a = False"
+    hence *: "bl_to_bin (a # bs) - (int o of_bool) a * 2 ^ (length bs + 1) =  bl_to_bin (a # bs)"
+      by auto
+    have "bl_to_bin (a # bs) + 2 ^ length bs < 2 ^ (length bs + 1)"
+      using `a = False` bl_to_bin_False by (auto simp add: bl_to_bin_lt2p)
+    hence "bl_to_bin (a # bs) = sbintrunc (length (a # bs) - 1) (bl_to_bin (a # bs))"
+      unfolding sbintrunc_mod2p  by (simp add: bl_to_bin_ge0)
+    hence ?case
+      using * by auto }
+  moreover
+  { assume "a = True"
+    hence *: "bl_to_bin (a # bs) = 2 ^ length bs + bl_to_bin bs"
+      using bl_to_bin_correctness  sbl_to_bin_correctness by auto
+    hence "bl_to_bin (a # bs) - (int \<circ> of_bool) a * 2 ^ (length (bs) + 1) =   bl_to_bin bs - 2 ^ length bs "
+      using `a = True` by auto
+    also have "... = sbintrunc (length bs) (bl_to_bin (a # bs))"
+      unfolding sbintrunc_mod2p * 
+      by (smt "*" \<open>a = True\<close> add.commute bl_to_bin_ge0 bl_to_bin_lt2p calculation int_mod_eq'
+      minus_mod_self2 mult_cancel_right2 o_apply of_bool_eq(2) of_nat_1 plus_1_eq_Suc)
+    finally have ?case
+      by simp }
+  ultimately show ?case by auto
+qed
+
+lemma
+  "bl_to_bin (map Not bs) + 1 = 2 ^ length bs - bl_to_bin bs"
+proof -
+  have "bl_to_bin (map Not bs) = (\<Sum>i = 0..<length bs. (int \<circ> of_bool) (\<not> (rev bs ! i)) * 2 ^ i)"
+    unfolding bl_to_bin_correctness rev_map using nth_map[of _ "rev bs" "Not"] by auto
+  moreover have "bl_to_bin bs = (\<Sum>i = 0..<length bs. (int \<circ> of_bool) (rev bs ! i) * 2 ^ i)"
+    unfolding bl_to_bin_correctness by auto
+  ultimately have "bl_to_bin (map Not bs) + bl_to_bin bs = (\<Sum>i = 0..<length bs. (int \<circ> of_bool) (\<not> (rev bs ! i)) * 2 ^ i) +  (\<Sum>i = 0..<length bs. (int \<circ> of_bool) (rev bs ! i) * 2 ^ i)"
+    by auto
+  also have "... = (\<Sum>x = 0..<length bs. (int \<circ> of_bool) (\<not> rev bs ! x) * 2 ^ x + (int \<circ> of_bool) (rev bs ! x) * 2 ^ x)"
+    unfolding sum.distrib[symmetric] by auto
+  also have "... = (\<Sum>x = 0..<length bs. ((int \<circ> of_bool) (\<not> rev bs ! x) + (int o of_bool) (rev bs ! x)) * 2 ^ x)"
+    by (auto simp add: field_simps)
+  also have "... = (\<Sum>x = 0..<length bs. 2 ^ x)"
+    by (smt comp_apply mult_cancel_right2 of_bool_eq(1) of_bool_eq(2) of_nat_1 semiring_1_class.of_nat_0 sum.cong)
+  also have "... = bl_to_bin (replicate (length bs) True) "
+    unfolding bl_to_bin_correctness by auto
+  also have "... = 2 ^ length bs - 1"
+    using bl_to_bin_replicate_T by auto
+  finally show ?thesis
+    by auto
+qed
+
+lemma uminus_alt':
+  "sbl_to_bin (map Not (a # bs)) + 1 = - sbl_to_bin (a # bs)"
+proof -
+  have "sbl_to_bin (map Not (a # bs)) = sbl_to_bin (Not a # map Not bs)"
+    by auto
+  also have "... = - (int \<circ> of_bool) (\<not> a) * 2 ^ length bs + (\<Sum>i = 0..<length bs. (int \<circ> of_bool) ( \<not> (rev bs ! i)) * 2 ^ i)" (is "_ = ?init_not + ?sbl_not")
+    unfolding sbl_to_bin_correctness rev_map using nth_map[of _ "rev bs" "Not"] by auto
+  finally have "sbl_to_bin (map Not (a # bs)) = ?init_not + ?sbl_not"
+    by auto
+  have "sbl_to_bin (a # bs) = - (int \<circ> of_bool) a * 2 ^ length bs + (\<Sum>i = 0..<length bs. (int \<circ> of_bool) (rev bs ! i) * 2 ^ i)" (is "_ = ?init_def + ?sbl_def")
+    unfolding sbl_to_bin_correctness by auto
+  hence "sbl_to_bin (map Not (a # bs)) + sbl_to_bin (a # bs) = ?init_not + ?init_def + ?sbl_not + ?sbl_def"
+    using `sbl_to_bin (map Not (a # bs)) = ?init_not + ?sbl_not` by auto
+  also have "... = - (2 ^ length bs) + (?sbl_not + ?sbl_def)"
+    by auto
+  also have "... = - (2 ^ length bs) + (\<Sum>x = 0..<length bs. (int \<circ> of_bool) (\<not> rev bs ! x) * 2 ^ x + (int \<circ> of_bool) (rev bs ! x) * 2 ^ x)"
+    unfolding sum.distrib[symmetric] by auto
+  also have "... = - (2 ^ length bs) + (\<Sum>x = 0..<length bs. ((int \<circ> of_bool) (\<not> rev bs ! x) + (int o of_bool) (rev bs ! x)) * 2 ^ x)"
+    by (auto simp add: field_simps)
+  also have "... = - (2 ^ length bs) + (\<Sum>x = 0..<length bs. 2 ^ x)"
+    by (smt comp_apply mult_cancel_right2 of_bool_eq(1) of_bool_eq(2) of_nat_1 semiring_1_class.of_nat_0 sum.cong)
+  also have "... = - (2 ^ length bs) + bl_to_bin (replicate (length bs) True)"
+    unfolding bl_to_bin_correctness by auto
+  also have "... = - (2 ^ length bs) + 2 ^ length bs - 1"
+    using bl_to_bin_replicate_T by auto
+  also have "... = -1"
+    by auto
+  finally show ?thesis
+    by auto
+qed
+
+lemma uminus_alt:
+  "0 < length bs \<Longrightarrow> sbl_to_bin (map Not bs) + 1 = - sbl_to_bin bs"
+  using uminus_alt'  by (metis list_exhaust_size_gt0)
+
+lemma sbin_bl_bin_sbintruc:
+  "0 < n \<Longrightarrow> sbl_to_bin (bin_to_bl n w) = sbintrunc (n - 1) w"
+  using bin_bl_bin sbl_to_bin_alt_def size_bin_to_bl by auto
+
+lemma sbl_to_bin_alt_def2:
+  "0 < n \<Longrightarrow> sbl_to_bin bs = sbintrunc (length bs - 1) (sbl_to_bin bs)"
+  by (simp add: sbl_to_bin_alt_def)
+(* proof (induction bs)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons a bs)
+  have " sbl_to_bin (a # bs) =  bl_to_bin (a # bs) - (int \<circ> of_bool) a * 2 ^ (length (bs) + 1)"
+    unfolding sbl_to_bin.simps by auto
+  have "a = True \<or> a = False"
+    by auto
+  moreover
+  { assume "a = False"
+    hence *: "bl_to_bin (a # bs) - (int o of_bool) a * 2 ^ (length bs + 1) =  bl_to_bin (a # bs)"
+      by auto
+    have "bl_to_bin (a # bs) + 2 ^ length bs < 2 ^ (length bs + 1)"
+      using `a = False` bl_to_bin_False by (auto simp add: bl_to_bin_lt2p)
+    hence "bl_to_bin (a # bs) = sbintrunc (length (a # bs) - 1) (bl_to_bin (a # bs))"
+      unfolding sbintrunc_mod2p  by (simp add: bl_to_bin_ge0)
+    hence ?case
+      using * by auto }
+  moreover
+  { assume "a = True"
+    hence *: "bl_to_bin (a # bs) = 2 ^ length bs + bl_to_bin bs"
+      using bl_to_bin_correctness  sbl_to_bin_correctness by auto
+    hence "bl_to_bin (a # bs) - (int \<circ> of_bool) a * 2 ^ (length (bs) + 1) =   bl_to_bin bs - 2 ^ length bs "
+      using `a = True` by auto
+    also have "... = sbintrunc (length bs) (bl_to_bin (a # bs))"
+      unfolding sbintrunc_mod2p * 
+      by (smt "*" \<open>a = True\<close> add.commute bl_to_bin_ge0 bl_to_bin_lt2p calculation int_mod_eq'
+      minus_mod_self2 mult_cancel_right2 o_apply of_bool_eq(2) of_nat_1 plus_1_eq_Suc)
+    finally have ?case
+      by simp }
+  ultimately show ?case by auto
+qed *)
+
 end
