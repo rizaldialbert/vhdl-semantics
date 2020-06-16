@@ -829,7 +829,7 @@ proof (rule Assign2_altI, rule, rule, rule, rule, rule_tac[!] ballI)
   moreover have "fst tw = fst ?tw'"
     unfolding worldline_upd2_def worldline_upd_def by auto
   ultimately have "fst tw < j"
-    by auto
+    by linarith
 
   have 2: "inv_second (j, snd ?tw')"
     unfolding inv_second_def
@@ -853,7 +853,7 @@ proof (rule Assign2_altI, rule, rule, rule, rule, rule_tac[!] ballI)
     moreover
     { assume "fst tw \<le> i \<and> i < j - 1"
       hence "fst ?tw' \<le> i \<and> i < j - 1"
-        by (simp add: \<open>get_time tw = get_time ?tw'\<close>)
+        using `fst tw = fst ?tw'` by linarith
       hence "wline_of ?tw' OUT (i + 1) = wline_of ?tw' OUT (fst ?tw' + 1)"
         by (smt \<open>j \<in> {get_time tw[ OUT, 1 :=\<^sub>2 v]<..next_time_world tw[ OUT, 1 :=\<^sub>2 v]}\<close>
         dual_order.strict_trans1 greaterThanAtMost_iff le_add1 less_diff_conv not_less

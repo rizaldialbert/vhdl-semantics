@@ -44,7 +44,10 @@ lemma well_typed:
   "seq_wt \<Gamma> (Bassign_trans C (Bmult (Bsig A) (Bsig B)) 1)"
   apply (rule seq_wt.intros(4))
   unfolding ctype len_def apply (rule bexp_wt.intros(18))
-  unfolding atype[THEN sym] btype[THEN sym] apply (rule bexp_wt.intros(3))+
+      apply (rule bexp_wt.intros(3))
+      apply (rule atype[symmetric])
+     apply (rule bexp_wt.intros)
+     apply (rule btype[symmetric])
   using len1 len2 by auto
 
 abbreviation "lof_wline tw sig n \<equiv> lval_of (wline_of tw sig n)"

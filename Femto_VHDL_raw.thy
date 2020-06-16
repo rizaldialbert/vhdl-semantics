@@ -49,7 +49,7 @@ definition zero_fun :: "'a \<Rightarrow> 'b" where
 instance proof qed
 end
 
-instantiation set :: (type) zero
+(* instantiation set :: (type) zero
 begin
 
 definition zero_set :: "'a set" where
@@ -57,6 +57,7 @@ definition zero_set :: "'a set" where
 
 instance proof qed
 end
+ *)
 
 lemma upd_eventually_cofinite:
   assumes  "\<forall>\<^sub>\<infinity>n. f n = 0"
@@ -2749,6 +2750,175 @@ theorem parallel_comp_assoc2:
   using assms
   by (smt b_conc_exec.intros(3) clean_zip_raw_assoc conc_cases(2) set_append signals_from.simps(2))
 
+lemma b_conc_exec_distrib1:
+  assumes "b_conc_exec t \<sigma> \<gamma> \<theta> def ((cs1 || cs3) || (cs2 || cs3)) \<tau> \<tau>'"
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  shows   "b_conc_exec t \<sigma> \<gamma> \<theta> def ((cs1 || cs2) || cs3) \<tau> \<tau>'"
+proof (rule conc_cases(2)[OF assms(1)])
+  fix \<tau>13 \<tau>23 
+  assume "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs1 || cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>13"
+  then obtain \<tau>1 \<tau>3 where h0: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs1, \<tau>> \<longrightarrow>\<^sub>c \<tau>1" and tau3: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>3" 
+    and h1: "clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>3, set (signals_from cs3)) = \<tau>13"
+    by (rule conc_cases(2)) blast
+  assume tau23: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs2 || cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>23"
+  then obtain \<tau>2 where tau2: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs2 , \<tau>> \<longrightarrow>\<^sub>c \<tau>2" and 
+                       h2: "clean_zip_raw \<tau> (\<tau>2, set (signals_from cs2)) (\<tau>3, set (signals_from cs3)) = \<tau>23"
+    apply (rule conc_cases(2))
+    using tau3 b_conc_exec_deterministic by blast
+  obtain \<tau>12 where tau12: "clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2)) = \<tau>12"
+    by blast
+  assume *: "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) = \<tau>'"
+  have "clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) = \<tau>'"
+    unfolding *[symmetric]
+  proof (rule ext, rule ext)
+    fix t s
+    consider "s \<in> set (signals_from cs1)" 
+      | " s \<in> set (signals_from cs2)"
+      | " s \<in> set (signals_from cs3) " 
+      | " s \<notin> set (signals_from cs1) \<and> s \<notin> set (signals_from cs2) \<and> s \<notin> set  (signals_from cs3)"
+      by auto
+    thus "clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s = 
+          clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s"
+    proof (cases)
+      case 1
+      hence " clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s = \<tau>1 t s"
+        by (smt UnCI \<open>clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2)) = \<tau>12\<close> clean_zip_raw_def prod.simps(2) set_append signals_from.simps(2))
+      moreover have "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s = \<tau>1 t s"
+        using 1 h0 tau3 h1  by (smt "*" assms b_conc_exec_deterministic clean_zip_raw_def conc_cases(2) parallel_comp_assoc prod.simps(2))
+      ultimately show ?thesis 
+        by auto
+    next
+      case 2
+      hence "clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s = \<tau>2 t s"
+        using h0 tau3 h1
+        by (smt IntI UnCI \<open>clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2)) = \<tau>12\<close> assms(2) clean_zip_raw_def conc_stmt_wf_def distinct_append emptyE prod.simps(2) set_append signals_from.simps(2))
+      moreover have " clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s = \<tau>2 t s"
+      proof -
+        have "s \<notin> set (signals_from (cs1 || cs3))"
+          using 2 assms(2)  by (metis IntI Un_iff conc_stmt_wf_def distinct_append emptyE set_append signals_from.simps(2))
+        moreover have "s \<in> set (signals_from (cs2 || cs3))"
+          using 2 by auto
+        ultimately have "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s = \<tau>23 t s"
+          unfolding clean_zip_raw_def Let_def by (auto)
+        also have "... = \<tau>2 t s"
+          using h2 2 unfolding clean_zip_raw_def Let_def by auto
+        finally show ?thesis
+          by auto
+      qed
+      ultimately show ?thesis 
+        by auto
+    next
+      case 3
+      hence " clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s = \<tau>3 t s"
+        unfolding clean_zip_raw_def Let_def 
+        by (smt IntI assms(2) case_prod_conv conc_stmt_wf_def distinct_append emptyE signals_from.simps(2))
+      moreover have "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s = \<tau>3 t s"
+      proof -
+        have "s \<in> set (signals_from (cs1 || cs3))" and "s \<notin> set (signals_from cs1)"
+          using 3  apply auto
+          using assms(2) 3  by (metis (full_types) IntI UnCI conc_stmt_wf_def distinct_append emptyE set_append signals_from.simps(2))
+        hence "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s = \<tau>13 t s"
+          unfolding clean_zip_raw_def Let_def by auto
+        also have "... = \<tau>3 t s"
+          using h1 3 `s \<notin> set (signals_from cs1)`unfolding clean_zip_raw_def Let_def by auto
+        finally show ?thesis
+          by auto
+      qed
+      ultimately show ?thesis 
+        by auto
+    next
+      case 4
+      hence "clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s = \<tau> t s"
+        by (simp add: clean_zip_raw_def)
+      moreover have "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s = \<tau> t s"
+        using 4 by (simp add: clean_zip_raw_def)
+      ultimately show ?thesis 
+        by auto
+    qed
+  qed
+  thus " t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <(cs1 || cs2) || cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    by (metis \<open>clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2)) = \<tau>12\<close> \<open>t ,
+    \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs2 || cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>23\<close> b_conc_exec.intros(3) clean_zip_raw_assoc h0 h2
+    parallel_comp_assoc2 set_append signals_from.simps(2))
+qed
+
+lemma b_conc_exec_distrib2:
+  assumes "b_conc_exec t \<sigma> \<gamma> \<theta> def ((cs1 || cs2) || cs3) \<tau> \<tau>'"
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  shows  "b_conc_exec t \<sigma> \<gamma> \<theta> def ((cs1 || cs3) || (cs2 || cs3)) \<tau> \<tau>'"
+proof (rule conc_cases(2)[OF assms(1)])
+  fix \<tau>12 \<tau>3 
+  assume "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs1 || cs2 , \<tau>> \<longrightarrow>\<^sub>c \<tau>12"
+  then obtain \<tau>1 \<tau>2 where h0: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs1, \<tau>> \<longrightarrow>\<^sub>c \<tau>1" and tau3: "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs2 , \<tau>> \<longrightarrow>\<^sub>c \<tau>2" 
+    and h1: "clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2)) = \<tau>12"
+    by (rule conc_cases(2)) blast
+  assume tau3':"t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>3"
+  obtain \<tau>13 where "clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>3, set (signals_from cs3)) = \<tau>13"
+    by blast
+  obtain \<tau>23 where tau23: "clean_zip_raw \<tau> (\<tau>2, set (signals_from cs2)) (\<tau>3, set (signals_from cs3)) = \<tau>23"
+    by blast
+  assume *: "clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) = \<tau>'"
+  have "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) = \<tau>'"
+    unfolding *[symmetric]
+  proof (rule ext, rule ext)
+    fix t s
+    consider "s \<in> set (signals_from cs1)" 
+      | " s \<in> set (signals_from cs2)"
+      | " s \<in> set (signals_from cs3) " 
+      | " s \<notin> set (signals_from cs1) \<and> s \<notin> set (signals_from cs2) \<and> s \<notin> set  (signals_from cs3)"
+      by auto
+    thus "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s = 
+          clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s"
+    proof (cases)
+      case 1
+      hence " clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s  = \<tau>1 t s"
+        by (smt UnCI \<open>clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>3, set (signals_from cs3)) = \<tau>13\<close> clean_zip_raw_def prod.simps(2) set_append signals_from.simps(2))
+      moreover have "clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s = \<tau>1 t s"
+        using 1    by (smt "*" assms(1) b_conc_exec_deterministic clean_zip_raw_def conc_cases(2) h0 parallel_comp_assoc prod.simps(2))
+      ultimately show ?thesis 
+        by auto
+    next
+      case 2
+      hence " s \<notin> set (signals_from (cs1 || cs3))" and "s \<in> set (signals_from (cs2 || cs3))"
+        using assms(2) 2 by (metis IntI Un_iff conc_stmt_wf_def distinct_append emptyE set_append signals_from.simps(2))+
+      hence "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s  = \<tau>23 t s"
+        by (simp add: clean_zip_raw_def)
+      also have "... = \<tau>2 t s"
+        unfolding tau23[symmetric] clean_zip_raw_def using 2  by simp
+      finally have "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s  = \<tau>2 t s"
+        by auto
+      moreover have " clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s = \<tau>2 t s"
+        using 2 assms(2)  by (smt UnCI \<open>s \<notin> set (signals_from (cs1 || cs3))\<close> clean_zip_raw_def h1 prod.simps(2) set_append signals_from.simps(2))
+      ultimately show ?thesis 
+        by auto
+    next
+      case 3
+      hence " clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s = \<tau>3 t s"
+        by (smt IntI assms(2) case_prod_conv clean_zip_raw_def conc_stmt_wf_def distinct_append emptyE signals_from.simps(2))
+      moreover have "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s = \<tau>3 t s"
+        using 3  by (smt IntI UnCI UnI1 \<open>clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>3, set (signals_from cs3)) = \<tau>13\<close> tau3' append.assoc append_Nil2 append_assoc assms(1) assms(2) b_conc_exec_deterministic case_prod_conv clean_zip_raw_def conc_cases(2) conc_stmt_wf_def distinct_append emptyE in_set_conv_decomp prod.simps(1) prod.simps(2) set_append signals_from.simps(2))
+      ultimately show ?thesis 
+        by auto
+    next
+      case 4
+      hence "clean_zip_raw \<tau> (\<tau>12, set (signals_from (cs1 || cs2))) (\<tau>3, set (signals_from cs3)) t s = \<tau> t s"
+        by (simp add: clean_zip_raw_def)
+      moreover have "clean_zip_raw \<tau> (\<tau>13, set (signals_from (cs1 || cs3))) (\<tau>23, set (signals_from (cs2 || cs3))) t s = \<tau> t s"
+        using 4 by (simp add: clean_zip_raw_def)
+      ultimately show ?thesis 
+        by auto
+    qed
+  qed
+  thus "  t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <(cs1 || cs3) || cs2 || cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    by (metis \<open>clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>3, set (signals_from cs3)) = \<tau>13\<close> b_conc_exec.intros(3) h0 tau23 tau3 tau3')
+qed
+
+lemma parallel_composition_distrib:
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  shows "b_conc_exec t \<sigma> \<gamma> \<theta> def ((cs1 || cs2) || cs3) \<tau> \<tau>' \<longleftrightarrow> b_conc_exec t \<sigma> \<gamma> \<theta> def ((cs1 || cs3) || (cs2 || cs3)) \<tau> \<tau>'"
+  using b_conc_exec_distrib1[OF _ assms] b_conc_exec_distrib2[OF _ assms] 
+  by meson
+
 text \<open>The Language Reference Manual for VHDL stipulates that each process will be executed initially
 regardless of their sensitivity list.\<close>
 
@@ -4300,15 +4470,15 @@ inductive_cases bexp_wt_cases :   "bexp_wt \<Gamma> (Bnot  exp) type"
                                   "bexp_wt \<Gamma> (Bnand exp1 exp2) type"
                                   "bexp_wt \<Gamma> (Bnor  exp1 exp2) type"
                                   "bexp_wt \<Gamma> (Bxor  exp1 exp2) type"
-                                  "bexp_wt \<Gamma> (Bxnor exp1 exp2) type"
-                                  "bexp_wt \<Gamma> (Bslice sig l r)  type"
+                                  "bexp_wt \<Gamma> (Bxnor exp1 exp2) type" and
+             bexp_wt_cases_slice: "bexp_wt \<Gamma> (Bslice sig l r)  type"
                                   "bexp_wt \<Gamma> (Bsig sig) type"
                                   "bexp_wt \<Gamma> (Bindex sig idx) type"
                                   "bexp_wt \<Gamma> (Badd exp1 exp2) type"
                                   "bexp_wt \<Gamma> (Bmult exp1 exp2) type"
-                                  "bexp_wt \<Gamma> (Bsub exp1 exp2) type"
-                                  "bexp_wt \<Gamma> (Bshiftl exp n) type"
-                                  "bexp_wt \<Gamma> (Bshiftr exp n) type" and
+                                  "bexp_wt \<Gamma> (Bsub exp1 exp2) type" and
+            bexp_wt_cases_shiftl: "bexp_wt \<Gamma> (Bshiftl exp n) type" and
+            bexp_wt_cases_shiftr: "bexp_wt \<Gamma> (Bshiftr exp n) type" and
               bexp_wt_cases_when: "bexp_wt \<Gamma> (Bwhen th g el) type" and
                bexp_wt_cases_lit: "bexp_wt \<Gamma> (Bliteral sign val) type" and 
                bexp_wt_cases_del: "bexp_wt \<Gamma> (Bsig_delayed sig dly) type" and 
@@ -4973,8 +5143,7 @@ proof (induction rule:bexp_wt.inducts)
 next
   case (14 \<Gamma> sig ki len idx)
   then show ?case
-    by (smt beval_raw.intros(1) beval_raw.intros(21) bexp_wt_cases(9) styping_def ty.distinct(1)
-    type_of.simps(1) val.collapse(1) val.collapse(2))
+    by (smt beval_raw.intros(1) beval_raw.intros(21) bexp_wt_cases_slice(2) styping_def ty.distinct(1) type_of.simps(1) val.collapse(1) val.collapse(2))
 next
   case (1 \<Gamma>)
   then show ?case by (auto intro!: beval_raw.intros)
@@ -5077,6 +5246,26 @@ next
   case (2 \<Gamma> cs1 cs2)
   then show ?case by (meson b_conc_exec.intros(3))
 qed
+
+thm parallel_comp_assoc
+
+lemma
+  "conc_wt \<Gamma> ((cs1 || cs2) || cs3) \<longleftrightarrow> conc_wt \<Gamma> ((cs1 || cs3) || (cs2 || cs3))"
+proof 
+  assume *: "conc_wt \<Gamma> ((cs1 || cs2) || cs3)"
+  hence "conc_wt \<Gamma> cs1" and "conc_wt \<Gamma> cs2" and "conc_wt \<Gamma> cs3"
+    by blast+
+  hence "conc_wt \<Gamma>(cs1 || cs3)" and "conc_wt \<Gamma> (cs2 || cs3)"
+    using conc_wt.intros(2) by blast+
+  thus "conc_wt \<Gamma> ((cs1 || cs3) || (cs2 || cs3))"
+    by (simp add: conc_wt.intros(2))
+next
+  assume "conc_wt \<Gamma> ((cs1 || cs3) || cs2 || cs3)"
+  hence "conc_wt \<Gamma> cs1" and "conc_wt \<Gamma> cs2" and "conc_wt \<Gamma> cs3"
+    by blast+
+  thus "conc_wt \<Gamma> ((cs1 || cs2) || cs3)"
+    by (simp add: conc_wt.intros(2))
+qed  
 
 subsection \<open>Semantics of simulation\<close>
 
@@ -5382,6 +5571,40 @@ proof
     by auto
 qed
 
+lemma next_state2_preserve_styping:
+  assumes "styping \<Gamma> \<sigma>"
+  assumes "ttyping \<Gamma> \<tau>'"
+  shows   "styping \<Gamma> (next_state2 (t + 1) \<tau>' \<sigma>)"
+  unfolding styping_def
+proof
+  fix s
+  have "s \<in> (dom (\<tau>' (t + 1))) \<or> s \<notin> (dom (\<tau>' (t + 1)))"
+    by auto
+  moreover
+  { assume "s \<notin> (dom (\<tau>' (t + 1)))"
+    hence "next_state2 (t + 1) \<tau>' \<sigma> s = \<sigma> s" (is "?lhs = ?rhs")
+      unfolding next_state2_def Let_def comp_def by auto
+    hence "type_of ?lhs = type_of ?rhs"
+      by auto
+    also have "... = \<Gamma> s"
+      using assms(1) unfolding styping_def by auto
+    finally have "type_of ?lhs = \<Gamma> s"
+      by auto }
+  moreover
+  { assume "s \<in> (dom (\<tau>' (t + 1)))"
+    hence "next_state2 (t + 1) \<tau>' \<sigma> s = the (\<tau>' (t + 1) s)" (is "?lhs = ?rhs")
+      unfolding next_state2_def Let_def by auto
+    hence "type_of ?lhs = type_of ?rhs"
+      by auto
+    also have "... = \<Gamma> s"
+      using assms(2) unfolding ttyping_def
+      by (metis (full_types) \<open>s \<in> dom (\<tau>' (t + 1))\<close> domIff dom_imp_keys to_trans_raw_sig_def)
+    finally have "type_of ?lhs = \<Gamma> s"
+      by auto }
+  ultimately show "type_of (next_state2 (t + 1) \<tau>' \<sigma> s) = \<Gamma> s"
+    by auto
+qed
+
 lemma [simp]:
   "override_on \<sigma> (the o (0 :: 'a \<rightharpoonup> bool)) (dom (0 :: 'a \<rightharpoonup> bool)) = \<sigma>"
   by (simp add: zero_fun_def zero_option_def)
@@ -5608,7 +5831,122 @@ qed auto
 
 inductive_cases bau: "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> beh"
 inductive_cases bau_suc: "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto>s beh"
- 
+
+lemma b_simulate_fin_parallel_commute:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> beh"
+  assumes "conc_stmt_wf (cs)"
+  assumes "cs = cs1 || cs2"
+  shows   "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs2 || cs1, \<tau>> \<leadsto> beh"
+  using assms
+proof (induction rule: b_simulate_fin.induct)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  then show ?case 
+    using parallel_comp_commute  by (metis b_simulate_fin.intros(1))
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    by (simp add: b_simulate_fin.intros(2) parallel_comp_commute')
+qed (auto intro!: b_simulate_fin.intros)
+
+lemma b_simulate_fin_parallel_commute_eq:
+  assumes "conc_stmt_wf (cs1 || cs2)"
+  shows "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs1 || cs2, \<tau>> \<leadsto> beh \<longleftrightarrow> maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs2 || cs1, \<tau>> \<leadsto> beh"
+  using assms b_simulate_fin_parallel_commute 
+  by (metis conc_stmt_wf_def disjoint_iff_not_equal distinct_append signals_from.simps(2))
+
+lemma b_simulate_fin_parallel_distrib1:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> beh"
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  assumes "cs = (cs1 || cs3) || (cs2 || cs3)"
+  shows   "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <(cs1 || cs2) || cs3, \<tau>> \<leadsto> beh"
+  using assms
+proof (induction rule: b_simulate_fin.induct)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "maxtime, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , add_to_beh \<sigma> \<theta> t (next_time t \<tau>'), def \<turnstile> <(cs1 || cs2) || cs3 , \<tau>'(next_time t \<tau>' := 0)> \<leadsto> res"
+    by blast
+  have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <(cs1 || cs2) || cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    using parallel_composition_distrib[OF 1(7)] 1(3) unfolding 1(8) by auto
+  then show ?case 
+    by (meson "1.IH" "1.hyps"(1) "1.hyps"(2) "1.hyps"(4) "1.prems"(2) assms(2) b_simulate_fin.intros(1))
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <(cs1 || cs2) || cs3 , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    using parallel_composition_distrib[OF 2(5)] 2(3) unfolding 2(6) by auto
+  then show ?case 
+    by (simp add: "2.hyps"(1) "2.hyps"(2) "2.hyps"(4) b_simulate_fin.intros(2))
+qed (auto intro!: b_simulate_fin.intros)
+
+lemma b_simulate_fin_parallel_distrib2:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> beh"
+  assumes "conc_stmt_wf cs"
+  assumes "cs = (cs1 || cs2) || cs3"
+  shows   "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <(cs1 || cs3) || (cs2 || cs3), \<tau>> \<leadsto> beh"
+  using assms
+proof (induction rule: b_simulate_fin.induct)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  then show ?case 
+    by (simp add: "1.IH" b_simulate_fin.intros(1) parallel_composition_distrib)
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  hence "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <(cs1 || cs3) || (cs2 || cs3) , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    by (simp add: parallel_composition_distrib)
+  then show ?case 
+    by (simp add: "2.hyps"(1) "2.hyps"(2) "2.hyps"(4) b_simulate_fin.intros(2))
+qed (auto intro!: b_simulate_fin.intros)
+
+
+lemma b_simulat_fin_parallel_distrib:
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  shows   "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <(cs1 || cs3) || (cs2 || cs3), \<tau>> \<leadsto> beh \<longleftrightarrow> 
+           maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <(cs1 || cs2) || cs3, \<tau>> \<leadsto> beh"
+  using b_simulate_fin_parallel_distrib1 b_simulate_fin_parallel_distrib2 assms by metis
+
+lemma b_simulate_fin_parallel_assoc1:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> beh"
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  assumes "cs = (cs1 || cs2) || cs3"
+  shows   "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs1 || cs2 || cs3, \<tau>> \<leadsto> beh"
+  using assms
+proof (induction rule: b_simulate_fin.induct)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs1 || cs2 || cs3, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    using parallel_comp_assoc  by (simp add: parallel_comp_assoc)
+  then show ?case 
+    using 1  by (meson b_simulate_fin.intros(1))
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  hence "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs1 || cs2 || cs3, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    using parallel_comp_assoc  by (simp add: parallel_comp_assoc)
+  then show ?case 
+    using 2  by (simp add: b_simulate_fin.intros(2))
+qed (auto intro!: b_simulate_fin.intros)
+
+lemma b_simulate_fin_parallel_assoc2:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> beh"
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  assumes "cs = cs1 || cs2 || cs3"
+  shows   "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <(cs1 || cs2) || cs3, \<tau>> \<leadsto> beh"
+  using assms
+proof (induction rule: b_simulate_fin.inducts)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <(cs1 || cs2) || cs3, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    by (simp add: parallel_comp_assoc2)
+  then show ?case 
+    using 1  by (meson b_simulate_fin.intros(1))
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  hence "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <(cs1 || cs2) || cs3, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+    by (simp add: parallel_comp_assoc2)
+  then show ?case 
+    using 2 by (simp add: b_simulate_fin.intros(2))
+qed (auto intro!: b_simulate_fin.intros)
+
+lemma b_simulate_fin_parallel_assoc:
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  shows "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <(cs1 || cs2) || cs3, \<tau>> \<leadsto> beh \<longleftrightarrow> 
+         maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < cs1 || cs2 || cs3, \<tau>> \<leadsto> beh"
+  using b_simulate_fin_parallel_assoc1 b_simulate_fin_parallel_assoc2 assms by metis
+
 lemma case_quiesce:
   assumes "t < maxtime"
   assumes "quiet \<tau> \<gamma>"
@@ -6524,6 +6862,71 @@ next
 next
   case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
   then show ?case  by (meson b_simulate_fin.intros(4))
+qed
+
+lemma conc_wt_simulation_progress:
+  assumes \<open>conc_wt \<Gamma> cs\<close>
+  assumes \<open>nonneg_delay_conc cs\<close>
+  assumes \<open>ttyping \<Gamma> \<tau>\<close> and \<open>ttyping \<Gamma> \<theta>\<close>
+  assumes \<open>styping \<Gamma> \<sigma>\<close> and \<open>styping \<Gamma> def\<close>
+  assumes \<open>t \<le> maxtime\<close>
+  shows   \<open>\<exists>res. maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto>s res\<close>
+proof -
+  consider "t < maxtime" | "t = maxtime"
+    using `t \<le> maxtime` by linarith
+  thus ?thesis
+  proof (cases)
+    case 1
+    obtain \<tau>' where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+      using conc_stmts_progress[OF assms(1) assms(5) assms(4) assms(6) assms(3)]
+      by auto
+    hence "ttyping \<Gamma> \<tau>'"
+      using conc_stmt_preserve_type_correctness[OF assms(1) assms(5) assms(4) assms(6) assms(3)]
+      by auto
+    thus ?thesis 
+      using `t < maxtime` `t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'` assms(5) assms(4) assms(6)
+    proof (induction "maxtime - t" arbitrary: t \<sigma> \<gamma> \<theta> def \<tau> \<tau>')
+      case 0
+      then show ?case  by linarith
+    next
+      case (Suc x)
+      hence "x = maxtime - (t + 1)"
+        by auto
+      have "t + 1 < maxtime \<or> t + 1 = maxtime"
+        using Suc(4) by auto
+      moreover
+      { assume "t + 1 < maxtime"
+        have "styping \<Gamma> (next_state2 (t + 1) \<tau>' \<sigma>)"
+          using Suc(3) next_state2_preserve_styping[OF Suc(6) Suc(3)] by auto
+        have "ttyping \<Gamma> (\<theta>(t := Some \<circ> \<sigma>))"
+          using add_to_beh_preserve_type_correctness[OF Suc(6) Suc(7)]  
+          by (metis Suc.prems(2) add_to_beh_def)
+        have "ttyping \<Gamma> ( \<tau>'(t + 1 := 0))"
+          using ttyping_rem_curr_trans[OF Suc(3)] by auto
+        obtain \<tau>'' where "t + 1 , next_state2 (t + 1) \<tau>' \<sigma> , next_event2 (t + 1) \<tau>' \<sigma> , \<theta> (t := Some \<circ> \<sigma>), def \<turnstile> <cs , \<tau>'(t + 1 := 0)> \<longrightarrow>\<^sub>c \<tau>''"
+          using conc_stmts_progress[OF assms(1) `styping \<Gamma> (next_state2 (t + 1) \<tau>' \<sigma>)` `ttyping \<Gamma> (\<theta>(t := Some \<circ> \<sigma>))` Suc(8) `ttyping \<Gamma> ( \<tau>'(t + 1 := 0))`]
+          by auto
+        hence "\<exists>res. b_simulate_fin_suc maxtime (t + 1) (next_state2 (t + 1) \<tau>' \<sigma>) (next_event2 (t + 1) \<tau>' \<sigma>) (\<theta>(t := Some o \<sigma>)) def cs (\<tau>'(t + 1 := 0)) res"
+          using Suc(1)[OF `x = maxtime - (t + 1)` `ttyping \<Gamma> ( \<tau>'(t + 1 := 0))` `t + 1 < maxtime` ]
+          by (meson Suc.hyps(1) Suc.prems(6) \<open>styping \<Gamma> (next_state2 (t + 1) \<tau>' \<sigma>)\<close> \<open>t + 1 <
+          maxtime\<close> \<open>ttyping \<Gamma> (\<tau>'(t + 1 := 0))\<close> \<open>ttyping \<Gamma> (\<theta>(t := Some \<circ> \<sigma>))\<close> \<open>x = maxtime - (t +
+          1)\<close> assms(1) conc_stmt_preserve_type_correctness)
+        hence ?case
+          using b_simulate_fin_suc.intros(1)[OF `t < maxtime` Suc(5)]  by blast }
+      moreover
+      { assume "t + 1 = maxtime"
+        hence "\<exists>res. b_simulate_fin_suc maxtime (t + 1) (next_state2 (t + 1) \<tau>' \<sigma>) (next_event2 (t + 1) \<tau>' \<sigma>) (\<theta>(t := Some o \<sigma>)) def cs (\<tau>'(t + 1 := 0)) res"
+          using b_simulate_fin_suc.intros(2) by blast
+        hence ?case
+          using Suc.prems(2) Suc.prems(3) b_simulate_fin_suc.intros(1) by blast }
+      ultimately show ?case 
+        by auto
+    qed
+  next
+    case 2
+    then show ?thesis 
+      using b_simulate_fin_suc.intros(2) by blast
+  qed
 qed
 
 lemma quiet_fast_forward:

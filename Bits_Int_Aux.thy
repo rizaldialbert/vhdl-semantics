@@ -496,38 +496,5 @@ lemma sbin_bl_bin_sbintruc:
 lemma sbl_to_bin_alt_def2:
   "0 < n \<Longrightarrow> sbl_to_bin bs = sbintrunc (length bs - 1) (sbl_to_bin bs)"
   by (simp add: sbl_to_bin_alt_def)
-(* proof (induction bs)
-  case Nil
-  then show ?case by auto
-next
-  case (Cons a bs)
-  have " sbl_to_bin (a # bs) =  bl_to_bin (a # bs) - (int \<circ> of_bool) a * 2 ^ (length (bs) + 1)"
-    unfolding sbl_to_bin.simps by auto
-  have "a = True \<or> a = False"
-    by auto
-  moreover
-  { assume "a = False"
-    hence *: "bl_to_bin (a # bs) - (int o of_bool) a * 2 ^ (length bs + 1) =  bl_to_bin (a # bs)"
-      by auto
-    have "bl_to_bin (a # bs) + 2 ^ length bs < 2 ^ (length bs + 1)"
-      using `a = False` bl_to_bin_False by (auto simp add: bl_to_bin_lt2p)
-    hence "bl_to_bin (a # bs) = sbintrunc (length (a # bs) - 1) (bl_to_bin (a # bs))"
-      unfolding sbintrunc_mod2p  by (simp add: bl_to_bin_ge0)
-    hence ?case
-      using * by auto }
-  moreover
-  { assume "a = True"
-    hence *: "bl_to_bin (a # bs) = 2 ^ length bs + bl_to_bin bs"
-      using bl_to_bin_correctness  sbl_to_bin_correctness by auto
-    hence "bl_to_bin (a # bs) - (int \<circ> of_bool) a * 2 ^ (length (bs) + 1) =   bl_to_bin bs - 2 ^ length bs "
-      using `a = True` by auto
-    also have "... = sbintrunc (length bs) (bl_to_bin (a # bs))"
-      unfolding sbintrunc_mod2p * 
-      by (smt "*" \<open>a = True\<close> add.commute bl_to_bin_ge0 bl_to_bin_lt2p calculation int_mod_eq'
-      minus_mod_self2 mult_cancel_right2 o_apply of_bool_eq(2) of_nat_1 plus_1_eq_Suc)
-    finally have ?case
-      by simp }
-  ultimately show ?case by auto
-qed *)
 
 end

@@ -1693,7 +1693,7 @@ proof (rule, rule)
   proof -
     have "fst tw' \<le> j - 1" and "j - 1 < j"
       using \<open>fst tw < j\<close> 
-      apply (metis Suc_eq_plus1 diff_add_inverse less_imp_Suc_add linordered_field_class.sign_simps(2) not_add_less1 not_le_imp_less prod.sel(1) tw'_def worldline_inert_upd2_def)
+      apply (metis One_nat_def add_diff_cancel_right' diff_Suc_Suc diff_le_self diff_zero fst_conv less_imp_Suc_add tw'_def worldline_inert_upd2_def)
       using \<open>get_time tw < j\<close> by auto
     hence "wline_of tw' A (j - 1) = wline_of tw' A (fst tw')"
       using unchanged_until_next_time_world[where tw="tw'"]

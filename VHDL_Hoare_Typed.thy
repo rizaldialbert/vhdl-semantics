@@ -132,7 +132,7 @@ next
 next
   case (10 t w sig)
   show ?case
-    apply (rule bexp_wt_cases(9)[OF 10(1)])
+    apply (rule bexp_wt_cases_slice(2)[OF 10(1)])
     using 10 
     by (metis (no_types, hide_lams) eval_world_raw.simps(10) ty.distinct(1) type_of.elims wityping_def wtyping_def)
 next
@@ -146,7 +146,7 @@ next
   show ?case 
     apply (rule bexp_wt_cases_del[OF 13(1)])
     using 13 unfolding wityping_def wtyping_def 
-    by (metis eval_world_raw.simps(13) styping_def ty.distinct(1) type_of.elims)
+    by (metis (full_types) eval_world_raw.simps(13) styping_def ty.distinct(1) type_of.elims)
 next
   case (14 t w sig)
   show ?case  by auto
@@ -160,21 +160,21 @@ next
 next
   case (16 t w sig l r)
   then show ?case 
-    by (meson bexp_wt_cases(8) ty.distinct(1))
+    by (meson bexp_wt_cases_slice(1) ty.distinct(1))
 next
   case (17 t w sig idx)
   then show ?case 
-    by (metis (no_types, lifting) bexp_wt_cases(10) bexp_wt_cases(9) eval_world_raw.simps(10)
+    by (metis (no_types, lifting) bexp_wt_cases_slice(3) bexp_wt_cases_slice(2) eval_world_raw.simps(10)
     eval_world_raw.simps(17) is_Bv_def ty.simps(3) type_of.simps(1) val.case_eq_if wityping_def
     wtyping_def)
 next
   case (18 t w e n)
   then show ?case 
-    by (meson bexp_wt_cases(14) ty.distinct(1))
+    by (meson bexp_wt_cases_shiftl ty.distinct(1))
 next
   case (19 t w e n)
   then show ?case 
-    by (meson bexp_wt_cases(15) ty.distinct(1))
+    by (meson bexp_wt_cases_shiftr ty.distinct(1))
 next
   case (20 t w th guard el)
   hence *: "\<exists>v. eval_world_raw t w guard = Bv v"
@@ -293,7 +293,7 @@ next
 next
   case (10 t w sig)
   show ?case
-    apply (rule bexp_wt_cases(9)[OF 10(1)])
+    apply (rule bexp_wt_cases_slice(2)[OF 10(1)])
     using 10  by (smt eval_world_raw.simps(10) ty.distinct(1) ty.inject type_of.elims wityping_def wtyping_def)
 next
   case (11 t w)
@@ -322,24 +322,24 @@ next
 next
   case (16 t w sig l r)
   show ?case 
-    apply (rule bexp_wt_cases(8)[OF 16(2)])
+    apply (rule bexp_wt_cases_slice(1)[OF 16(2)])
     using 16 
     apply (auto split:val.split)
     unfolding length_nths using card_slice by auto
 next
   case (17 t w sig idx)
   then show ?case
-    using bexp_wt_cases(10) by fastforce
+    using bexp_wt_cases_slice(3) by fastforce
 next
   case (18 t w e n)
   show ?case 
-    apply (rule bexp_wt_cases(14)[OF 18(2)])
+    apply (rule bexp_wt_cases_shiftl[OF 18(2)])
      apply (auto split:val.split)
     using 18 by auto
 next
   case (19 t w e n)
   show ?case 
-    apply (rule bexp_wt_cases(15)[OF 19(2)])
+    apply (rule bexp_wt_cases_shiftr[OF 19(2)])
      apply (auto split:val.split)
     using 19 by auto
 next
@@ -768,7 +768,7 @@ next
 next
   case (16 t w sig l r)
   then obtain ki bs where *: "eval_world_raw t w (Bsig sig) = Lv ki bs"
-    by (meson bexp_wt_cases(8) eval_world_raw_lv)
+    by (meson bexp_wt_cases_slice(1) eval_world_raw_lv)
   hence IH: "beval_world_raw w t (Bsig sig) (Lv ki bs)"
     using 16  bexp_wt.intros(3) by fastforce
   have "res = Lv ki (nths bs {length bs - l - 1..length bs - r - 1})"
@@ -779,7 +779,7 @@ next
 next
   case (17 t w sig idx)
   then obtain ki bs where *: "eval_world_raw t w (Bsig sig) = Lv ki bs"
-    by (meson bexp_wt_cases eval_world_raw_lv)
+    by (meson bexp_wt_cases_slice(3) eval_world_raw_lv)
   hence IH: " beval_world_raw w t (Bsig sig) (Lv ki bs)"
     using 17  using bexp_wt.intros(3) by fastforce
   have "eval_world_raw t w (Bsig sig) = snd w sig t"
@@ -792,29 +792,29 @@ next
 next
   case (18 t w e n)
   then obtain ki bs where *: "eval_world_raw t w e = Lv ki bs" 
-    by (meson bexp_wt_cases(14) eval_world_raw_lv)
+    by (meson bexp_wt_cases_shiftl eval_world_raw_lv)
   hence IH : "beval_world_raw w t e (Lv ki bs)"
-    using 18  by (metis bexp_wt_cases(14))
+    using 18  bexp_wt_cases_shiftl by force
   have "ki = Uns \<or> ki = Sig"
     using `bexp_wt \<Gamma> (Bshiftl e n) ty` 
-    by (metis "*" "18.prems"(2) bexp_wt_cases(14) eval_world_raw_lv val.inject(2))
+    by (metis "*" "18.prems"(2) bexp_wt_cases_shiftl eval_world_raw_lv val.inject(2))
   hence "res =  Lv ki (drop n (bs @ replicate n False))"
     using * 18 unfolding eval_world_raw.simps by auto
   then show ?case 
     using IH 
     by (smt "18.prems"(2) "18.prems"(3) beval_raw.intros(28) beval_raw.intros(29) 
         beval_raw_preserve_well_typedness beval_world_raw.cases beval_world_raw.intros 
-        bexp_wt_cases(14) ty.inject type_of.simps(2) wityping_def wityping_ensure_styping 
+        bexp_wt_cases_shiftl ty.inject type_of.simps(2) wityping_def wityping_ensure_styping 
         wityping_ensure_ttyping)
 next
   case (19 t w e n)
   then obtain ki bs where *: "eval_world_raw t w e = Lv ki bs"
-    by (meson bexp_wt_cases(15) eval_world_raw_lv)
+    by (meson bexp_wt_cases_shiftr eval_world_raw_lv)
   hence IH : "beval_world_raw w t e (Lv ki bs)"
-    using 19  by (metis bexp_wt_cases(15))
+    using 19  by (metis bexp_wt_cases_shiftr)
   have "ki = Uns \<or> ki = Sig"
     using `bexp_wt \<Gamma> (Bshiftr e n) ty` 
-    by (metis "*" "19.prems"(2) bexp_wt_cases(15) eval_world_raw_lv val.inject(2))
+    by (metis "*" "19.prems"(2) bexp_wt_cases_shiftr eval_world_raw_lv val.inject(2))
   moreover
   { assume "ki = Uns"
     hence "res = Lv Uns (take (length bs) (replicate n False @ bs))"
@@ -874,7 +874,208 @@ lemma eval_world_raw_correctness_only_if:
 section \<open>Typed hoare logic for sequential statements\<close>
 
 abbreviation eval_world_raw2 where "eval_world_raw2 tw exp \<equiv> eval_world_raw (fst tw) (snd tw) exp"
-                                                                    
+
+lemma eval_world_raw2_irrelevant:
+  assumes "sig \<notin> set_bexp v"
+  shows "eval_world_raw2 a[ sig, dly :=\<^sub>2 eval_world_raw2 a exp] v = eval_world_raw2 a v"
+  using assms
+  by (induction v)
+     (auto simp add: worldline_upd2_def worldline_upd_def event_of_alt_def split: val.splits bool.splits)
+
+lemma eval_world_raw2_irrelevant_inert:
+  assumes "sig \<notin> set_bexp v"
+  shows "eval_world_raw2 a\<lbrakk> sig, dly :=\<^sub>2 eval_world_raw2 a exp\<rbrakk> v = eval_world_raw2 a v"
+  using assms
+proof (induction v)
+  case (Bwhen v1 v2 v3)
+  then show ?case 
+    by(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def event_of_alt_def split: val.splits bool.splits) presburger+
+qed(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def event_of_alt_def)
+
+lemma eval_world_raw2_simp:
+  assumes "0 < dly"
+  shows " eval_world_raw2 tw[ sig, dly :=\<^sub>2 v] expr = eval_world_raw2 tw expr"
+  using assms
+  by (induction expr)
+     (auto simp add: worldline_upd2_def worldline_upd_def event_of_alt_def split:val.splits bool.splits)
+
+lemma eval_world_raw2_suc[simp]:
+  "eval_world_raw2 (tw[ sig, 1 :=\<^sub>2 v]) exp = eval_world_raw2 tw exp"
+  by (induction exp)
+     (auto simp add: worldline_upd2_def worldline_upd_def event_of_alt_def split:val.splits bool.splits)
+
+lemma type_of_eval_world_raw2:
+  assumes "bexp_wt \<Gamma> expr ty"
+  shows "\<And>tw. wityping \<Gamma> (snd tw) \<Longrightarrow> type_of (eval_world_raw2 tw expr) = ty"
+  using assms
+proof (induction expr arbitrary: ty)
+  case (Bsig x)
+  then show ?case 
+    by (metis bexp_wt_cases_slice(2) eval_world_raw.simps(10) wityping_def wtyping_def)
+next
+  case (Bsig_event x)
+  have "ty = Bty"
+    using bexp_wt_cases_all[OF Bsig_event(2)] by auto
+  then show ?case 
+    by auto
+next
+  case (Bsig_delayed x1a x2a)
+  hence "ty = \<Gamma> x1a"
+    using bexp_wt_cases_all[OF Bsig_delayed(2)] by auto    
+  then show ?case 
+    using Bsig_delayed(1) unfolding wityping_def wtyping_def styping_def
+    by auto
+next
+  case (Bnot expr)
+  hence "bexp_wt \<Gamma> expr ty"
+    using bexp_wt_cases(1)[OF Bnot(3)] by blast
+  then show ?case 
+    using Bnot(1)[OF Bnot(2)]  by (auto split:val.splits)
+next
+  case (Band expr1 expr2)
+  moreover hence " type_of (eval_world_raw2 tw expr1) = ty"
+    using bexp_wt_cases(2) by blast
+  moreover have "type_of (eval_world_raw2 tw expr2) = ty"
+    using Band.IH(2) Band.prems(1) Band.prems(2) bexp_wt_cases(2) by blast
+  ultimately show ?case 
+    by (auto split:val.splits)
+next
+  case (Bor expr1 expr2)
+  moreover hence " type_of (eval_world_raw2 tw expr1) = ty"
+    using bexp_wt_cases(3) by blast
+  moreover have "type_of (eval_world_raw2 tw expr2) = ty"
+    by (meson bexp_wt_cases(3) calculation(2) calculation(3) calculation(4))
+  ultimately show ?case 
+    by (auto split: val.splits)
+next
+  case (Bnand expr1 expr2)
+  moreover hence " type_of (eval_world_raw2 tw expr1) = ty"
+    using bexp_wt_cases(4) by blast
+  moreover have "type_of (eval_world_raw2 tw expr2) = ty"
+    by (meson bexp_wt_cases(4) calculation(2) calculation(3) calculation(4))
+  ultimately show ?case 
+    by (auto split:val.splits)
+next
+  case (Bnor expr1 expr2)
+  moreover hence " type_of (eval_world_raw2 tw expr1) = ty"
+    using bexp_wt_cases(5) by blast
+  moreover have "type_of (eval_world_raw2 tw expr2) = ty"
+    by (meson bexp_wt_cases(5) calculation(2) calculation(3) calculation(4))
+  ultimately show ?case 
+    by (auto split:val.splits)
+next
+  case (Bxor expr1 expr2)
+  moreover hence " type_of (eval_world_raw2 tw expr1) = ty"
+    using bexp_wt_cases(6) by blast
+  moreover have "type_of (eval_world_raw2 tw expr2) = ty"
+    by (meson bexp_wt_cases(6) calculation(2) calculation(3) calculation(4))
+  ultimately show ?case 
+    by (auto split:val.splits)
+next
+  case (Bxnor expr1 expr2)
+  moreover hence " type_of (eval_world_raw2 tw expr1) = ty"
+    using bexp_wt_cases(7) by blast
+  moreover have "type_of (eval_world_raw2 tw expr2) = ty"
+    by (meson bexp_wt_cases(7) calculation(2) calculation(3) calculation(4))
+  ultimately show ?case 
+    by (auto split:val.splits)
+next
+  case Btrue
+  have "ty = Bty"
+    using bexp_wt_cases_all[OF Btrue(2)] by auto
+  then show ?case 
+    by auto
+next
+  case Bfalse
+  have "ty = Bty"
+    using bexp_wt_cases_all[OF Bfalse(2)] by auto
+  then show ?case 
+    by auto
+next
+  case (Bslice x1a x2a x3)
+  show ?case  
+    by (metis Bslice.prems(1) Bslice.prems(2) bexp_wt_cases_slice(1) eval_world_raw_lv type_of.simps(2))
+next
+  case (Bindex x1a x2a)
+  then show ?case 
+    by (metis bexp_wt_cases_slice(3) eval_world_raw_bv type_of.simps(1))
+next
+  case (Badd expr1 expr2)
+  then obtain ki len1 where *: " type_of (eval_world_raw2 tw expr1) = Lty ki len1"
+    using bexp_wt_cases_add[OF Badd(4)]  by (metis eval_world_raw_lv type_of.simps(2))
+  then obtain ki len2 where **: "type_of (eval_world_raw2 tw expr2) = Lty ki len2"
+    using bexp_wt_cases_add[OF Badd(4)]  by (metis Badd(3) eval_world_raw_lv type_of.simps(2))
+  hence "ty = Lty ki (max len1 len2)"
+    using bexp_wt_cases_add[OF Badd(4)] 
+    by (smt Badd.prems(1) * eval_world_raw_lv ty.inject type_of.simps(2))
+  then show ?case 
+    using * **
+    by (metis Badd.prems(1) Badd.prems(2) eval_world_raw_lv type_of.simps(2))
+next
+  case (Bmult expr1 expr2)
+  then obtain ki len1 where *: " type_of (eval_world_raw2 tw expr1) = Lty ki len1"
+    using bexp_wt_cases_mult[OF Bmult(4)]  by (metis eval_world_raw_lv type_of.simps(2))
+  then obtain ki len2 where **: "type_of (eval_world_raw2 tw expr2) = Lty ki len2"
+    using bexp_wt_cases_mult[OF Bmult(4)]   by (metis Bmult(3) eval_world_raw_lv type_of.simps(2))
+  hence "ty = Lty ki (len1  + len2)"
+    using bexp_wt_cases_mult[OF Bmult(4)] 
+    by (smt "*" Bmult(3) eval_world_raw_lv ty.inject type_of.simps(2))
+  then show ?case 
+    using * ** by (metis Bmult.prems(1) Bmult.prems(2) eval_world_raw_lv type_of.simps(2))
+next
+  case (Bsub expr1 expr2)
+  then obtain ki len1 where *: " type_of (eval_world_raw2 tw expr1) = Lty ki len1"
+    using bexp_wt_cases_sub[OF Bsub(4)]  by (metis eval_world_raw_lv type_of.simps(2))
+  then obtain ki len2 where **: "type_of (eval_world_raw2 tw expr2) = Lty ki len2"
+    using bexp_wt_cases_sub[OF Bsub(4)]  by (metis Bsub.prems(1) eval_world_raw_lv type_of.simps(2))
+  hence "ty = Lty ki (max len1 len2)"
+    using bexp_wt_cases_sub[OF Bsub(4)]  by (smt "*" Bsub.prems(1) eval_world_raw_lv ty.inject type_of.simps(2))
+  then show ?case 
+    using * **  by (metis Bsub.prems(1) Bsub.prems(2) eval_world_raw_lv type_of.simps(2))
+next
+  case (Bshiftl expr x2a)
+  then obtain ki len where "ty = Lty ki len" and "0 < len"
+    using bexp_wt_cases_shiftl[OF Bshiftl(3)] by metis
+  then show ?case 
+    by (metis Bshiftl.prems(1) Bshiftl.prems(2) eval_world_raw_lv type_of.simps(2))
+next
+  case (Bshiftr expr x2a)
+  then obtain ki len where "ty = Lty ki len" and "0 < len"
+    using bexp_wt_cases_shiftr[OF Bshiftr(3)] by metis
+  then show ?case 
+    by (metis Bshiftr.prems(1) Bshiftr.prems(2) eval_world_raw_lv type_of.simps(2))
+next
+  case (Bwhen expr1 expr2 expr3)
+  hence "bexp_wt \<Gamma> expr2 Bty"
+    using bexp_wt_cases_when[OF Bwhen(5)]  by blast
+  hence *: "type_of (eval_world_raw2 tw expr2) = Bty"
+    using Bwhen  by blast
+  have "bexp_wt \<Gamma> expr3 ty" and "bexp_wt \<Gamma> expr1 ty"
+    using bexp_wt_cases_when[OF Bwhen(5)]  by blast+
+  hence "type_of (eval_world_raw2 tw expr1) = ty" and "type_of (eval_world_raw2 tw expr3) = ty"
+    using Bwhen by blast+
+  then show ?case 
+    using * by (auto split:val.splits bool.splits)
+next
+  case (Bliteral x1a x2a)
+  then show ?case 
+    using bexp_wt_cases_lit by fastforce
+qed
+
+lemma worldline_upd_eval_world_raw_preserve_wityping:
+  assumes "wityping \<Gamma> (snd tw)"
+  assumes "bexp_wt \<Gamma> expr (\<Gamma> sig)"
+  shows   "wityping \<Gamma> (snd (tw[ sig, t :=\<^sub>2 eval_world_raw2 tw expr]))"
+  using assms 
+  by (simp add: type_of_eval_world_raw2 worldline_upd2_def worldline_upd_preserve_wityping)
+
+lemma worldline_upd_eval_world_raw_preserve_wityping2:
+  assumes "wityping \<Gamma> (snd tw)"
+  assumes "type_of v = \<Gamma> sig"
+  shows   "wityping \<Gamma> (snd (tw[ sig, t :=\<^sub>2 v]))"
+  using assms
+  by (simp add: worldline_upd2_def worldline_upd_preserve_wityping)
+
 inductive
   seq_hoare3 :: "'signal tyenv \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal seq_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("  (1_) \<turnstile> ([(1_)]/ (_)/ [(1_)])" 50)
   where
@@ -1438,9 +1639,31 @@ next
     wp3_fun_eq_wp3[OF 8(3) nss] wp3_fun_eq_wp3[OF 8(4) not] by auto
 qed
 
+lemma strengthen_pre_hoare2:
+  assumes "\<forall>tw. P' tw \<and> wityping \<Gamma> (snd tw) \<longrightarrow> P tw" and "\<Gamma> \<turnstile> [P] s [Q]"
+  shows "\<Gamma> \<turnstile> [P'] s [Q]"
+  using assms by (blast intro: Conseq3)
+
+lemma seq_hoare_wt_complete:
+  assumes "seq_wt \<Gamma> ss" and "nonneg_delay ss"
+  assumes "\<Gamma> \<Turnstile> [P] ss [Q]" 
+  shows   "\<Gamma> \<turnstile> [P] ss [Q]"
+proof (rule strengthen_pre_hoare2)
+  show "\<forall>w. P w \<and> wityping \<Gamma> (snd w) \<longrightarrow> wp3 \<Gamma> ss Q w" using assms
+    unfolding seq_hoare_valid2_wt_def wp3_def by auto
+  show " \<Gamma> \<turnstile> [wp3 \<Gamma> ss Q] ss [Q]"
+    using assms wp3_fun_is_pre wp3_fun_eq_wp3 by fastforce
+qed
+
 definition
 conc_hoare_valid_wt :: "'signal tyenv \<Rightarrow>'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("(1_) \<Turnstile> \<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>" 50)
 where "\<Gamma> \<Turnstile> \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace> \<longleftrightarrow>  (\<forall>tw tw'.  wityping \<Gamma> (snd tw) \<and> P tw \<and> (tw, c \<Rightarrow>\<^sub>c tw') \<longrightarrow> Q tw')"
+
+lemma conc_hoare_valid_wt_commute:
+  assumes "conc_stmt_wf (cs1 || cs2)"
+  shows "\<Gamma> \<Turnstile> \<lbrace>P\<rbrace> cs1 || cs2 \<lbrace>Q\<rbrace> \<longleftrightarrow> \<Gamma> \<Turnstile> \<lbrace>P\<rbrace> cs2 || cs1 \<lbrace>Q\<rbrace>"
+  unfolding conc_hoare_valid_wt_def using world_conc_exec_commute[OF _ _ assms] 
+  by (smt assms parallel_comp_commute world_conc_exec.simps)
 
 inductive
   conc_hoare_wt :: "'signal tyenv \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"
@@ -1452,6 +1675,8 @@ inductive
 | Parallel2: "\<Gamma> \<turnstile> \<lbrace>P\<rbrace> cs\<^sub>2 \<lbrace>R\<rbrace> \<Longrightarrow> \<Gamma> \<turnstile> \<lbrace>R\<rbrace> cs\<^sub>1 \<lbrace>Q\<rbrace> \<Longrightarrow> conc_stmt_wf (cs\<^sub>1 || cs\<^sub>2) \<Longrightarrow> \<Gamma> \<turnstile> \<lbrace>P\<rbrace> cs\<^sub>1 || cs\<^sub>2 \<lbrace>Q\<rbrace>"
 | Conseq': "\<lbrakk>\<forall>w. wityping \<Gamma> (snd w) \<and> P' w \<longrightarrow> P w; \<Gamma> \<turnstile> \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<Gamma> \<turnstile> \<lbrace>P'\<rbrace> c \<lbrace>Q'\<rbrace>"
 | Conj2: "\<Gamma> \<turnstile> \<lbrace>P\<rbrace> s \<lbrace>Q1\<rbrace> \<Longrightarrow> \<Gamma> \<turnstile> \<lbrace>P\<rbrace> s \<lbrace>Q2\<rbrace> \<Longrightarrow> \<Gamma> \<turnstile> \<lbrace>P\<rbrace> s \<lbrace>\<lambda>tw. Q1 tw \<and> Q2 tw\<rbrace>"
+
+inductive_cases conc_hoare_wt_cases : "\<Gamma> \<turnstile> \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>"
 
 lemma parallel_valid:
   assumes "\<Gamma> \<Turnstile> \<lbrace>P\<rbrace> c1 \<lbrace>R\<rbrace>" and "\<Gamma> \<Turnstile> \<lbrace>R\<rbrace> c2 \<lbrace>Q\<rbrace>" and "conc_stmt_wf (c1 || c2)"
@@ -1524,6 +1749,10 @@ proof rule+
     using assms(2) `wityping \<Gamma> (snd tw1)` unfolding conc_hoare_valid_wt_def 
     by meson
 qed
+
+lemma conseq_valid:
+  shows "\<lbrakk>\<forall>w. wityping \<Gamma> (snd w) \<and> P' w \<longrightarrow> P w; \<Gamma> \<Turnstile> \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>; \<forall>w. Q w \<longrightarrow> Q' w\<rbrakk> \<Longrightarrow> \<Gamma> \<Turnstile> \<lbrace>P'\<rbrace> c \<lbrace>Q'\<rbrace>"
+  unfolding conc_hoare_valid_wt_def by meson
 
 lemma soundness_conc_hoare:
   assumes "\<Gamma> \<turnstile> \<lbrace>P\<rbrace> c \<lbrace>Q\<rbrace>"
@@ -1649,6 +1878,14 @@ proof (induction rule: world_conc_exec.induct)
   thus ?case
     by (meson \<open>tw , c1 \<Rightarrow>\<^sub>c tw_temp\<close>)
 qed
+
+lemma exist_middle_worldline': 
+  assumes "conc_stmt_wf (c1 || c2)" and "nonneg_delay_conc (c1 || c2)"
+  shows   "tw, c1 || c2 \<Rightarrow>\<^sub>c tw' \<longleftrightarrow> (\<exists>tw_temp. tw, c1 \<Rightarrow>\<^sub>c tw_temp \<and> tw_temp, c2 \<Rightarrow>\<^sub>c tw')"
+  using exist_middle_worldline[OF _ _ assms]
+  by (smt assms(1) assms(2) conc_stmt_wf_def distinct_append nonneg_delay_conc.simps(2)
+  signals_from.simps(2) world_conc_exec_alt.intros(3) world_conc_exec_alt_imp_world_conc_exec
+  world_conc_exec_imp_world_conc_exec_alt)
 
 lemma wp3_conc_parallel:
   assumes "conc_stmt_wf (cs1 || cs2)" and "nonneg_delay_conc (cs1 || cs2)"
@@ -1800,16 +2037,29 @@ next
     by (smt Bsingle.prems(3) Conseq3 conc_wt_cases(1) wp3_fun_eq_wp3 wp3_fun_is_pre) auto
 qed
 
+lemma wp3_conc_is_pre_valid:
+  assumes "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  assumes "conc_wt \<Gamma> cs"
+  shows "\<Gamma> \<Turnstile> \<lbrace>wp3_conc \<Gamma> cs Q\<rbrace> cs \<lbrace>Q\<rbrace>"
+  using assms  by (simp add: VHDL_Hoare_Typed.soundness_conc_hoare wp3_conc_is_pre)
+
 definition
 sim_hoare_valid_wt :: "'signal tyenv \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("(1_) \<Turnstile>\<^sub>s \<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>" 50)
 where "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace> \<longleftrightarrow> (\<forall>tw T tw'. wityping \<Gamma> (snd tw) \<and> P tw \<and> (tw, T, cs \<Rightarrow>\<^sub>S tw') \<longrightarrow> Q tw')"
+
+lemma true_program_true:
+  \<open>\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. True\<rbrace> cs \<lbrace>\<lambda>tw. True\<rbrace>\<close> 
+  unfolding sim_hoare_valid_wt_def by auto
 
 inductive
   sim_hoare :: "'signal tyenv \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"
   ("(1_) \<turnstile>\<^sub>s (\<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>)" 50)
   where
 While_Suc: "\<Gamma> \<turnstile> \<lbrace>\<lambda>tw. P tw\<rbrace> cs \<lbrace> \<lambda>tw. P (fst tw + 1, snd tw)\<rbrace>  \<Longrightarrow> \<Gamma> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>P\<rbrace>" |
-Conseq_sim: "\<forall>tw. wityping \<Gamma> (snd tw) \<and> P' tw \<longrightarrow> P tw \<Longrightarrow> \<Gamma> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace> \<Longrightarrow> \<forall>tw. Q tw \<longrightarrow> Q' tw \<Longrightarrow> \<Gamma> \<turnstile>\<^sub>s \<lbrace>P'\<rbrace> cs \<lbrace>Q'\<rbrace>"
+Conseq_sim: "\<forall>tw. wityping \<Gamma> (snd tw) \<and> P' tw \<longrightarrow> P tw \<Longrightarrow> \<Gamma> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace> \<Longrightarrow> \<forall>tw. Q tw \<longrightarrow> Q' tw \<Longrightarrow> \<Gamma> \<turnstile>\<^sub>s \<lbrace>P'\<rbrace> cs \<lbrace>Q'\<rbrace>" |
+Conj_sim : "\<Gamma> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>Q1\<rbrace> \<Longrightarrow> \<Gamma> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>Q2\<rbrace> \<Longrightarrow> \<Gamma> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>\<lambda>tw. Q1 tw \<and> Q2 tw\<rbrace>"
+
+inductive_cases sim_hoare_cases: "\<Gamma> \<turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace>"
 
 lemma while_soundness:
   assumes "\<Gamma> \<Turnstile> \<lbrace>P\<rbrace> cs \<lbrace>\<lambda>tw. P (fst tw + 1, snd tw)\<rbrace>"
@@ -1861,7 +2111,109 @@ next
   case (Conseq_sim \<Gamma> P' P cs Q Q')
   then show ?case 
     by (smt sim_hoare_valid_wt_def)
+next
+  case (Conj_sim \<Gamma> P cs Q1 Q2)
+  then show ?case 
+    by (simp add: sim_hoare_valid_wt_def)
 qed
+
+lemma While_Suc':
+  assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs" and "conc_wt \<Gamma> cs"
+  shows   "\<Gamma> \<Turnstile> \<lbrace>\<lambda>tw. P tw\<rbrace> cs \<lbrace> \<lambda>tw. P (fst tw + 1, snd tw)\<rbrace>  \<Longrightarrow> \<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>P\<rbrace>"
+  using While_Suc conc_sim_soundness[OF _ assms] soundness_conc_hoare[OF _ assms(3) assms(2) assms(1)]
+  using assms(1) assms(2) assms(3) sim_hoare_valid_wt_def while_soundness by fastforce
+
+lemma conseq_sim_valid:
+  "\<forall>tw. wityping \<Gamma> (snd tw) \<and> P' tw \<longrightarrow> P tw \<Longrightarrow> \<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>Q\<rbrace> \<Longrightarrow> \<forall>tw. Q tw \<longrightarrow> Q' tw \<Longrightarrow> \<Gamma> \<Turnstile>\<^sub>s \<lbrace>P'\<rbrace> cs \<lbrace>Q'\<rbrace>"
+  unfolding sim_hoare_valid_wt_def by blast
+
+lemma conc_wt_progress_world_sim:
+  assumes "fst tw \<le> T" 
+  assumes \<open>conc_wt \<Gamma> cs\<close>
+  assumes \<open>nonneg_delay_conc cs\<close>
+  assumes \<open>wityping \<Gamma> (snd tw)\<close>
+  assumes \<open>conc_stmt_wf cs\<close>
+  shows   "\<exists>tw'. tw, T, cs \<Rightarrow>\<^sub>S tw'"
+proof -
+  obtain t \<sigma> \<gamma> \<theta> def \<tau> where "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)"
+    using destruct_worldline_exist by blast
+  hence "ttyping \<Gamma> \<tau>"
+    using `wityping \<Gamma> (snd tw)` wityping_ensure_ttyping2 
+    by (metis (no_types, lifting) destruct_worldline_def snd_conv)
+  have "ttyping \<Gamma> \<theta>"
+    using wityping_ensure_ttyping 
+    by (smt Pair_inject \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)\<close> assms(4) destruct_worldline_def)
+  have "styping \<Gamma> \<sigma>"
+    by (metis (no_types, lifting) Pair_inject \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)\<close>
+    assms(4) destruct_worldline_def styping_def wityping_def wtyping_def)
+  have "styping \<Gamma> def"
+    by (metis (mono_tags, lifting) \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)\<close> assms(4) destruct_worldline_def fst_conv snd_conv wityping_def)
+  obtain t' \<sigma>' \<theta>' \<tau>' where " T, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto>s (t', \<sigma>', \<theta>', \<tau>')"
+    using conc_wt_simulation_progress[OF assms(2-3) `ttyping \<Gamma> \<tau>` `ttyping \<Gamma> \<theta>` `styping \<Gamma> \<sigma>` `styping \<Gamma> def`]
+    by (metis (full_types) \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)\<close> assms(1) fst_conv fst_destruct_worldline prod_cases4)
+  hence "\<exists>tw'. world_sim_fin2 tw T cs tw'"
+    using \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)\<close> world_sim_fin2.intros by blast
+  thus ?thesis
+    using world_sim_fin2_imp_fin  using assms(3) assms(5) by blast
+qed
+
+lemma simulation_semi_complete:
+  assumes \<open>\<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> cs \<lbrace>P\<rbrace>\<close>
+  assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs" and "conc_wt \<Gamma> cs" 
+  shows   \<open>\<Gamma> \<Turnstile> \<lbrace>P\<rbrace> cs \<lbrace>\<lambda>tw. P (fst tw + 1, snd tw)\<rbrace>\<close>
+proof -
+  have *: "\<And>tw T tw'. wityping \<Gamma> (snd tw) \<Longrightarrow> P tw \<Longrightarrow>  tw, T, cs \<Rightarrow>\<^sub>S tw' \<Longrightarrow> P tw'"
+    using assms(1) unfolding sim_hoare_valid_wt_def by auto
+  { fix tw tw'
+    assume "wityping \<Gamma> (snd tw)" and "P tw"
+    assume " tw , cs \<Rightarrow>\<^sub>c tw'"
+    obtain tw_fin where "tw, fst tw + 1, cs \<Rightarrow>\<^sub>S tw_fin"
+      using conc_wt_progress_world_sim 
+      by (metis \<open>wityping \<Gamma> (snd tw)\<close> add.commute assms(2) assms(3) assms(4) le_add2)
+    hence "P tw_fin"
+      using *[OF `wityping \<Gamma> (snd tw)` `P tw`] by blast
+    have "tw_fin = (fst tw + 1, snd tw_fin)"
+      using \<open>tw, get_time tw + 1, cs \<Rightarrow>\<^sub>S tw_fin\<close> world_maxtime_lt_fst_tres by fastforce
+    have "world_sim_fin2 tw (fst tw + 1) cs tw_fin"
+      using \<open>tw, get_time tw + 1, cs \<Rightarrow>\<^sub>S tw_fin\<close> assms(2) assms(3) world_sim_fin_imp_fin2 by blast
+    hence "world_sim_fin2_alt tw (fst tw + 1) cs tw_fin"
+      by (simp add: assms(2) assms(3) world_sim_fin2_eq_world_sim_fin2_alt)
+    then obtain tw2 where "world_conc_exec_alt tw cs tw2" and "world_sim_fin2_alt (fst tw2 + 1, snd tw2) (fst tw + 1) cs tw_fin"
+      by (metis (no_types, lifting) less_add_one not_add_less1 world_sim_fin2_alt.simps)
+    hence " tw , cs \<Rightarrow>\<^sub>c tw2"
+      using assms(2) assms(3) world_conc_exec_alt_imp_world_conc_exec by blast
+    have "tw_fin = (fst tw2 + 1, snd tw2)"
+      by (metis (no_types, lifting) One_nat_def \<open>tw , cs \<Rightarrow>\<^sub>c tw2\<close> \<open>world_sim_fin2_alt (get_time tw2
+      + 1, snd tw2) (get_time tw + 1) cs tw_fin\<close> fst_conv fst_world_conc_exec group_cancel.add1
+      not_add_less1 plus_1_eq_Suc world_sim_fin2_alt.cases)
+    hence "P (get_time tw' + 1, snd tw')"
+      by (metis \<open>P tw_fin\<close> \<open>tw , cs \<Rightarrow>\<^sub>c tw'\<close> \<open>tw , cs \<Rightarrow>\<^sub>c tw2\<close> world_conc_exec_deterministic) }
+  thus ?thesis
+    unfolding conc_hoare_valid_wt_def by metis
+qed
+
+lemma sim_hoare_valid_wt_parallel_commute:
+  assumes "conc_stmt_wf (cs1 || cs2)"
+  shows " \<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> (cs1 || cs2) \<lbrace>Q\<rbrace> \<longleftrightarrow> \<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> (cs2 || cs1) \<lbrace>Q\<rbrace>"
+  unfolding sim_hoare_valid_wt_def world_sim_fin_parallel_commute[OF assms]
+  by auto
+
+lemma sim_hoare_valid_wt_parallel_distrib:
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  shows "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> (cs1 || cs2) || cs3 \<lbrace>Q\<rbrace> \<longleftrightarrow> \<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> (cs1 || cs3) || (cs2 || cs3) \<lbrace>Q\<rbrace>"
+  unfolding sim_hoare_valid_wt_def world_sim_fin_parallel_distrib[OF assms]
+  by blast
+
+lemma sim_hoare_valid_wt_parallel_associative:
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"  
+  shows "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> (cs1 || cs2) || cs3 \<lbrace>Q\<rbrace> \<longleftrightarrow> \<Gamma> \<Turnstile>\<^sub>s \<lbrace>P\<rbrace> cs1 || cs2 || cs3 \<lbrace>Q\<rbrace>"
+  unfolding sim_hoare_valid_wt_def world_sim_fin_parallel_associative[OF assms]
+  by blast
+
+lemma comb_sim_hoare_valid_wt:
+  assumes "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>P1\<rbrace> cs \<lbrace>Q1\<rbrace>" and "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>P2\<rbrace> cs \<lbrace>Q2\<rbrace>"
+  shows   "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. P1 tw \<and> P2 tw\<rbrace> cs \<lbrace>\<lambda>tw. Q1 tw \<and> Q2 tw\<rbrace>"
+  using assms unfolding sim_hoare_valid_wt_def  by blast
 
 inductive
   init_hoare :: "'signal tyenv \<Rightarrow> 'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"

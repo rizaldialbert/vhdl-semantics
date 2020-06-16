@@ -23,6 +23,20 @@ lemma fst_worldline_upd2 [simp]:
   "fst (tw[sig, t :=\<^sub>2 v]) = fst tw"
   unfolding worldline_upd2_def by auto
 
+lemma switch_worldline_upd2:
+  assumes "sig1 \<noteq> sig2"
+  shows "tw[sig1, dly1 :=\<^sub>2 v1][sig2, dly2 :=\<^sub>2 v2] = tw[sig2, dly2 :=\<^sub>2 v2][sig1, dly1 :=\<^sub>2 v1]"
+  using assms unfolding worldline_upd2_def worldline_upd_def fst_conv snd_conv
+  by force
+
+lemma switch_assignment3: 
+  assumes "sig1 \<noteq> sig2" and "sig2 \<noteq> sig3" and "sig1 \<noteq> sig3"
+  shows   "tw[sig1, dly1 :=\<^sub>2 v1][sig2, dly2 :=\<^sub>2 v2][sig3, dly3 :=\<^sub>2 v3] = 
+           tw[sig2, dly2 :=\<^sub>2 v2][sig3, dly3 :=\<^sub>2 v3][sig1, dly1 :=\<^sub>2 v1]"
+  using assms
+  unfolding worldline_upd2_def snd_conv worldline_upd_def fst_conv 
+  by (auto intro!:ext)
+
 abbreviation wline_of where "wline_of (tw :: nat \<times> 'signal worldline_init) \<equiv> (snd o snd) tw"
 
 lemma worldline_upd2_before_dly:
@@ -49,9 +63,168 @@ lemma worldline_upd2_after_dly:
   shows "\<And>s i. fst tw + dly < i \<Longrightarrow> wline_of (fst tw + dly, snd tw') sig i = val"
   unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
 
+lemma snd_worldline_upd2:
+  "sig \<noteq> sig' \<Longrightarrow> snd (snd (tw[sig, t :=\<^sub>2 v])) sig' t' = snd (snd tw) sig' t'"
+  unfolding worldline_upd2_def worldline_upd_def by auto
+
+lemma snd_worldline_upd2':
+  "0 < t \<Longrightarrow> t' \<le> fst tw \<Longrightarrow> snd (snd (tw[sig, t :=\<^sub>2 v])) sig' t' = snd (snd tw) sig' t'"
+  unfolding worldline_upd2_def worldline_upd_def by auto
+
 definition worldline_inert_upd2 ::
   "nat \<times> 'signal worldline_init \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> nat \<times> 'signal worldline_init" ("_\<lbrakk> _, _ :=\<^sub>2 _\<rbrakk>")
   where "worldline_inert_upd2 \<equiv> \<lambda>tw sig dly v. (fst tw, worldline_inert_upd (snd tw) sig (fst tw) dly v)"
+
+lemma fst_worldline_inert_upd2:
+  "fst (worldline_inert_upd2 tw sig dly v) = fst tw"
+  unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+
+lemma switch_worldline_inert_upd2:
+  assumes "sig \<noteq> sig'"
+  shows "(tw\<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>)\<lbrakk>sig', dly' :=\<^sub>2 v'\<rbrakk> = (tw\<lbrakk>sig', dly' :=\<^sub>2 v'\<rbrakk>)\<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>"
+  apply (rule)
+  subgoal by (auto simp add: fst_worldline_inert_upd2)
+  subgoal 
+    apply (rule)
+    subgoal unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+    apply (rule ext)
+    apply (rule ext)
+  proof -
+    fix s' t'
+    have "s' \<noteq> sig' \<and> s' \<noteq> sig \<or> s' = sig \<or> s' = sig'"
+      by auto
+    moreover
+    { assume "s' \<noteq> sig' \<and> s' \<noteq> sig"
+      hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw) s' t'"
+        unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+      also have "... = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        using `s' \<noteq> sig' \<and> s' \<noteq> sig`
+        unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+      finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto }
+    moreover
+    { assume "s' = sig" hence "s' \<noteq> sig'" using assms by auto
+      hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+      moreover have "snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        using `s' = sig` `s' \<noteq> sig'` unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+      ultimately have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto }
+    moreover
+    { assume "s' = sig'" hence "s' \<noteq> sig" using assms by auto
+      hence "snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t'"
+        unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+      moreover have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' =  snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t'"
+        using `s' = sig'` `s' \<noteq> sig` unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+      ultimately have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto } 
+    ultimately show "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto
+  qed
+  done
+
+lemma switch_worldline_inert_non_inert:
+  assumes "sig \<noteq> sig'"
+  shows "(tw\<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>)[sig', dly' :=\<^sub>2 v'] = (tw[sig', dly' :=\<^sub>2 v'])\<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>"
+  apply (rule)
+   apply (simp add: fst_worldline_inert_upd2)
+  apply (rule)
+   apply (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+proof (rule ext)+
+  fix s' t'
+  have "s' \<noteq> sig' \<and> s' \<noteq> sig \<or> s' = sig \<or> s' = sig'"
+    by auto  
+  moreover
+  { assume "s' \<noteq> sig' \<and> s' \<noteq> sig"
+    hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw) s' t'"
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    also have "... = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      using `s' \<noteq> sig' \<and> s' \<noteq> sig` 
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto }
+  moreover
+  { assume "s' = sig" hence "s' \<noteq> sig'" using assms by auto
+    hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    also have "... = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      using `s' = sig` `s' \<noteq> sig'`
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto }
+  moreover
+  { assume "s' = sig'" hence "s' \<noteq> sig" using assms by auto
+    hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']) s' t'"
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    also have "... = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      using `s' \<noteq> sig` `s' = sig'`
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto }
+  ultimately show "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+    by auto
+qed
+
+lemma switch_worldline_inert_non_inert3:
+  assumes "sig1 \<noteq> sig2" and "sig2 \<noteq> sig3" and "sig1 \<noteq> sig3"
+  shows "(tw\<lbrakk>sig1, dly :=\<^sub>2 v\<rbrakk>)[sig2, dly2 :=\<^sub>2 v2][sig3, dly3 :=\<^sub>2 v3] = 
+         (tw[sig2, dly2 :=\<^sub>2 v2][sig3, dly3 :=\<^sub>2 v3])\<lbrakk>sig1, dly :=\<^sub>2 v\<rbrakk>"
+  apply (rule)
+   apply (simp add: fst_worldline_inert_upd2)
+  apply (rule)
+   apply (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+proof (rule ext)+
+  fix s' t'
+  have "s' \<noteq> sig1 \<and> s' \<noteq> sig2 \<and> s' \<noteq> sig3 \<or> s' = sig1 \<or> s' = sig2 \<or> s' = sig3"
+    by auto
+  moreover
+  { assume "s' \<noteq> sig1 \<and> s' \<noteq> sig2 \<and> s' \<noteq> sig3"
+    hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw) s' t'"
+      by (auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      using `s' \<noteq> sig1 \<and> s' \<noteq> sig2 \<and> s' \<noteq> sig3`
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto }
+  moreover
+  { assume "s' = sig1" hence "s' \<noteq> sig2" and "s' \<noteq> sig3" using assms by auto
+    hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by (auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      using `s' = sig1` `s' \<noteq> sig2`  `s' \<noteq> sig3`
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto }
+  moreover
+  { assume "s' = sig2" hence "s' \<noteq> sig1" and "s' \<noteq> sig3" using assms by auto
+    hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2]) s' t'"
+      by (auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      using `s' = sig2` `s' \<noteq> sig1`  `s' \<noteq> sig3`
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto }
+  moreover
+  { assume "s' = sig3" hence "s' \<noteq> sig1" and "s' \<noteq> sig2" using assms by auto
+    hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw[ sig3, dly3 :=\<^sub>2 v3]) s' t'"
+      by (auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      using `s' = sig3` `s' \<noteq> sig1`  `s' \<noteq> sig2`
+      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+    finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto }
+  ultimately show "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+    by auto 
+qed
+
+  
+
+
 
 definition beval_world_raw2 :: "nat \<times> 'signal worldline_init \<Rightarrow> 'signal bexp \<Rightarrow> val \<Rightarrow> bool" where
   "beval_world_raw2 \<equiv> \<lambda>tw exp. beval_world_raw (snd tw) (fst tw) exp"
@@ -3057,6 +3230,15 @@ lemma event_of_alt_def:
   using event_of_alt_def1 event_of_alt_def2
   by (metis (mono_tags, lifting) gr0I)
 
+lemma event_of_worldline_upd2:
+  "\<And>v1. 0 < dly \<Longrightarrow> event_of (w[ sig, dly :=\<^sub>2 v1]) = event_of w"
+  unfolding event_of_alt_def fst_worldline_upd2 worldline_upd2_def worldline_upd_def
+  by (auto)
+
+lemma event_of_worldline_upd2':
+  "\<And>v1.  event_of (w[ sig, 1 :=\<^sub>2 v1]) = event_of w"
+  by (simp add: event_of_worldline_upd2)
+
 inductive
   conc_hoare :: "'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"
   ("\<turnstile> (\<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>)" 50)
@@ -3340,6 +3522,24 @@ proof -
     using assms(2) \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)\<close> \<open>worldline2 t \<sigma> \<theta> def \<tau>' = tw1\<close>
     by (smt b_conc_exec_deterministic fst_conv snd_conv world_conc_exec_cases)
 qed
+
+lemma world_conc_exec_commute':
+  assumes "conc_stmt_wf (cs1 || cs2)"
+  shows "tw, (cs1 || cs2) \<Rightarrow>\<^sub>c tw' \<longleftrightarrow> tw, (cs2 || cs1) \<Rightarrow>\<^sub>c tw'"
+  using world_conc_exec_commute 
+  by (smt assms parallel_comp_commute world_conc_exec.simps)
+
+lemma world_conc_exec_associative:
+  assumes "tw, (cs1 || cs2) || cs3 \<Rightarrow>\<^sub>c tw1"
+  assumes "tw, cs1 || (cs2 || cs3) \<Rightarrow>\<^sub>c tw2"
+  shows   "tw1 = tw2"
+  using assms 
+  by (smt parallel_comp_assoc2 world_conc_exec.intros world_conc_exec_alt_cases(2) world_conc_exec_deterministic)
+
+lemma world_conc_exec_associative':
+  "tw, (cs1 || cs2) || cs3 \<Rightarrow>\<^sub>c tw' \<longleftrightarrow> tw, cs1 || (cs2 || cs3) \<Rightarrow>\<^sub>c tw'"
+  using world_conc_exec_associative 
+  by (smt parallel_comp_assoc parallel_comp_assoc2 world_conc_exec.intros world_conc_exec_cases)
 
 lemma world_conc_exec_disjnt:
   fixes tw :: "nat \<times> 'a worldline_init"
@@ -4246,6 +4446,21 @@ inductive world_sim_fin :: "nat \<times> 'signal worldline_init \<Rightarrow> na
    \<Longrightarrow> T, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> (t', \<sigma>', \<theta>', \<tau>')
    \<Longrightarrow> worldline_raw t' \<sigma>' \<theta>' def \<tau>' = w'
    \<Longrightarrow> tw, T, cs \<Rightarrow>\<^sub>S (t', w')"
+
+lemma world_sim_fin_parallel_commute:
+  assumes "conc_stmt_wf (cs1 || cs2)"
+  shows   "tw, T, cs1 || cs2 \<Rightarrow>\<^sub>S tw' \<longleftrightarrow> tw, T, cs2 || cs1 \<Rightarrow>\<^sub>S tw'"
+  using assms b_simulate_fin_parallel_commute_eq  by (smt world_sim_fin.simps)
+
+lemma world_sim_fin_parallel_distrib:
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  shows   "tw, T, (cs1 || cs3) || (cs2 || cs3) \<Rightarrow>\<^sub>S tw' \<longleftrightarrow> tw, T, ((cs1 || cs2) || cs3) \<Rightarrow>\<^sub>S tw'"
+  using assms by (simp add: b_simulat_fin_parallel_distrib world_sim_fin.simps) 
+
+lemma world_sim_fin_parallel_associative:
+  assumes "conc_stmt_wf ((cs1 || cs2) || cs3)"
+  shows   "tw, T, (cs1 || cs2) || cs3 \<Rightarrow>\<^sub>S tw' \<longleftrightarrow> tw, T, cs1 || cs2 || cs3 \<Rightarrow>\<^sub>S tw'"
+  using assms by (simp add: b_simulate_fin_parallel_assoc world_sim_fin.simps)
 
 lemma b_simulate_fin_preserves_history_prop:
   assumes "T, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res"
@@ -8195,6 +8410,10 @@ lemma wityping_ensure_styping:
 lemma wityping_ensure_ttyping:
   "wityping \<Gamma> wi \<Longrightarrow> ttyping \<Gamma> (derivative_hist_raw wi t)"
   by (simp add: derivative_hist_raw_def difference_raw_alt_def domIff wityping_def ttyping_def wtyping_def)
+
+lemma wityping_ensure_ttyping2:
+  "wityping \<Gamma> wi \<Longrightarrow> ttyping \<Gamma> (derivative_raw wi t)"
+  by (auto simp add: derivative_raw_def difference_raw_alt_def Let_def domIff wityping_def ttyping_def wtyping_def)
 
 lemma worldline_upd_preserve_wityping:
   assumes "wityping \<Gamma> wi"
