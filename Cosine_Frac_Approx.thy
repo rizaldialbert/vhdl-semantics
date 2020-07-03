@@ -28,7 +28,7 @@ definition floatarith8 :: "floatarith" where
   "floatarith8 = floatarith.Inverse (floatarith.Num (Float 40320 0))"
 
 definition floatarith6 :: "floatarith" where
-  "floatarith6 = floatarith.Inverse (floatarith.Num (Float 720 0))"
+  "floatarith6 = floatarith.Inverse (floatarith.Num (Float (- 720) 0))"
 
 definition floatarith4 :: "floatarith" where
   "floatarith4 = floatarith.Inverse (floatarith.Num (Float 24 0))"
@@ -44,16 +44,16 @@ definition "approx_eighth = 53261"
 value [code] "approx 23 floatarith6 []"
 
 lemma
-  "1 / ((fact 6) :: int) \<in> {Float 372827 (- 28) .. Float 11930465 (- 33)}"
+  "- 1 / ((fact 6) :: int) \<in> {Float (- 11930465) (- 33) .. Float (-372827) (- 28)}"
   unfolding fact6 by (approximation 23)
 
 lemma
-  "1 / ((fact 6) :: int) \<in> {Float 2982616 (- 31) .. Float 11651 (- 23)}"
+  "- 1 / ((fact 6) :: int) \<in> {Float (-11651) (- 23) .. Float (- 2982616) (- 31)}"
   unfolding fact6 by (approximation 23)
 
-definition "approx_sixth = 2982616" 
+definition "approx_sixth = - 2982616" 
 
-lemma "Float 372827 (-28) = Float approx_sixth (-31)"
+lemma "Float (-372827) (-28) = Float approx_sixth (-31)"
   by eval
 
 value [code ] "approx 24 floatarith4 []"
@@ -76,10 +76,10 @@ lemma
   by eval
 
 lemma
-  "1 / ((fact 2) :: int) = Float 1073741824 (-31)"
+  " - 1 / ((fact 2) :: int) = Float (-1073741824) (-31)"
   by eval
 
-definition "approx_half = 1073741824"
+definition "approx_half = (- 1073741824)"
 
 definition "approx_one = 2147483647"
 

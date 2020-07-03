@@ -494,7 +494,57 @@ lemma sbin_bl_bin_sbintruc:
   using bin_bl_bin sbl_to_bin_alt_def size_bin_to_bl by auto
 
 lemma sbl_to_bin_alt_def2:
-  "0 < n \<Longrightarrow> sbl_to_bin bs = sbintrunc (length bs - 1) (sbl_to_bin bs)"
+  "sbl_to_bin bs = sbintrunc (length bs - 1) (sbl_to_bin bs)"
   by (simp add: sbl_to_bin_alt_def)
+
+lemma trunc_sbl2bin:
+  "sbintrunc m (sbl_to_bin bs) = sbl_to_bin (drop (length bs - 1 - m) bs)"
+proof -
+  have *: "sbintrunc m (sbl_to_bin bs) =  sbintrunc m (sbintrunc (length bs - 1) (bl_to_bin bs))"
+    unfolding sbl_to_bin_alt_def by auto
+  have "length bs - 1 \<le> m \<or> m < length bs - 1"
+    by auto
+  moreover
+  { assume less: "length bs - 1 \<le> m"
+    have "sbintrunc m (sbintrunc (length bs - 1) (bl_to_bin bs)) = sbintrunc (length bs - 1) (bl_to_bin bs)"
+      unfolding sbintrunc_sbintrunc_l[OF less] by auto
+    also have "... = sbl_to_bin bs"
+      unfolding sbl_to_bin_alt_def by auto
+    finally have "sbintrunc m (sbl_to_bin bs) = sbl_to_bin bs"
+      using * by auto 
+    also have "... = sbl_to_bin (drop (length bs - 1 - m) bs)"
+      using less by auto 
+    finally have ?thesis
+      by blast }
+  moreover
+  { assume "m < length bs - 1"
+    hence ?thesis
+      using bl2bin_drop sbintrunc_bintrunc sbl_to_bin_alt_def by auto }
+  ultimately show ?thesis
+    by auto
+qed
+
+lemma sbl2bin_drop:
+  "k < length bl \<Longrightarrow> sbl_to_bin (drop k bl) = sbintrunc (length bl - 1 - k) (sbl_to_bin bl)"
+  apply (rule trans)
+   prefer 2
+   apply (rule trunc_sbl2bin [symmetric])
+  apply (cases "k \<le> length bl - 1")
+   apply auto
+  done
+
+lemma bin_rest_power_strunc:
+  "k \<le> n \<Longrightarrow> (bin_rest ^^ k) (sbintrunc n bin) = sbintrunc (n - k) ((bin_rest ^^ k) bin)"
+proof (induction k)
+  case 0
+  then show ?case by simp
+next
+  case (Suc k)
+  hence "(bin_rest ^^ k) (sbintrunc n bin) = sbintrunc (n - k) ((bin_rest ^^ k) bin)"
+    by auto
+  then show ?case 
+    using Suc.prems Suc_diff_le by fastforce
+qed  
+
 
 end

@@ -79,6 +79,100 @@ lemma fst_worldline_inert_upd2:
   "fst (worldline_inert_upd2 tw sig dly v) = fst tw"
   unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
 
+lemma snd_worldline_inert_upd2':
+  "0 < t \<Longrightarrow> t' \<le> fst tw \<Longrightarrow> snd (snd (tw\<lbrakk>sig, t :=\<^sub>2 v\<rbrakk>)) sig' t' = snd (snd tw) sig' t'"
+proof -
+  assume "0 < t" and "t' \<le> fst tw"
+  have "snd (snd (tw\<lbrakk>sig, t :=\<^sub>2 v\<rbrakk>)) sig' t' = (let time =
+           if snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v then get_time tw + t
+           else GREATEST n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v
+     in if sig' \<noteq> sig \<or> t' < get_time tw then snd (snd tw) sig' t' else if t' < time then snd (snd tw) sig' (get_time tw) else v)"
+    (is "_ = ?comp")
+    unfolding worldline_inert_upd2_def snd_conv worldline_inert_upd_def by auto
+  have "(snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v) \<or> 
+      \<not> (snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v)"
+    by auto
+  moreover
+  { assume "snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v"
+    hence "?comp = (if sig' \<noteq> sig \<or> t' < get_time tw then snd (snd tw) sig' t' else if t' < fst tw + t then snd (snd tw) sig' (get_time tw) else v)"
+      by auto
+    also have "... = snd (snd tw) sig' t'"
+      using \<open>0 < t\<close> \<open>t' \<le> get_time tw\<close> by auto
+    finally have "?comp = snd (snd tw) sig' t'"
+      by auto }
+  moreover
+  { let ?t = "GREATEST n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v"
+    assume "\<not> (snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v)"
+    hence temp: "?comp = (if sig' \<noteq> sig \<or> t' < get_time tw then snd (snd tw) sig' t' else if t' < ?t then snd (snd tw) sig' (get_time tw) else v)"
+      by auto
+    have "snd (snd tw) sig (fst tw) \<noteq> v" and "snd (snd tw) sig (fst tw + t) = v"
+      using \<open>\<not> (snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v)\<close> by auto
+    have *: "\<exists>n. fst tw \<le> n \<and> n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v"
+    proof (rule ccontr)
+      assume "\<not> (\<exists>n. fst tw \<le> n \<and> n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v)"
+      hence "\<forall>n. fst tw \<le> n \<and> n \<le> fst tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<longrightarrow> snd (snd tw) sig n \<noteq> v"
+        by auto
+      have "(\<forall>n. fst tw \<le> n \<and> n \<le> fst tw + t \<longrightarrow> snd (snd tw) sig n \<noteq> v) \<longleftrightarrow> 
+            (\<forall>j. j \<le> t \<longrightarrow> snd (snd tw) sig (j + fst tw) \<noteq> v)"
+        by (metis \<open>snd (snd tw) sig (get_time tw + t) = v\<close> add.commute add_leD2 order_refl)
+      have "(\<forall>j. j \<le> t \<longrightarrow> snd (snd tw) sig (j + fst tw) \<noteq> v)"
+      proof (rule, rule)
+        fix j 
+        show "j \<le> t  \<Longrightarrow> snd (snd tw) sig (j + get_time tw) \<noteq> v"
+        proof (induction j)
+          case 0
+          then show ?case using \<open>snd (snd tw) sig (fst tw) \<noteq> v\<close> by auto
+        next
+          case (Suc j)
+          hence "j \<le> t" by  linarith
+          hence "snd (snd tw) sig (j + get_time tw) \<noteq> v"
+            using Suc by auto
+          then show ?case 
+            using \<open>\<forall>n. fst tw \<le> n \<and> n \<le> fst tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<longrightarrow> snd (snd tw) sig n \<noteq> v\<close> \<open>j \<le> t\<close> Suc(2)
+            by (simp add: \<open>snd (snd tw) sig (j + get_time tw) \<noteq> v\<close>)
+        qed
+      qed
+      thus False
+        by (metis (full_types) \<open>snd (snd tw) sig (get_time tw + t) = v\<close> add.commute order_refl)
+    qed
+    hence ***: "\<exists>n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v"
+      by blast
+    have **: "\<forall>y. y \<le> get_time tw + t \<and> snd (snd tw) sig (y - 1) \<noteq> v \<and> snd (snd tw) sig y = v \<longrightarrow> y \<le> fst tw + t"
+      by blast
+    hence "?t \<le> fst tw + t" and "snd (snd tw) sig (?t - 1) \<noteq> v " and " snd (snd tw) sig ?t = v"
+      using GreatestI_ex_nat[OF *** **] by auto
+    have "?t \<noteq> fst tw"
+      using \<open>snd (snd tw) sig (GREATEST n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd
+      (snd tw) sig n = v) = v\<close> \<open>snd (snd tw) sig (get_time tw) \<noteq> v\<close> by auto
+    have "fst tw < ?t"
+    proof (rule ccontr)
+      assume "\<not> fst tw < ?t" hence "?t \<le> fst tw" by auto hence "?t < fst tw" using `?t \<noteq> fst tw` by auto
+      obtain n where "fst tw \<le> n" and "n \<le> fst tw + t" and "snd (snd tw) sig (n - 1) \<noteq> v" and 
+        "snd (snd tw) sig n = v" using * by blast
+      hence "n \<le> ?t"
+        using Greatest_le_nat[where b="fst tw + t"] by auto
+      hence "n < fst tw"
+        using `?t < fst tw` by auto
+      with `fst tw \<le> n` show False by auto
+    qed
+    consider "sig' \<noteq> sig \<or> t' < get_time tw" | "sig' = sig \<and> fst tw \<le> t'"
+      using not_le_imp_less by blast
+    hence "?comp = snd (snd tw) sig' t'"
+    proof (cases)
+      case 2
+      with `t' \<le> fst tw` have "fst tw = t'" by auto
+      hence "t' < ?t" using `fst tw < ?t` by auto
+      then show ?thesis 
+        unfolding temp  by (simp add: \<open>get_time tw = t'\<close>)
+    qed auto }
+  ultimately have "?comp = snd (snd tw) sig' t'"
+    by auto
+  thus ?thesis
+    by (simp add: \<open>snd (snd tw\<lbrakk> sig, t :=\<^sub>2 v\<rbrakk>) sig' t' = ?comp\<close>)
+qed
+
+
+
 lemma switch_worldline_inert_upd2:
   assumes "sig \<noteq> sig'"
   shows "(tw\<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>)\<lbrakk>sig', dly' :=\<^sub>2 v'\<rbrakk> = (tw\<lbrakk>sig', dly' :=\<^sub>2 v'\<rbrakk>)\<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>"
@@ -221,10 +315,6 @@ proof (rule ext)+
                   snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
     by auto 
 qed
-
-  
-
-
 
 definition beval_world_raw2 :: "nat \<times> 'signal worldline_init \<Rightarrow> 'signal bexp \<Rightarrow> val \<Rightarrow> bool" where
   "beval_world_raw2 \<equiv> \<lambda>tw exp. beval_world_raw (snd tw) (fst tw) exp"
@@ -2799,6 +2889,25 @@ inductive_cases world_seq_exec_alt_cases [elim!] :
   "world_seq_exec_alt tw (Bassign_inert sig exp dly) ss"
   "world_seq_exec_alt tw (Bcase exp ((Explicit exp', ss) # choices)) tw'"
 
+lemma world_seq_exec_alt_unaffected:
+  assumes "world_seq_exec_alt tw ss tw'"
+  assumes "sig \<notin> set (signals_in ss)"
+  shows   "\<And>k. wline_of tw sig k = wline_of tw' sig k"
+  using assms
+proof (induction rule: world_seq_exec_alt.inducts)
+  case (5 tw exp x tw' sig2 dly)
+  hence "sig2 \<noteq> sig"
+    by auto
+  show ?case 
+    using snd_worldline_upd2[OF `sig2 \<noteq> sig`] unfolding comp_def 5(2) by auto
+next
+  case (6 tw exp x tw' sig2 dly)
+  hence "sig2 \<noteq> sig"
+    by auto
+  then show ?case 
+    unfolding comp_def 6(2) worldline_inert_upd2_def worldline_inert_upd_def by auto
+qed auto
+
 lemma world_seq_exec_bcase_empty:
   "tw, Bcase exp [] \<Rightarrow>\<^sub>s tw"
 proof -
@@ -2809,6 +2918,25 @@ proof -
   ultimately show ?thesis
     using world_seq_exec_alt_imp_world_seq_exec  by blast
 qed
+
+lemma world_seq_exec_alt_unaffected_before_curr:
+  assumes "world_seq_exec_alt tw ss tw'"
+  assumes "nonneg_delay ss"
+  shows   "\<And>k. k \<le> fst tw \<Longrightarrow> wline_of tw sig k = wline_of tw' sig k"
+  using assms
+proof (induction rule: world_seq_exec_alt.inducts)
+  case (2 tw ss1 tw'' ss2 tw')
+  then show ?case 
+    by (metis (no_types, lifting) fst_world_seq_exec_alt nonneg_delay.simps(2))
+next
+  case (5 tw exp x tw' sig dly)
+  then show ?case 
+    by (simp add: snd_worldline_upd2')
+next                        
+  case (6 tw exp x tw' sig dly)
+  then show ?case 
+    by (auto simp add: snd_worldline_inert_upd2')
+qed auto
 
 lemma world_seq_exec_bcase_others:
   fixes tw :: "nat \<times> 'a worldline_init"
@@ -3326,11 +3454,19 @@ next
     by (simp add: world_conc_exec_alt.intros(1))
 qed
 
-
+lemma world_conc_exec_alt_unaffected:
+  assumes "world_conc_exec_alt tw cs tw'"
+  assumes "sig \<notin> set (signals_from cs)"
+  shows   "\<And>k. wline_of tw sig k = wline_of tw' sig k"
+  using assms
+proof (induction rule: world_conc_exec_alt.inducts)
+  case (2 tw ss tw' sl)
+  then show ?case 
+    using world_seq_exec_alt_unaffected  by (metis signals_from.simps(1))
+qed (auto)
 
 inductive_cases world_conc_exec_alt_cases [elim!] : "world_conc_exec tw (process sl : ss) tw'"
                                                     "world_conc_exec tw (cs1 || cs2) tw'"
-
 lemma fst_world_conc_exec_alt:
   assumes "world_conc_exec_alt tw cs tw'"
   shows   "fst tw = fst tw'"
@@ -3576,7 +3712,47 @@ proof -
     using assms(2) des  by (smt b_seq_exec_deterministic fst_conv snd_conv world_seq_exec_cases)
   thus ?thesis
     using des ex
-    by (meson world_conc_exec.intros) qed
+    by (meson world_conc_exec.intros) 
+qed
+
+lemma world_conc_exec_alt_unaffected_before_curr:
+  assumes "world_conc_exec_alt tw cs tw'"
+  assumes "nonneg_delay_conc cs"
+  shows   "\<And>k. k \<le> fst tw \<Longrightarrow> wline_of tw sig k = wline_of tw' sig k"
+  using assms
+proof (induction rule:world_conc_exec_alt.inducts)
+  case (1 sl tw ss)
+  then show ?case by auto
+next
+  case (2 tw ss tw' sl)
+  then show ?case 
+    by (meson nonneg_delay_conc.simps(1) world_seq_exec_alt_unaffected_before_curr)
+next
+  case (3 tw cs1 tw' cs2 tw'')
+  hence "\<And>k. k \<le> fst tw \<Longrightarrow> wline_of tw sig k = wline_of tw' sig k"
+    by auto
+  have "\<And>k. k \<le> fst tw' \<Longrightarrow> wline_of tw' sig k = wline_of tw'' sig k"
+    using 3 by auto
+  moreover have "fst tw = fst tw'"
+    using 3(1)  using fst_world_conc_exec_alt by blast
+  ultimately have "\<And>k. k \<le> fst tw \<Longrightarrow> wline_of tw' sig k = wline_of tw'' sig k"
+    by auto
+  then show ?case
+    using \<open>\<And>k. k \<le> fst tw \<Longrightarrow> wline_of tw sig k = wline_of tw' sig k\<close> \<open>k \<le> get_time tw\<close> by auto
+next
+  case (4 tw cs2 tw' cs1 tw'')
+  hence "\<And>k. k \<le> fst tw \<Longrightarrow> wline_of tw sig k = wline_of tw' sig k"
+    by auto
+  have "\<And>k. k \<le> fst tw' \<Longrightarrow> wline_of tw' sig k = wline_of tw'' sig k"
+    using 4 by auto
+  moreover have "fst tw = fst tw'"
+    using 4(1)  using fst_world_conc_exec_alt by blast
+  ultimately have "\<And>k. k \<le> fst tw \<Longrightarrow> wline_of tw' sig k = wline_of tw'' sig k"
+    by auto
+  then show ?case
+    using \<open>\<And>k. k \<le> fst tw \<Longrightarrow> wline_of tw sig k = wline_of tw' sig k\<close> \<open>k \<le> get_time tw\<close> by auto
+qed
+
 
 definition
 conc_hoare_valid :: "'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" ("\<Turnstile> \<lbrace>(1_)\<rbrace>/ (_)/ \<lbrace>(1_)\<rbrace>" 50)
@@ -4447,6 +4623,8 @@ inductive world_sim_fin :: "nat \<times> 'signal worldline_init \<Rightarrow> na
    \<Longrightarrow> worldline_raw t' \<sigma>' \<theta>' def \<tau>' = w'
    \<Longrightarrow> tw, T, cs \<Rightarrow>\<^sub>S (t', w')"
 
+inductive_cases world_sim_fin: "tw, T, cs \<Rightarrow>\<^sub>S tw'"
+
 lemma world_sim_fin_parallel_commute:
   assumes "conc_stmt_wf (cs1 || cs2)"
   shows   "tw, T, cs1 || cs2 \<Rightarrow>\<^sub>S tw' \<longleftrightarrow> tw, T, cs2 || cs1 \<Rightarrow>\<^sub>S tw'"
@@ -4509,6 +4687,18 @@ proof -
   ultimately show ?thesis
     unfolding worldline_raw_def by presburger
 qed
+
+(* lemma
+  assumes "fst tw \<le> T" and "conc_wt \<Gamma> cs" and "wityping \<Gamma> (snd tw)"
+  shows   "\<exists>tw'. tw, T, cs \<Rightarrow>\<^sub>S tw'"
+proof -
+  obtain t \<sigma> \<gamma> \<theta> def \<tau> where "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)"
+    by (meson destruct_worldline_def)
+  hence "fst tw = t"
+    by (metis fst_conv fst_destruct_worldline)
+  then obtain t' \<sigma>' \<theta>' \<tau>' where "T, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> (t', \<sigma>', \<theta>', \<tau>')"
+    using assms  conc_wt_simulation_progress
+ *)
 
 inductive world_sim_fin2 :: "nat \<times> 'signal worldline_init \<Rightarrow> nat \<Rightarrow> 'signal conc_stmt \<Rightarrow> nat \<times> 'signal worldline_init \<Rightarrow> bool" where
   "    destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)
@@ -4594,6 +4784,20 @@ proof (induction rule:world_sim_fin2.inducts)
     s) \<theta>' s k)\<close> res world_sim_fin.intros by blast
 qed
 
+lemma world_sim_fin2_eq_world_sim_fin:
+  assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs"
+  shows   "world_sim_fin2 tw T cs = world_sim_fin tw T cs"
+proof (rule, rule)
+  fix x
+  assume "world_sim_fin2 tw T cs x" thus "tw, T, cs \<Rightarrow>\<^sub>S x"
+    using world_sim_fin2_imp_fin[OF \<open>world_sim_fin2 tw T cs x\<close> assms] world_sim_fin_semi_equivalent[OF _ \<open>world_sim_fin2 tw T cs x\<close> assms] 
+    by blast
+next
+  fix x
+  assume "tw, T, cs \<Rightarrow>\<^sub>S x" thus "world_sim_fin2 tw T cs x"
+    using world_sim_fin_imp_fin2[OF \<open>tw, T, cs \<Rightarrow>\<^sub>S x\<close> assms] by auto
+qed
+  
 lemma
   assumes "T = fst tw"
   shows "tw, T, cs \<Rightarrow>\<^sub>S tw"
@@ -4622,8 +4826,6 @@ proof -
     using des sim w'_def
     by (simp add: \<open>T = t\<close> \<open>tw = worldline2 t \<sigma> \<theta> def \<tau>\<close> world_sim_fin.intros worldline2_def)
 qed
-
-inductive_cases world_sim_fin: "tw, T, cs \<Rightarrow>\<^sub>S tw'"
 
 lemma premises_of_world_sim_fin:
   assumes "tw, T, cs \<Rightarrow>\<^sub>S tw'"
@@ -5530,6 +5732,79 @@ inductive world_sim_fin2_alt :: "nat \<times> 'signal worldline_init \<Rightarro
 
 | "  fst tw = T  \<Longrightarrow> world_sim_fin2_alt tw T cs tw"
 
+inductive_cases world_sim_fin2_alt_cases : "world_sim_fin2_alt tw T cs tw'"
+
+lemma split_world_sim_fin2_alt:
+  assumes "world_sim_fin2_alt tw T cs tw'"
+  assumes "fst tw < t" and "t < T"
+  shows   "\<exists>tw2. world_sim_fin2_alt tw t cs tw2 \<and> world_sim_fin2_alt tw2 T cs tw'"
+  using assms
+proof (induction rule: world_sim_fin2_alt.induct)
+  case (1 tw T cs tw2 tw3)
+  hence "fst tw2 = fst tw"
+    using fst_world_conc_exec_alt by fastforce
+  hence "fst tw2 + 1 < t \<or> fst tw2 + 1 = t"
+    using 1 by linarith
+  moreover
+  { assume "fst tw2 + 1 < t"
+    hence " \<exists>tw2a. world_sim_fin2_alt (get_time tw2 + 1, snd tw2) t cs tw2a \<and> world_sim_fin2_alt tw2a T cs tw3"
+      using 1 unfolding fst_conv by auto
+    hence ?case
+      using "1.hyps"(2) "1.prems"(1) world_sim_fin2_alt.intros(1) by blast }
+  moreover
+  { assume "fst tw2 + 1 = t"
+    hence "world_sim_fin2_alt (get_time tw2 + 1, snd tw2) t cs (fst tw2 + 1, snd tw2)"
+      by (simp add: world_sim_fin2_alt.intros(2))
+    hence " world_sim_fin2_alt tw t cs (fst tw2 + 1, snd tw2)"
+      using `world_conc_exec_alt tw cs tw2` `fst tw < t` world_sim_fin2_alt.intros(1) by blast
+    hence ?case
+      using 1(3)  by (intro exI[where x="(fst tw2 + 1, snd tw2)"])(auto) }
+  ultimately show ?case
+    by auto
+next
+  case (2 tw T cs)
+  then show ?case by auto
+qed 
+
+lemma world_sim_fin2_alt_unaffected:
+  assumes "world_sim_fin2_alt tw T cs tw'"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs"
+  shows   "\<And>k. wline_of tw sig k = wline_of tw' sig k"
+  using assms
+proof (induction rule: world_sim_fin2_alt.induct)
+  case (1 tw T cs tw2 tw3)
+  hence "\<And>k. wline_of (get_time tw2 + 1, snd tw2) sig k = wline_of tw3 sig k"
+    by auto
+  moreover have "\<And>k. wline_of tw sig k = wline_of tw2 sig k"
+    using world_conc_exec_alt_unaffected[OF 1(2)] "1.prems"(1) by blast
+  ultimately show ?case 
+    unfolding comp_def snd_conv by auto
+qed auto
+
+lemma world_sim_fin2_alt_unaffected_before_curr:
+  assumes "world_sim_fin2_alt tw T cs tw'"
+  assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs"
+  shows   "\<And>k. k \<le> fst tw \<Longrightarrow> wline_of tw sig k = wline_of tw' sig k"
+  using assms
+proof (induction rule: world_sim_fin2_alt.induct)
+  case (1 tw T cs tw2 tw3)
+  then show ?case 
+    by (metis (no_types, lifting) One_nat_def add.right_neutral add_Suc_right comp_apply fst_conv
+    fst_world_conc_exec_alt le_imp_less_Suc nat_less_le snd_conv
+    world_conc_exec_alt_unaffected_before_curr)
+next
+  case (2 tw T cs)
+  then show ?case by auto
+qed
+
+lemma fst_world_sim_fin2_alt:
+  assumes "world_sim_fin2_alt tw T cs tw'"
+  shows   "fst tw' = T"
+  using assms
+  apply (induction rule: world_sim_fin2_alt.inducts)
+  by auto
+
 lemma non_stuttering_suc:
   assumes "\<forall>s. non_stuttering (to_trans_raw_sig \<tau>) \<sigma> s"
   assumes "\<forall>n \<le> t. \<tau> n = 0"
@@ -5940,6 +6215,12 @@ lemma world_sim_fin2_eq_world_sim_fin2_alt:
   shows   "world_sim_fin2 tw T cs = world_sim_fin2_alt tw T cs"
   using assms world_sim_fin2_imp_world_sim_fin2_alt world_simp_fin2_alt_imp_world_sim_fin2
   by blast
+
+lemma world_sim_fin_eq_world_sim_fin2_alt:
+  assumes "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  shows   "world_sim_fin w T cs = world_sim_fin2_alt w T cs"
+  using world_sim_fin2_eq_world_sim_fin2_alt[OF assms] world_sim_fin2_eq_world_sim_fin[OF assms(2) assms(1)]
+  by auto
 
 lemma non_stuttering_preserved:
   assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> s"
@@ -7711,8 +7992,19 @@ inductive world_init_exec :: "nat \<times> 'signal worldline_init \<Rightarrow> 
    \<Longrightarrow>  worldline2 t \<sigma> \<theta> def \<tau>' = tw'
    \<Longrightarrow>  world_init_exec tw cs tw'"
 
+lemma fst_world_init_exec:
+  assumes "world_init_exec tw cs tw'"
+  shows   "fst tw' = fst tw"
+  using assms
+proof (induction rule:world_init_exec.inducts)
+  case (1 tw t \<sigma> \<gamma> \<theta> def \<tau> cs \<tau>' tw')
+  then show ?case 
+    by (metis fst_conv fst_destruct_worldline worldline2_def)
+qed
+
 inductive_cases world_init_exec_cases [elim!]: "world_init_exec tw (process sl : ss) tw'"
                                                "world_init_exec tw (cs1 || cs2) tw'"
+
 lemma world_init_exec_deterministic:
   assumes "tw, cs \<Rightarrow>\<^sub>I tw1"
   assumes "tw, cs \<Rightarrow>\<^sub>I tw2"
@@ -7906,7 +8198,21 @@ lemma world_init_equality:
   assumes "conc_stmt_wf cs" and "nonneg_delay_conc cs"
   shows   "world_init_exec_alt tw cs = world_init_exec tw cs"
   using world_init_exec_alt_imp_world_init_exec world_init_exec_imp_world_init_exec_alt assms
-  by blast  
+  by blast
+
+lemma world_init_exec_alt_unaffected:
+  assumes "world_init_exec_alt tw cs tw'"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "nonneg_delay_conc cs"
+  shows   "\<And>k. wline_of tw sig k = wline_of tw' sig k"
+  using assms
+proof (induction rule:world_init_exec_alt.inducts)
+  case (1 tw ss tw' sl)
+  hence "world_seq_exec_alt tw ss tw'"
+    using world_seq_exec_imp_world_seq_exec_alt nonneg_delay_conc.simps(1) by blast
+  then show ?case 
+    using "1.prems"(1) world_seq_exec_alt_unaffected by fastforce
+qed (auto)
 
 inductive
   init_hoare :: "'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool"
@@ -8138,6 +8444,27 @@ qed
 
 inductive_cases init_sim2_cases [elim!]: "init_sim2 tw cs tw'"
 
+lemma fst_init_sim2:
+  assumes "init_sim2 tw cs tw'"
+  shows   "fst tw' = fst tw + 1"
+  using init_sim2_cases[OF assms] fst_world_init_exec
+  by (metis Suc_eq_plus1 fst_conv)
+
+lemma init_sim2_unaffected:
+  assumes "init_sim2 tw cs tw'"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs"
+  shows   "\<And>k. wline_of tw sig k = wline_of tw' sig k"
+proof (rule init_sim2_cases[OF assms(1)])
+  fix k tw2
+  assume "tw' = (Suc (fst tw2), snd tw2)" and "tw, cs \<Rightarrow>\<^sub>I tw2"
+  hence "world_init_exec_alt tw cs tw2"
+    using assms(3-4)  by (simp add: world_init_exec_imp_world_init_exec_alt)
+  thus "wline_of tw sig k = wline_of tw' sig k"
+    using world_init_exec_alt_unaffected 
+    by (metis \<open>tw' = (Suc (get_time tw2), snd tw2)\<close> assms(2) assms(3) comp_def snd_conv)
+qed
+
 definition init_sim_valid :: "'signal assn2 \<Rightarrow> 'signal conc_stmt \<Rightarrow> 'signal assn2 \<Rightarrow> bool" where
   "init_sim_valid P cs Q = (\<forall>tw tw'. P tw \<and> init_sim tw cs tw' \<longrightarrow> Q tw')"
 
@@ -8237,6 +8564,11 @@ inductive sim_fin2 :: "'signal worldline_init \<Rightarrow> nat \<Rightarrow> 's
   "init_sim2 (0, w) cs tw  \<Longrightarrow> tw, T, cs \<Rightarrow>\<^sub>S tw' \<Longrightarrow> sim_fin2 w T cs tw'"
 
 inductive_cases sim_fin2_ic: "sim_fin2 w T cs tw'"
+
+lemma fst_time_sim_fin2:
+  assumes "sim_fin2 w T cs tw'" shows   "fst tw' = T"
+  using assms world_maxtime_lt_fst_tres
+  by (induction rule: sim_fin2.inducts) blast
 
 lemma world_sim_fin2_alt_start_earlier:
   assumes "world_sim_fin2_alt (next_time_world tw_init, snd tw_init) T cs tw1"
@@ -8385,6 +8717,35 @@ lemma sim_fin_imp_sim_fin2:
   using progress_for_sim_fin2[OF assms] sim_fin_eq_sim_fin2[OF assms(1) _ assms(2-3)]
   by auto
 
+lemma split_sim_fin2:
+  assumes "sim_fin2 w T cs tw''"
+  assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs"
+  assumes "0 < t" and "t < T"
+  shows   "\<exists>tw'. sim_fin2 w t cs tw' \<and> tw', T, cs \<Rightarrow>\<^sub>S tw''"
+proof -
+  obtain tw where "init_sim2 (0, w) cs tw " and " tw, T, cs \<Rightarrow>\<^sub>S tw''"
+    using assms(1)  by (meson sim_fin2.cases)
+  have "fst tw = 1"
+    by (rule init_sim2_cases[OF `init_sim2 (0, w) cs tw`])(simp add: fst_world_init_exec)
+  hence "fst tw \<le> t"
+    using `0 < t` by auto
+  have "world_sim_fin2 tw T cs tw''"
+    using `tw, T, cs \<Rightarrow>\<^sub>S tw''` assms  by (metis world_sim_fin_imp_fin2)
+  hence "world_sim_fin2_alt tw T cs tw''"
+    by (simp add: assms(2) assms(3) world_sim_fin2_imp_world_sim_fin2_alt)
+  then obtain tw2 where "world_sim_fin2_alt tw t cs tw2" and "world_sim_fin2_alt tw2 T cs tw''"
+    using split_world_sim_fin2_alt 
+    by (metis \<open>get_time tw \<le> t\<close> assms(5) nat_less_le world_sim_fin2_alt.simps)
+  hence "sim_fin2 w t cs tw2"
+    by (metis \<open>init_sim2 (0, w) cs tw\<close> assms(2) assms(3) sim_fin2.intros world_sim_fin2_alt_progress
+    world_sim_fin2_alt_semi_det world_sim_fin2_imp_fin world_sim_fin_imp_fin2)
+  moreover have "tw2, T, cs \<Rightarrow>\<^sub>S tw''"
+    using \<open>world_sim_fin2_alt tw2 T cs tw''\<close> assms(2) assms(3) world_sim_fin2_alt_progress
+    world_sim_fin2_alt_semi_det world_sim_fin2_imp_fin world_sim_fin_semi_equivalent by blast
+  ultimately show ?thesis
+    by blast
+qed  
+
 lemma premises_sim_fin:
   assumes "sim_fin w T cs tw'"
   shows "\<exists>tw. init_sim (0, w) cs tw \<and> tw, T, cs \<Rightarrow>\<^sub>S tw'"
@@ -8394,6 +8755,25 @@ lemma premises_sim_fin_obt:
   assumes "sim_fin w T cs tw'"
   obtains tw where "init_sim (0, w) cs tw" and "tw, T, cs \<Rightarrow>\<^sub>S tw'"
   using premises_sim_fin[OF assms] by metis
+
+lemma sim_fin2_unaffected:
+  assumes "sim_fin2 w T cs tw'"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "nonneg_delay_conc cs" and "conc_stmt_wf cs"
+  shows   "\<And>k. wline_of (0, w) sig k = wline_of tw' sig k"
+proof (rule sim_fin2_ic[OF assms(1)])
+  fix k tw
+  assume "init_sim2 (0, w) cs tw"
+  hence *: "\<And>k. wline_of (0, w) sig k = wline_of tw sig k"
+    using init_sim2_unaffected assms by metis
+  assume "tw, T, cs \<Rightarrow>\<^sub>S tw'"
+  hence "world_sim_fin2_alt tw T cs tw'"
+    by (simp add: assms(3) assms(4) world_sim_fin2_imp_world_sim_fin2_alt world_sim_fin_imp_fin2)
+  hence "\<And>k. wline_of tw sig k = wline_of tw' sig k"
+    using world_sim_fin2_alt_unaffected  by (metis assms(2) assms(3) assms(4))
+  thus "wline_of (0, w) sig k = wline_of tw' sig k"
+    using * by auto
+qed
 
 subsection \<open>The notion of typing for a worldline\<close>
 

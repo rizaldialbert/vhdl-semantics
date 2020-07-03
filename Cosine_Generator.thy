@@ -123,9 +123,7 @@ definition next_common :: "sig conc_stmt" where
                    Bguarded (Bsig INREADY)   (Bassign_trans NEXT_COMMON (Bsig INPUT)  1) 
                                              (Bassign_trans NEXT_COMMON (Bsig COMMON) 1))
          ,   (Explicit (S_PRE),
-                   Bassign_trans NEXT_COMMON (Badd (Bnot (Bslice SQUARE_TEMP 62 31)) ONE) 1)
-         ,   (Explicit (S_PROC), 
-                   Bassign_trans NEXT_COMMON (Badd (Bnot (Bsig COMMON)) ONE) 1)
+                   Bassign_trans NEXT_COMMON (Bslice SQUARE_TEMP 62 31) 1)
          ,   (Explicit (S_INIT), 
                    Bassign_trans NEXT_COMMON (Bliteral Sig U_ZERO32) 1)
          ,   (Others, 
@@ -206,11 +204,13 @@ lemma nonneg_delay_next_counter: "nonneg_delay (get_seq next_counter)"
 definition next_accum :: "sig conc_stmt" where
   "next_accum \<equiv> (process {STATE, ACCUM, FRAC, TERM1} : 
       Bcase (Bsig STATE)
-         [   (Explicit (S_PRE),
-                   Bassign_trans NEXT_ACCUM (Bliteral Sig (to_bl (0 :: 32 word))) 1)
+         [   (Explicit (S_POST),
+                   Bassign_trans NEXT_ACCUM (Badd (Bsig FRAC) (Bslice TERM1 62 31)) 1)
          ,   (Explicit (S_PROC),
                    Bassign_trans NEXT_ACCUM (Badd (Bsig FRAC) (Bslice TERM1 62 31)) 1)
          ,   (Explicit (S_INIT), 
+                   Bassign_trans NEXT_ACCUM (Bliteral Sig (to_bl (0 :: 32 word))) 1)
+         ,   (Explicit (S_PRE), 
                    Bassign_trans NEXT_ACCUM (Bliteral Sig (to_bl (0 :: 32 word))) 1)
          ,   (Others,
                    Bassign_trans NEXT_ACCUM (Bsig ACCUM) 1)])"
@@ -286,14 +286,8 @@ lemma nonneg_delay_next_frac: "nonneg_delay (get_seq next_frac)"
 definition next_outready_reg :: "sig conc_stmt" where
   "next_outready_reg \<equiv> (process {STATE, CTR_NEQ_0, OUTREADY_REG} : 
       Bcase (Bsig STATE)    
-         [   (Explicit (S_PROC), 
-                    Bguarded (Bsig CTR_NEQ_0) 
-                        (Bassign_trans NEXT_OUTREADYREG (Bfalse) 1) 
-                        (Bassign_trans NEXT_OUTREADYREG (Btrue ) 1))
-         ,   (Explicit (S_POST), 
-                    Bassign_trans NEXT_OUTREADYREG (Bsig OUTREADY_REG) 1)
-         ,   (Others, 
-                    Bassign_trans NEXT_OUTREADYREG (Bfalse) 1)])"
+         [   (Explicit (S_POST),  (Bassign_trans NEXT_OUTREADYREG (Btrue ) 1))
+         ,   (Others,  Bassign_trans NEXT_OUTREADYREG (Bfalse) 1)])"
 
 lemma conc_stmt_wf_next_outready_reg: "conc_stmt_wf next_outready_reg"
   unfolding next_outready_reg_def  conc_stmt_wf_def by auto
@@ -398,7 +392,7 @@ lemma conc_stmt_wf_registers: "conc_stmt_wf registers"
 
 definition architecture :: "sig conc_stmt" where
   "architecture \<equiv>     
-              (   ((((next_common || squaring) || next_accum || term1) || output) || output_ready)  
+              (   (((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready)  
               ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))) 
               ||  registers"
 
@@ -442,12 +436,12 @@ section \<open>Functional specification of @{term "registers"}\<close>
 
 definition inv_reg :: "sig assn2" where
   "inv_reg   tw \<equiv> (\<forall>s \<in> {ACCUM, COUNTER, FRAC, COMMON, STATE, OUTREADY_REG}. 
-                 1 < fst tw \<longrightarrow> wline_of tw s (fst tw) = (if is_posedge2 (snd tw) CLK (fst tw - 1) then 
+                 0 < fst tw \<and> wline_of tw s (fst tw) = (if is_posedge2 (snd tw) CLK (fst tw - 1) then 
                                                             if bof_wline tw RST (fst tw - 1) then zero_of s else wline_of tw (next_signal s) (fst tw - 1) 
                                                           else wline_of tw s (fst tw - 1)))"
 
 lemma inv_reg_alt_def:
-  "inv_reg tw \<longleftrightarrow> (1 < fst tw \<longrightarrow> (if wline_of (tw) CLK ((fst tw - 1) - 1) = Bv False \<and> wline_of tw CLK (fst tw - 1) = Bv True
+  "inv_reg tw \<longleftrightarrow> (0 < fst tw \<and> (if wline_of (tw) CLK ((fst tw - 1) - 1) = Bv False \<and> wline_of tw CLK (fst tw - 1) = Bv True
                                    then if bof_wline tw RST (fst tw - 1)
                                         then wline_of tw ACCUM (fst tw) = V_ZERO32
                                         else wline_of tw ACCUM (fst tw) = wline_of tw (NEXT_ACCUM) (fst tw - 1)
@@ -478,13 +472,13 @@ lemma inv_reg_alt_def:
                                         else wline_of tw OUTREADY_REG (fst tw) = wline_of tw (NEXT_OUTREADYREG) (fst tw - 1)
                                    else wline_of tw OUTREADY_REG (fst tw) = wline_of tw OUTREADY_REG (fst tw - 1)))"
   unfolding inv_reg_def
-  by simp
+  by auto
 
 schematic_goal inv_reg_concrete:
   "inv_reg tw \<longleftrightarrow> eval ?Q ?ws ?ns (?ss :: sig list)"
   unfolding inv_reg_alt_def
   apply (reify eval_simps Irwline.simps Irnat_simps Irsig_simps Irval_simps Irset.simps Irint_simps
-        (" (1 < get_time tw \<longrightarrow>
+        (" (0 < get_time tw \<and>
      (if wline_of tw CLK (get_time tw - 1 - 1) = Bv False \<and> wline_of tw CLK (get_time tw - 1) = Bv True
       then if bval_of (wline_of tw RST (get_time tw - 1)) then wline_of tw ACCUM (get_time tw) = V_ZERO32 else wline_of tw ACCUM (get_time tw) = wline_of tw NEXT_ACCUM (get_time tw - 1)
       else wline_of tw ACCUM (get_time tw) = wline_of tw ACCUM (get_time tw - 1)) \<and>
@@ -523,7 +517,7 @@ schematic_goal inv_reg2_concrete:
 
 definition 
   "inv_reg_comb \<equiv> Rsepand 
-(RImp (RNLT (NC 1) (NFst (Wvar 0)))
+(RAnd (RNLT (NC 0) (NFst (Wvar 0)))
        (RAnd
          (RIfte (RAnd (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NDec (NFst (Wvar 0))))) (VC (Bv False))) (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (VC (Bv True))))
            (RIfte (RBval (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0))))) (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc 0))))))))))))) (NFst (Wvar 0))) (VC V_ZERO32))
@@ -586,9 +580,10 @@ lemma inv_reg_next_time_rst:
   assumes "\<not> disjnt {CLK} (event_of tw)"
   assumes "eval_world_raw2 tw (Bsig CLK) = Bv True"
   assumes "wityping \<Gamma> (snd tw)"
+  assumes "inv_reg tw"
   shows   "inv_reg (fst tw' + 1, snd tw')"
   unfolding inv_reg_def
-proof (rule ballI, rule impI)
+proof (rule ballI)
   fix s
   assume "s \<in> {ACCUM, COUNTER, FRAC, COMMON, STATE, OUTREADY_REG}"
   have "bval_of (wline_of (get_time tw' + 1, snd tw') RST (get_time (get_time tw' + 1, snd tw') - 1))"
@@ -596,9 +591,8 @@ proof (rule ballI, rule impI)
     worldline_upd2_def worldline_upd_def by auto
   hence "bof_wline (fst tw' + 1, snd tw') RST (fst tw')"
     by auto
-  assume "1 < get_time (get_time tw' + 1, snd tw')"
   hence "0 < fst tw" 
-    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+    using `inv_reg tw` unfolding inv_reg_def by auto
   have *: "wline_of tw CLK (fst tw) \<noteq> wline_of tw CLK (fst tw - 1)"
     using assms(3) `0 < fst tw` unfolding event_of_alt_def by auto
   have **: "wline_of tw CLK (fst tw) = Bv True"
@@ -616,7 +610,8 @@ proof (rule ballI, rule impI)
   also have "... = zero_of s"
     using zero_of.simps `s \<in> {ACCUM, COUNTER, FRAC, COMMON, STATE, OUTREADY_REG}`
     unfolding tw'_def  worldline_upd2_def worldline_upd_def by auto
-  finally show "wline_of (get_time tw' + 1, snd tw') s (get_time (get_time tw' + 1, snd tw')) =
+  finally show " 0 < get_time (get_time tw' + 1, snd tw') \<and>
+         wline_of (get_time tw' + 1, snd tw') s (get_time (get_time tw' + 1, snd tw')) =
          (if snd (snd (get_time tw' + 1, snd tw')) CLK (get_time (get_time tw' + 1, snd tw') - 1 - 1) = Bv False \<and>
              snd (snd (get_time tw' + 1, snd tw')) CLK (get_time (get_time tw' + 1, snd tw') - 1) = Bv True
           then if bval_of (wline_of (get_time tw' + 1, snd tw') RST (get_time (get_time tw' + 1, snd tw') - 1)) then zero_of s
@@ -641,7 +636,7 @@ lemma inv_reg_next_time_clk:
   assumes "inv_reg tw"
   shows   "inv_reg (fst tw' + 1, snd tw')"
   unfolding inv_reg_def
-proof (rule, rule)
+proof (rule)
   have tw'_alt_def: "tw' = tw[ ACCUM, 1 :=\<^sub>2 snd (snd tw) (next_signal ACCUM) (fst tw)]
                              [ COUNTER, 1 :=\<^sub>2 snd (snd tw) (next_signal COUNTER) (fst tw)]
                              [ FRAC, 1 :=\<^sub>2 snd (snd tw) (next_signal FRAC) (fst tw)]
@@ -657,9 +652,8 @@ proof (rule, rule)
     using assms(2) assms(5) unfolding eval_world_raw.simps  by (metis ty.distinct(1) type_of.elims)
   hence not_bval: "\<not> bval_of (wline_of (get_time tw' + 1, snd tw') RST (get_time (get_time tw' + 1, snd tw') - 1))"
     unfolding fst_worldline_upd2 tw'_def fst_conv worldline_upd2_def worldline_upd_def by auto 
-  assume "1 < get_time (get_time tw' + 1, snd tw')"
   hence "0 < fst tw" 
-    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+    using `inv_reg tw` unfolding inv_reg_def by auto
   have *: "wline_of tw CLK (fst tw) \<noteq> wline_of tw CLK (fst tw - 1)"
     using assms(1) `0 < fst tw` unfolding event_of_alt_def by auto
   have **: "wline_of tw CLK (fst tw) = Bv True"
@@ -678,7 +672,8 @@ proof (rule, rule)
     using s_set unfolding tw'_alt_def worldline_upd2_def worldline_upd_def by auto
   also have "... = wline_of (get_time tw' + 1, snd tw') (next_signal s) (get_time (get_time tw' + 1, snd tw') - 1)"
     unfolding fst_conv tw'_alt_def worldline_upd2_def worldline_upd_def by auto 
-  finally show "         wline_of (get_time tw' + 1, snd tw') s (get_time (get_time tw' + 1, snd tw')) =
+  finally show " 0 < get_time (get_time tw' + 1, snd tw') \<and>
+         wline_of (get_time tw' + 1, snd tw') s (get_time (get_time tw' + 1, snd tw')) =
          (if snd (snd (get_time tw' + 1, snd tw')) CLK (get_time (get_time tw' + 1, snd tw') - 1 - 1) = Bv False \<and>
              snd (snd (get_time tw' + 1, snd tw')) CLK (get_time (get_time tw' + 1, snd tw') - 1) = Bv True
           then if bval_of (wline_of (get_time tw' + 1, snd tw') RST (get_time (get_time tw' + 1, snd tw') - 1)) then zero_of s
@@ -708,7 +703,8 @@ proof -
     by auto
   { fix s
     assume s_set: "s \<in> {ACCUM, COUNTER, FRAC, COMMON, STATE, OUTREADY_REG}"
-    assume "0 < fst tw"
+    have "0 < fst tw"
+      using `inv_reg tw` unfolding inv_reg_def by auto
     hence "\<not> is_posedge2 (snd tw) CLK (fst tw)"
       using * unfolding event_of_alt_def by auto
     have **: " wline_of tw s (fst tw + 1) = wline_of tw s (fst tw)"
@@ -1060,10 +1056,9 @@ definition inv_ncommon :: "sig assn2" where
                        V_WAIT \<Rightarrow> (if bof_wline tw INREADY (fst tw - 1) 
                                   then (bin_of INPUT at_time fst tw - 1 on tw) 
                                   else (bin_of COMMON at_time (fst tw - 1) on tw)) | 
-                       V_PRE  \<Rightarrow> sbintrunc 31 (- (sbl_to_bin (nths 
+                       V_PRE  \<Rightarrow> sbintrunc 31 ((sbl_to_bin (nths 
                                                              (lof_wline tw SQUARE_TEMP (fst tw - 1)) 
                                                              {1 .. 32})))  |
-                       V_PROC \<Rightarrow> sbintrunc 31 (- bin_of COMMON at_time fst tw - 1 on tw) |
                        _      \<Rightarrow>   bin_of COMMON at_time fst tw - 1 on tw 
                     ))"
 
@@ -1076,10 +1071,8 @@ lemma inv_ncommon_alt_def:
                then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (fst tw))) = sbl_to_bin (lval_of (wline_of tw INPUT (fst tw - 1))) 
                else sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (fst tw))) = sbl_to_bin (lval_of (wline_of tw COMMON (fst tw - 1)))
           else if wline_of tw STATE (fst tw - 1) = V_PRE
-               then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (fst tw))) = sbintrunc 31 (- (sbl_to_bin (nths (lval_of (wline_of tw SQUARE_TEMP (fst tw - 1))) {1 .. 32})))
-               else if wline_of tw STATE (fst tw - 1) = V_PROC 
-                    then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (fst tw))) = sbintrunc 31 (- (sbl_to_bin (lval_of (wline_of tw COMMON (fst tw - 1)))))
-                    else sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (fst tw))) = sbl_to_bin (lval_of (wline_of tw COMMON (fst tw - 1))))"
+               then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (fst tw))) = sbintrunc 31 ((sbl_to_bin (nths (lval_of (wline_of tw SQUARE_TEMP (fst tw - 1))) {1 .. 32})))
+               else sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (fst tw))) = sbl_to_bin (lval_of (wline_of tw COMMON (fst tw - 1))))"
   unfolding inv_ncommon_def
   by (simp split:val.splits signedness.splits list.splits bool.splits)
 
@@ -1087,13 +1080,14 @@ schematic_goal inc_ncommon_concrete:
   "inv_ncommon tw = eval ?Q ?ws ?ns (?ss :: sig list)"
   unfolding inv_ncommon_alt_def
   apply (reify eval.simps Irwline.simps Irnat_simps Irsig_simps Irval_simps Irset.simps Irint_simps
-          ("(if wline_of tw STATE (get_time tw - 1) = V_INIT then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = 0
+          (" (if wline_of tw STATE (get_time tw - 1) = V_INIT then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = 0
      else if wline_of tw STATE (get_time tw - 1) = V_WAIT
-          then if bval_of (wline_of tw INREADY (get_time tw - 1)) then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = sbl_to_bin (lval_of (wline_of tw INPUT (get_time tw - 1)))
+          then if bval_of (wline_of tw INREADY (get_time tw - 1))
+               then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = sbl_to_bin (lval_of (wline_of tw INPUT (get_time tw - 1)))
                else sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = sbl_to_bin (lval_of (wline_of tw COMMON (get_time tw - 1)))
-          else if wline_of tw STATE (get_time tw - 1) = V_PRE then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = sbintrunc 31 (- sbl_to_bin (nths (lval_of (wline_of tw SQUARE_TEMP (get_time tw - 1))) {1..32}))
-               else if wline_of tw STATE (get_time tw - 1) = V_PROC then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = sbintrunc 31 (- sbl_to_bin (lval_of (wline_of tw COMMON (get_time tw - 1))))
-                    else sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = sbl_to_bin (lval_of (wline_of tw COMMON (get_time tw - 1))))"))
+          else if wline_of tw STATE (get_time tw - 1) = V_PRE
+               then sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = sbintrunc 31 (sbl_to_bin (nths (lval_of (wline_of tw SQUARE_TEMP (get_time tw - 1))) {1..32}))
+               else sbl_to_bin (lval_of (wline_of tw NEXT_COMMON (get_time tw))) = sbl_to_bin (lval_of (wline_of tw COMMON (get_time tw - 1))))"))
   by rule
 
 definition inv_ncommon2 :: "sig assn2" where
@@ -1108,33 +1102,31 @@ schematic_goal inv_ncommon2_concrete:
   by rule
 
 lemma inv_ncommon_comb_alt_def:
-  "inv_ncommon tw \<and> inv_ncommon2 tw \<longleftrightarrow> eval (Rsepand ((RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_INIT)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (IC 0))
-       (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_WAIT))
+  "inv_ncommon tw \<and> inv_ncommon2 tw \<longleftrightarrow> eval (Rsepand 
+     (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (VC V_INIT)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (IC 0))
+       (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (VC V_WAIT))
          (RIfte (RBval (Vwline (Wvar 0) (Svar (Suc (Suc (Suc (Suc (Suc 0)))))) (NDec (NFst (Wvar 0)))))
            (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar (Suc (Suc (Suc (Suc 0))))) (NDec (NFst (Wvar 0))))))
            (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0)))))))
-         (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_PRE))
-           (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Isbintrunc (NC 31) (INeg (Islice (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (NC 1) (NC 32)))))
-           (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_PROC))
-             (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Isbintrunc (NC 31) (INeg (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0))))))))
-             (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0))))))))))) 
-                                                      ((RImp (RDisevt (LCons (Svar (Suc (Suc (Suc (Suc (Suc 0)))))) (LCons (Svar (Suc (Suc (Suc (Suc 0))))) (LCons (Svar (Suc (Suc (Suc 0)))) (LCons (Svar (Suc (Suc 0))) (LCons (Svar (Suc 0)) LEmpty))))) (Wvar 0))
+         (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (VC V_PRE))
+           (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Isbintrunc (NC 31) (Islice (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (NC 1) (NC 32))))
+           (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0)))))))))
+((RImp (RDisevt (LCons (Svar (Suc (Suc (Suc (Suc (Suc 0)))))) (LCons (Svar (Suc (Suc (Suc (Suc 0))))) (LCons (Svar (Suc (Suc (Suc 0)))) (LCons (Svar (Suc (Suc 0))) (LCons (Svar (Suc 0)) LEmpty))))) (Wvar 0))
        (RNall (RImp (RNLT (NFst (Wvar 0)) (NVar 0)) (RVEq (Vwline (Wvar 0) (Svar 0) (NVar 0)) (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0))))))))) 
-        [tw] [] [COMMON, NEXT_COMMON, STATE, SQUARE_TEMP, INPUT, INREADY, NEXT_COMMON, SQUARE_TEMP, INPUT, INREADY, COMMON, STATE] "
+        [tw] [] [COMMON, NEXT_COMMON, SQUARE_TEMP, STATE, INPUT, INREADY, NEXT_COMMON, SQUARE_TEMP, INPUT, INREADY, COMMON, STATE] "
   unfolding inv_ncommon_alt_def inv_ncommon2_def by auto
 
 definition 
-  "inv_ncommon_comb \<equiv> (Rsepand ((RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_INIT)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (IC 0))
-       (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_WAIT))
+  "inv_ncommon_comb \<equiv> (Rsepand 
+     (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (VC V_INIT)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (IC 0))
+       (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (VC V_WAIT))
          (RIfte (RBval (Vwline (Wvar 0) (Svar (Suc (Suc (Suc (Suc (Suc 0)))))) (NDec (NFst (Wvar 0)))))
            (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar (Suc (Suc (Suc (Suc 0))))) (NDec (NFst (Wvar 0))))))
            (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0)))))))
-         (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_PRE))
-           (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Isbintrunc (NC 31) (INeg (Islice (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (NC 1) (NC 32)))))
-           (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_PROC))
-             (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Isbintrunc (NC 31) (INeg (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0))))))))
-             (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0))))))))))) 
-                                                      ((RImp (RDisevt (LCons (Svar (Suc (Suc (Suc (Suc (Suc 0)))))) (LCons (Svar (Suc (Suc (Suc (Suc 0))))) (LCons (Svar (Suc (Suc (Suc 0)))) (LCons (Svar (Suc (Suc 0))) (LCons (Svar (Suc 0)) LEmpty))))) (Wvar 0))
+         (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (VC V_PRE))
+           (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Isbintrunc (NC 31) (Islice (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (NC 1) (NC 32))))
+           (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0)))))))))
+((RImp (RDisevt (LCons (Svar (Suc (Suc (Suc (Suc (Suc 0)))))) (LCons (Svar (Suc (Suc (Suc (Suc 0))))) (LCons (Svar (Suc (Suc (Suc 0)))) (LCons (Svar (Suc (Suc 0))) (LCons (Svar (Suc 0)) LEmpty))))) (Wvar 0))
        (RNall (RImp (RNLT (NFst (Wvar 0)) (NVar 0)) (RVEq (Vwline (Wvar 0) (Svar 0) (NVar 0)) (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))))))))"
 
 lemma [simp]: 
@@ -1142,7 +1134,7 @@ lemma [simp]:
   unfolding inv_ncommon_comb_def by auto
 
 definition 
-  "inv_ncommon_free_vars \<equiv> [COMMON, NEXT_COMMON, STATE, SQUARE_TEMP, INPUT, INREADY, NEXT_COMMON, SQUARE_TEMP, INPUT, INREADY, COMMON, STATE]"
+  "inv_ncommon_free_vars \<equiv> [COMMON, NEXT_COMMON, SQUARE_TEMP, STATE, INPUT, INREADY, NEXT_COMMON, SQUARE_TEMP, INPUT, INREADY, COMMON, STATE]"
 
 lemma [simp]:
   "length inv_ncommon_free_vars = 12"
@@ -1230,7 +1222,7 @@ lemma [simp]: "sint (1::32 word) = 1"
 lemma inv_ncommon_vpre:
   fixes tw
   assumes " curr_value_of STATE on tw = V_PRE"
-  defines "tw' \<equiv> tw[ NEXT_COMMON, 1 :=\<^sub>2 eval_world_raw2 tw (Badd (Bnot (Bslice SQUARE_TEMP 62 31)) ONE)]"
+  defines "tw' \<equiv> tw[ NEXT_COMMON, 1 :=\<^sub>2 eval_world_raw2 tw ((Bslice SQUARE_TEMP 62 31))]"
   assumes "wityping \<Gamma> (snd tw)"
   shows   "inv_ncommon (fst tw' + 1, snd tw')"
 proof -
@@ -1244,57 +1236,17 @@ proof -
     by (metis comp_apply ty.distinct(1) ty.inject type_of.elims val.sel(3))
   have len': "(length (nths (lval_of (curr_value_of SQUARE_TEMP on tw)) {Suc 0..32})) = 32"
     unfolding length_nths len using card_slice[of "62" "64" "31"] by auto
-  have "(bin_of NEXT_COMMON at_time (fst tw + 1) on tw') = (sbl_to_bin o lval_of) (eval_world_raw2 tw (Badd (Bnot (Bslice SQUARE_TEMP 62 31)) ONE))"
+  have "(bin_of NEXT_COMMON at_time (fst tw + 1) on tw') = (sbl_to_bin o lval_of) (eval_world_raw2 tw ((Bslice SQUARE_TEMP 62 31)))"
     unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-  also have "... =  sbl_to_bin (bin_to_bl (max (length (nths (lval_of (curr_value_of SQUARE_TEMP on tw)) {Suc 0..32})) 32) 
-                                              (sbl_to_bin (map Not (nths (lval_of (curr_value_of SQUARE_TEMP on tw)) {Suc 0..32})) + sbl_to_bin (to_bl (1::32 word))))"
+  also have "... = (sbl_to_bin ((nths (lval_of (curr_value_of SQUARE_TEMP on tw)) {Suc 0..32})))"
     using sqty unfolding eval_world_raw.simps comp_def eval_arith.simps by (auto split:val.splits signedness.splits simp del: bin_to_bl_def)
-  also have "... = sbl_to_bin (bin_to_bl 32 (sbl_to_bin (map Not (nths (lval_of (wline_of tw SQUARE_TEMP (get_time tw))) {Suc 0..32})) + 1))"
-    unfolding len' sbl_to_bin_to_bl by auto
-  also have "... =  sbl_to_bin (bin_to_bl 32 (- (sbl_to_bin (nths (lof_wline tw SQUARE_TEMP (fst tw)) {1 .. 32}))))"
-    unfolding len' using  len'  by (simp add: uminus_alt)
-  also have "... = sbintrunc 31 (- (sbl_to_bin (nths (lof_wline tw SQUARE_TEMP (fst tw)) {1 .. 32})))"
-    using  sbin_bl_bin_sbintruc by auto
+  also have "... = sbintrunc 31 ((sbl_to_bin (nths (lof_wline tw SQUARE_TEMP (fst tw)) {1 .. 32})))"
+    using  sbl_to_bin_alt_def2
+    by (metis One_nat_def Suc_numeral diff_Suc_1 len' semiring_norm(2) semiring_norm(8))
   finally have "(bin_of NEXT_COMMON at_time (fst tw + 1) on tw') = 
-                sbintrunc 31 (- (sbl_to_bin (nths (lof_wline tw SQUARE_TEMP (fst tw)) {1 .. 32})))"
+                sbintrunc 31 ((sbl_to_bin (nths (lof_wline tw SQUARE_TEMP (fst tw)) {1 .. 32})))"
     by auto
   moreover have "wline_of (get_time tw' + 1, snd tw') STATE (get_time (get_time tw' + 1, snd tw') - 1) = V_PRE"
-    using assms(2) snd_worldline_upd2 unfolding fst_conv `fst tw' = fst tw` comp_def snd_conv 
-    by (metis assms(1) comp_eq_dest_lhs diff_add_inverse2 mysigsimp[OF signames.distinct(423)] tw'_def)
-  ultimately show ?thesis
-    using assms(2) unfolding inv_ncommon_def `fst tw' = fst tw`  
-    by (auto simp add: tw'_def worldline_upd2_def worldline_upd_def)
-qed
-
-lemma inv_ncommon_vproc:
-  fixes tw
-  assumes " curr_value_of STATE on tw = V_PROC"
-  defines "tw' \<equiv> tw[ NEXT_COMMON, 1 :=\<^sub>2 eval_world_raw2 tw (Badd (Bnot (Bsig COMMON)) ONE)]"
-  assumes "wityping \<Gamma> (snd tw)"
-  shows   "inv_ncommon (fst tw' + 1, snd tw')"
-proof -
-  have "fst tw' = fst tw"
-    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-  have coty: "type_of (curr_value_of COMMON on tw) = Lty Sig 32"
-    using `wityping \<Gamma> (snd tw)` cosine_locale_axioms unfolding wityping_def wtyping_def cosine_locale_def
-    by auto
-  hence len: "length (lval_of (wline_of tw COMMON (get_time tw))) = 32"
-    using `wityping \<Gamma> (snd tw)`
-    by (metis comp_apply ty.distinct(1) ty.inject type_of.elims val.sel(3))
-  have "(bin_of NEXT_COMMON at_time (fst tw + 1) on tw') = (sbl_to_bin o lval_of) (eval_world_raw2 tw (Badd (Bnot (Bsig COMMON)) ONE))"
-    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
-  also have "... =  sbl_to_bin (bin_to_bl 32 (sbl_to_bin (map Not (lval_of curr_value_of COMMON on tw)) + sbl_to_bin (to_bl (1 :: 32 word))))"
-    using coty unfolding eval_world_raw.simps comp_def eval_arith.simps by (auto split:val.splits signedness.splits simp del: bin_to_bl_def)
-  also have "... =  sbl_to_bin (bin_to_bl 32 (sbl_to_bin (map Not (lval_of curr_value_of COMMON on tw)) + 1))"
-    unfolding sbl_to_bin_to_bl by auto
-  also have "... =  sbl_to_bin (bin_to_bl 32 ( - sbl_to_bin (lval_of (wline_of tw COMMON (get_time tw)))))"
-    using  len  uminus_alt[where bs="lval_of curr_value_of COMMON on tw"] by auto
-  also have "... = sbintrunc 31 ( - sbl_to_bin (lval_of (wline_of tw COMMON (get_time tw))))"
-    using  sbin_bl_bin_sbintruc by auto
-  finally have "(bin_of NEXT_COMMON at_time (fst tw + 1) on tw') = 
-                sbintrunc 31 ( - sbl_to_bin (lval_of (wline_of tw COMMON (get_time tw))))"
-    by auto
-  moreover have "wline_of (get_time tw' + 1, snd tw') STATE (get_time (get_time tw' + 1, snd tw') - 1) = V_PROC"
     using assms(2) snd_worldline_upd2 unfolding fst_conv `fst tw' = fst tw` comp_def snd_conv 
     by (metis assms(1) comp_eq_dest_lhs diff_add_inverse2 mysigsimp[OF signames.distinct(423)] tw'_def)
   ultimately show ?thesis
@@ -1314,7 +1266,6 @@ lemma inv_ncommon_others:
   fixes tw
   assumes " snd (snd tw) STATE (fst tw) \<noteq> V_WAIT"
   assumes " snd (snd tw) STATE (fst tw) \<noteq> V_PRE"
-  assumes " snd (snd tw) STATE (fst tw) \<noteq> V_PROC"
   assumes " snd (snd tw) STATE (fst tw) \<noteq> V_INIT"
   defines "tw' \<equiv> tw[ NEXT_COMMON, 1 :=\<^sub>2  eval_world_raw2 tw (Bsig COMMON)]"
   shows   "inv_ncommon (fst tw' + 1, snd tw')"
@@ -1330,7 +1281,7 @@ lemma correctness_ncommon':
   unfolding next_common_def wp3_conc_single'[OF cwt_nc[unfolded next_common_def] nonneg_delay_conc_next_common[unfolded next_common_def]]
   wp3_fun.simps fst_worldline_upd2
   using inv_ncommon2_preserved inv_ncommon_preserved inv_ncommon2 inv_ncommon_vwait_false inv_ncommon_vwait_true
-  inv_ncommon_vpre inv_ncommon_vproc inv_ncommon_vinit inv_ncommon_others by force
+  inv_ncommon_vpre inv_ncommon_vinit inv_ncommon_others by force
 
 lemma correctness_ncommon:
   "\<Gamma> \<turnstile>\<^sub>s \<lbrace>\<lambda>tw. inv_ncommon tw \<and> inv_ncommon2 tw\<rbrace> next_common \<lbrace>\<lambda>tw. inv_ncommon tw \<and> inv_ncommon2 tw\<rbrace>"
@@ -1349,7 +1300,7 @@ lemma init_ensures_ncommon:
   apply (rule wp3_fun_is_pre[OF seq_wt_next_common[unfolded next_common_def conc_stmt.sel(4)] nonneg_delay_next_common[unfolded next_common_def conc_stmt.sel(4)]], simp)
   unfolding wp3_fun.simps fst_worldline_upd2
   using inv_ncommon2_preserved inv_ncommon_preserved inv_ncommon2 inv_ncommon_vwait_false inv_ncommon_vwait_true
-  inv_ncommon_vpre inv_ncommon_vproc inv_ncommon_vinit inv_ncommon_others by force
+  inv_ncommon_vpre inv_ncommon_vinit inv_ncommon_others by force
   
 lemma 
   assumes "sim_fin2 w (i + 1) next_common tw'" and "wityping \<Gamma> w"
@@ -1914,22 +1865,22 @@ section \<open>Functional specification for @{term "next_accum"}\<close>
 definition inv_naccum :: "sig assn2" where
   "inv_naccum tw = (bin_of NEXT_ACCUM at_time fst tw on tw = 
                    (case wline_of tw STATE (fst tw - 1) of    
-                       V_PRE  \<Rightarrow> 0  |
+                       V_POST  \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw - 1 on tw)) + 
+                                              (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw - 1)) {1 .. 32}))   )  |
                        V_PROC \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw - 1 on tw)) + 
                                               (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw - 1)) {1 .. 32}))   ) |
                        V_INIT \<Rightarrow> 0 |
+                       V_PRE  \<Rightarrow> 0 |
                        _      \<Rightarrow>   bin_of ACCUM at_time fst tw - 1 on tw 
                       ))"
 
 lemma inv_naccum_alt_def:
-  "inv_naccum tw = (if wline_of tw STATE (fst tw - 1) = V_PRE 
-                    then bin_of NEXT_ACCUM at_time fst tw on tw = 0 
-                    else if wline_of tw STATE (fst tw - 1) = V_PROC 
-                         then bin_of NEXT_ACCUM at_time fst tw on tw = sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw - 1 on tw)) + 
+  "inv_naccum tw = (if wline_of tw STATE (fst tw - 1) = V_POST \<or> wline_of tw STATE (fst tw - 1) = V_PROC 
+                    then bin_of NEXT_ACCUM at_time fst tw on tw = sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw - 1 on tw)) + 
                                                                                     (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw - 1)) {1 .. 32}))   )
-                         else if wline_of tw STATE (fst tw - 1) = V_INIT 
-                              then bin_of NEXT_ACCUM at_time fst tw on tw = 0
-                              else bin_of NEXT_ACCUM at_time fst tw on tw = bin_of ACCUM at_time fst tw - 1 on tw)"
+                    else if wline_of tw STATE (fst tw - 1) = V_INIT \<or> wline_of tw STATE (fst tw  - 1) = V_PRE
+                         then bin_of NEXT_ACCUM at_time fst tw on tw = 0
+                         else bin_of NEXT_ACCUM at_time fst tw on tw = bin_of ACCUM at_time fst tw - 1 on tw)"
   unfolding inv_naccum_def 
   by (simp split: val.splits signedness.splits list.splits bool.splits)
 
@@ -1937,11 +1888,11 @@ schematic_goal inv_naccum_concrete:
   "inv_naccum tw = eval ?Q ?ws ?ns (?ss :: sig list)"
   unfolding inv_naccum_alt_def
   apply (reify eval.simps Irwline.simps Irnat_simps Irsig_simps Irval_simps Irset.simps Irint_simps
-         ("(if wline_of tw STATE (get_time tw - 1) = V_PRE then sbl_to_bin (lval_of (wline_of tw NEXT_ACCUM (get_time tw))) = 0
-     else if wline_of tw STATE (get_time tw - 1) = V_PROC
-          then sbl_to_bin (lval_of (wline_of tw NEXT_ACCUM (get_time tw))) = sbintrunc 31 (sbl_to_bin (lval_of (wline_of tw FRAC (get_time tw - 1))) + sbl_to_bin (nths (lval_of (wline_of tw TERM1 (get_time tw - 1))) {1..32}))
-          else if wline_of tw STATE (get_time tw - 1) = V_INIT then sbl_to_bin (lval_of (wline_of tw NEXT_ACCUM (get_time tw))) = 0
-               else sbl_to_bin (lval_of (wline_of tw NEXT_ACCUM (get_time tw))) = sbl_to_bin (lval_of (wline_of tw ACCUM (get_time tw - 1))))"))
+         ("(if wline_of tw STATE (get_time tw - 1) = V_POST \<or> wline_of tw STATE (get_time tw - 1) = V_PROC
+     then sbl_to_bin (lval_of (wline_of tw NEXT_ACCUM (get_time tw))) =
+          sbintrunc 31 (sbl_to_bin (lval_of (wline_of tw FRAC (get_time tw - 1))) + sbl_to_bin (nths (lval_of (wline_of tw TERM1 (get_time tw - 1))) {1..32}))
+     else if wline_of tw STATE (get_time tw - 1) = V_INIT \<or> wline_of tw STATE (get_time tw - 1) = V_PRE then sbl_to_bin (lval_of (wline_of tw NEXT_ACCUM (get_time tw))) = 0
+          else sbl_to_bin (lval_of (wline_of tw NEXT_ACCUM (get_time tw))) = sbl_to_bin (lval_of (wline_of tw ACCUM (get_time tw - 1))))"))
   by rule
 
 definition inv_naccum2 :: "sig assn2" where
@@ -1960,12 +1911,15 @@ schematic_goal inv_naccum2_concrete:
   by rule
 
 definition 
-  "inv_naccum_comb = Rsepand (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_PRE)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (IC 0))
-       (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_PROC))
-         (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0))))
-           (Isbintrunc (NC 31) (IAdd (Ibin_of (Vwline (Wvar 0) (Svar (Suc (Suc (Suc (Suc 0))))) (NDec (NFst (Wvar 0))))) (Islice (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (NC 1) (NC 32)))))
-         (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_INIT)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (IC 0))
-           (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0)))))))))
+  "inv_naccum_comb = Rsepand 
+ (RIfte (ROr (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_POST)) (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_PROC)))
+       (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0))))
+         (Isbintrunc (NC 31)
+           (IAdd (Ibin_of (Vwline (Wvar 0) (Svar (Suc (Suc (Suc (Suc 0))))) (NDec (NFst (Wvar 0)))))
+             (Islice (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))) (NC 1) (NC 32)))))
+       (RIfte (ROr (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_INIT)) (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_PRE)))
+         (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (IC 0))
+         (RIEq (Ibin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (Ibin_of (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0))))))))
  (RImp (RDisevt (LCons (Svar (Suc (Suc (Suc (Suc 0))))) (LCons (Svar (Suc (Suc (Suc 0)))) (LCons (Svar (Suc (Suc 0))) (LCons (Svar (Suc 0)) LEmpty)))) (Wvar 0))
        (RNall (RImp (RNLT (NFst (Wvar 0)) (NVar 0)) (RVEq (Vwline (Wvar 0) (Svar 0) (NVar 0)) (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))))))"
 
@@ -2002,18 +1956,22 @@ proof -
   hence "bin_of NEXT_ACCUM at_time fst tw + 1 on tw = bin_of NEXT_ACCUM at_time fst tw on tw"
     unfolding inv_naccum2_def by auto
   also have "... = (case wline_of tw STATE (fst tw - 1) of    
-                       V_PRE  \<Rightarrow> 0  |
+                       V_POST  \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw - 1 on tw)) + 
+                                              (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw - 1)) {1 .. 32}))   ) |
                        V_PROC \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw - 1 on tw)) + 
                                               (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw - 1)) {1 .. 32}))   ) |
                        V_INIT \<Rightarrow> 0 |
+                       V_PRE \<Rightarrow> 0 |
                        _      \<Rightarrow>   bin_of ACCUM at_time fst tw - 1 on tw 
                       )"
     using `inv_naccum tw` unfolding inv_naccum_def by auto
   also have "... = (case wline_of tw STATE (fst tw) of    
-                       V_PRE  \<Rightarrow> 0  |
+                       V_POST  \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw on tw)) + 
+                                              (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw)) {1 .. 32}))   ) |
                        V_PROC \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw on tw)) + 
                                               (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw)) {1 .. 32}))   ) |
                        V_INIT \<Rightarrow> 0 |
+                       V_PRE \<Rightarrow> 0 |
                        _      \<Rightarrow>   bin_of ACCUM at_time fst tw - 1 on tw 
                       )"
     unfolding 1 2 3 by auto
@@ -2021,13 +1979,14 @@ proof -
     using 0 unfolding inv_naccum_def by (simp_all split: val.splits signedness.splits list.splits bool.splits)
 qed
 
-lemma inv_naccum_vpre:
+(* lemma inv_naccum_vpre:
   fixes tw
   assumes " curr_value_of STATE on tw = V_PRE"
   defines "tw' \<equiv> tw[ NEXT_ACCUM, 1 :=\<^sub>2 V_ZERO32]"
   shows   "inv_naccum (fst tw' + 1, snd tw')"
   using assms unfolding inv_naccum_alt_def fst_worldline_upd2
   by (auto simp add: snd_worldline_upd2)(auto simp add: worldline_upd2_def worldline_upd_def)
+ *)
 
 lemma inv_naccum_vproc:
   fixes tw
@@ -2064,10 +2023,60 @@ proof -
                                  sbl_to_bin (nths (lval_of (curr_value_of TERM1 on tw)) {Suc 0..32}))"
     using sbin_bl_bin_sbintruc by auto
   also have "... = (case wline_of tw STATE (fst tw) of    
-                       V_PRE  \<Rightarrow> 0  |
+                       V_PRE  \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw on tw)) + 
+                                              (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw)) {1 .. 32}))   ) |
                        V_PROC \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw on tw)) + 
                                               (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw)) {1 .. 32}))   ) |
                        V_INIT \<Rightarrow> 0 |
+                       _      \<Rightarrow>   bin_of ACCUM at_time fst tw - 1 on tw 
+                      )"
+    using assms(1) unfolding comp_def by auto
+  finally show ?thesis
+    using * assms(1) ** ***
+    unfolding inv_naccum_def fst_conv comp_def snd_conv by (simp_all split: val.splits)
+qed
+
+lemma inv_naccum_vpost:
+  fixes tw
+  assumes " curr_value_of STATE on tw = V_POST"
+  defines "tw' \<equiv> tw[ NEXT_ACCUM, 1 :=\<^sub>2 eval_world_raw2 tw (Badd (Bsig FRAC) (Bslice TERM1 62 31))]"
+  assumes "wityping \<Gamma> (snd tw)"
+  shows   "inv_naccum (fst tw' + 1, snd tw')"
+proof -
+  have *: "snd (snd tw') STATE (get_time tw') = V_POST"
+    using assms(1) unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+  have **: "snd (snd tw') FRAC (get_time tw') = snd (snd tw) FRAC (fst tw)"
+    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+  have ***: "snd (snd tw') TERM1 (get_time tw') = snd (snd tw) TERM1 (get_time tw)"
+    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+  have tyfrac: "type_of (snd (snd tw) FRAC (get_time tw)) = Lty Sig 32"
+    using assms(3) cosine_locale_axioms unfolding cosine_locale_def wityping_def wtyping_def
+    by auto
+  have tyterm : "type_of (snd (snd tw) TERM1 (get_time tw)) = Lty Sig 64"
+    using assms(3) cosine_locale_axioms unfolding cosine_locale_def wityping_def wtyping_def
+    by auto
+  hence len: "length (lval_of (wline_of tw TERM1 (get_time tw))) = 64"
+    using `wityping \<Gamma> (snd tw)`  by (metis comp_apply ty.distinct(1) ty.inject type_of.elims val.sel(3))
+  have len': "(length (nths (lval_of (curr_value_of TERM1 on tw)) {Suc 0..32})) = 32"
+    unfolding length_nths len using card_slice[of "62" "64" "31"] by auto
+  have "bin_of NEXT_ACCUM at_time fst tw' + 1 on (fst tw' + 1, snd tw') = bin_of NEXT_ACCUM at_time fst tw + 1 on tw'"
+    unfolding tw'_def worldline_upd2_def worldline_upd_def by auto
+  also have "... =  sbl_to_bin (bin_to_bl 32  (bin_of FRAC at_time fst tw on tw
+                                                  +
+                                               sbl_to_bin (nths (lval_of (curr_value_of TERM1 on tw)) {Suc 0..32})))"
+    using tyterm tyfrac len' unfolding tw'_def worldline_upd2_def worldline_upd_def
+    by (auto split:val.splits signedness.splits simp del: bin_to_bl_def)
+  also have "... = sbintrunc 31 (bin_of FRAC at_time fst tw on tw
+                                                  +
+                                 sbl_to_bin (nths (lval_of (curr_value_of TERM1 on tw)) {Suc 0..32}))"
+    using sbin_bl_bin_sbintruc by auto
+  also have "... = (case wline_of tw STATE (fst tw) of    
+                       V_POST  \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw on tw)) + 
+                                              (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw)) {1 .. 32}))   ) |
+                       V_PROC \<Rightarrow> sbintrunc 31 (sbl_to_bin (lval_of (value_of FRAC at_time fst tw on tw)) + 
+                                              (sbl_to_bin (nths (lof_wline tw TERM1 (fst tw)) {1 .. 32}))   ) |
+                       V_INIT \<Rightarrow> 0 |
+                       V_PRE \<Rightarrow> 0 |
                        _      \<Rightarrow>   bin_of ACCUM at_time fst tw - 1 on tw 
                       )"
     using assms(1) unfolding comp_def by auto
@@ -2084,11 +2093,20 @@ lemma inv_naccum_vinit:
   using assms unfolding inv_naccum_alt_def fst_worldline_upd2
   by (auto simp add: snd_worldline_upd2)(auto simp add: worldline_upd2_def worldline_upd_def)
 
+lemma inv_naccum_vpre:
+  fixes tw
+  assumes " curr_value_of STATE on tw = V_PRE"
+  defines "tw' \<equiv> tw[ NEXT_ACCUM, 1 :=\<^sub>2 V_ZERO32]"
+  shows   "inv_naccum (fst tw' + 1, snd tw')"
+  using assms unfolding inv_naccum_alt_def fst_worldline_upd2
+  by (auto simp add: snd_worldline_upd2)(auto simp add: worldline_upd2_def worldline_upd_def)
+
 lemma inv_naccum_others:
   fixes tw
   assumes " curr_value_of STATE on tw \<noteq> V_PRE"
   assumes " curr_value_of STATE on tw \<noteq> V_PROC"
   assumes " curr_value_of STATE on tw \<noteq> V_INIT"
+  assumes " curr_value_of STATE on tw \<noteq> V_POST"
   defines "tw' \<equiv> tw[ NEXT_ACCUM, 1 :=\<^sub>2 eval_world_raw2 tw (Bsig ACCUM)]"
   assumes "wityping \<Gamma> (snd tw)"
   shows   "inv_naccum (fst tw' + 1, snd tw')"
@@ -2108,7 +2126,7 @@ lemma correctness_naccum':
     apply (rule wp3_conc_is_pre, rule conc_stmt_wf_next_accum, rule nonneg_delay_conc_next_accum, rule cwt_na, simp)
   unfolding next_accum_def wp3_conc_single'[OF cwt_na[unfolded next_accum_def] nonneg_delay_conc_next_accum[unfolded next_accum_def]] wp3_fun.simps 
   fst_worldline_upd2 using inv_naccum_preserved inv_naccum2_preserved inv_naccum2 inv_naccum_vpre
-  inv_naccum_vproc inv_naccum_vinit inv_naccum_others by force
+  inv_naccum_vproc inv_naccum_vinit inv_naccum_others inv_naccum_vpost by force
 
 lemma correctness_naccum:
   "\<Gamma> \<turnstile>\<^sub>s \<lbrace>\<lambda>tw. inv_naccum tw \<and> inv_naccum2 tw\<rbrace> next_accum \<lbrace>\<lambda>tw. inv_naccum tw \<and> inv_naccum2 tw\<rbrace>"
@@ -2125,7 +2143,7 @@ lemma init_ensures_naccum:
   apply (rule wp3_fun_is_pre[OF seq_wt_next_accum[unfolded next_accum_def conc_stmt.sel(4)] nonneg_delay_next_accum[unfolded next_accum_def conc_stmt.sel(4)]], simp)
   unfolding next_accum_def wp3_conc_single'[OF cwt_na[unfolded next_accum_def] nonneg_delay_conc_next_accum[unfolded next_accum_def]] wp3_fun.simps 
   fst_worldline_upd2 using inv_naccum_preserved inv_naccum2_preserved inv_naccum2 inv_naccum_vpre
-  inv_naccum_vproc inv_naccum_vinit inv_naccum_others by force
+  inv_naccum_vproc inv_naccum_vinit inv_naccum_others inv_naccum_vpost by force
 
 lemma 
   assumes "sim_fin2 w (i + 1) next_accum tw'" and "wityping \<Gamma> w"
@@ -2455,8 +2473,16 @@ definition
 (RImp (RDisevt (LCons (Svar (Suc 0)) LEmpty) (Wvar 0))
        (RNall (RImp (RNLT (NFst (Wvar 0)) (NVar 0)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NVar 0))) (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0))))))))"
 
+lemma [simp]:
+  "highest_idx_form_sig inv_nfrac_comb = 2"
+  unfolding inv_nfrac_comb_def by auto
+
 definition 
   "inv_nfrac_FV \<equiv> [NEXT_FRAC, COUNTER]"
+
+lemma [simp]:
+  "length inv_nfrac_FV = 2"
+  unfolding inv_nfrac_FV_def by auto
 
 lemma inv_nfrac_comb_alt_def:
   "inv_nfrac tw \<and> inv_nfrac2 tw \<longleftrightarrow> eval inv_nfrac_comb [tw] [] inv_nfrac_FV "
@@ -2818,16 +2844,11 @@ section \<open>Functional specification of @{term "next_outready_reg"}\<close>
 definition inv_nout :: "sig assn2" where
   "inv_nout tw = (bval_of (curr_value_of NEXT_OUTREADYREG on tw) = 
                   (case wline_of tw STATE (fst tw - 1) of    
-                       V_PROC \<Rightarrow> \<not> bval_of (value_of CTR_NEQ_0 at_time fst tw - 1 on tw) |
-                       V_POST \<Rightarrow> bval_of (value_of OUTREADY_REG at_time fst tw - 1 on tw) |
+                       V_POST \<Rightarrow>   True |
                        _      \<Rightarrow>   False))"
 
 lemma inv_nout_alt_def:
-  "inv_nout tw \<longleftrightarrow> (if wline_of tw STATE (fst tw - 1) = V_PROC 
-                    then bval_of (curr_value_of NEXT_OUTREADYREG on tw) \<longleftrightarrow> \<not> bval_of (value_of CTR_NEQ_0 at_time fst tw - 1 on tw) 
-                    else if wline_of tw STATE (fst tw - 1) = V_POST 
-                         then bval_of (curr_value_of NEXT_OUTREADYREG on tw) \<longleftrightarrow> bval_of (value_of OUTREADY_REG at_time fst tw - 1 on tw) 
-                         else \<not> bval_of (curr_value_of NEXT_OUTREADYREG on tw))"
+  "inv_nout tw \<longleftrightarrow> (bval_of (curr_value_of NEXT_OUTREADYREG on tw) \<longleftrightarrow> wline_of tw STATE (fst tw - 1) = V_POST)"
   unfolding inv_nout_def 
   by (simp split:val.splits signedness.splits list.splits bool.splits)
 
@@ -2835,9 +2856,7 @@ schematic_goal inv_nout_concrete:
   "inv_nout tw = eval ?Q ?ws ?ns (?ss :: sig list)"
   unfolding inv_nout_alt_def 
   apply (reify eval.simps Irwline.simps Irnat_simps Irsig_simps Irval_simps Irset.simps Irint_simps
-         (" (if wline_of tw STATE (get_time tw - 1) = V_PROC then bval_of (wline_of tw NEXT_OUTREADYREG (get_time tw)) = (\<not> bval_of (wline_of tw CTR_NEQ_0 (get_time tw - 1)))
-     else if wline_of tw STATE (get_time tw - 1) = V_POST then bval_of (wline_of tw NEXT_OUTREADYREG (get_time tw)) = bval_of (wline_of tw OUTREADY_REG (get_time tw - 1))
-          else \<not> bval_of (wline_of tw NEXT_OUTREADYREG (get_time tw)))"))
+         (" bval_of (wline_of tw NEXT_OUTREADYREG (get_time tw)) = (wline_of tw STATE (get_time tw - 1) = V_POST)"))
   by rule
 
 definition inv_nout2 :: "sig assn2" where
@@ -2852,22 +2871,20 @@ schematic_goal inv_nout2_concrete:
   by rule
 
 definition 
-  "inv_nout_comb \<equiv> Rsepand (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_PROC))
-       (RBImp (RBval (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (Rnot (RBval (Vwline (Wvar 0) (Svar (Suc (Suc (Suc 0)))) (NDec (NFst (Wvar 0)))))))
-       (RIfte (RVEq (Vwline (Wvar 0) (Svar (Suc (Suc 0))) (NDec (NFst (Wvar 0)))) (VC V_POST))
-         (RBImp (RBval (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (RBval (Vwline (Wvar 0) (Svar (Suc 0)) (NDec (NFst (Wvar 0)))))) (Rnot (RBval (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))))))
+  "inv_nout_comb \<equiv> Rsepand 
+(RBImp (RBval (Vwline (Wvar 0) (Svar (Suc 0)) (NFst (Wvar 0)))) (RVEq (Vwline (Wvar 0) (Svar 0) (NDec (NFst (Wvar 0)))) (VC V_POST)))
 (RImp (RDisevt (LCons (Svar (Suc (Suc (Suc 0)))) (LCons (Svar (Suc (Suc 0))) (LCons (Svar (Suc 0)) LEmpty))) (Wvar 0))
        (RNall (RImp (RNLT (NFst (Wvar 0)) (NVar 0)) (RBImp (RBval (Vwline (Wvar 0) (Svar 0) (NVar 0))) (RBval (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0))))))))"
 
 lemma [simp]:
-  "highest_idx_form_sig inv_nout_comb = 8"
+  "highest_idx_form_sig inv_nout_comb = 6"
   unfolding inv_nout_comb_def by auto
 
 definition 
-  "inv_nout_FV = [NEXT_OUTREADYREG, OUTREADY_REG, STATE, CTR_NEQ_0, NEXT_OUTREADYREG, OUTREADY_REG, CTR_NEQ_0, STATE]"
+  "inv_nout_FV = [STATE, NEXT_OUTREADYREG, NEXT_OUTREADYREG, OUTREADY_REG, CTR_NEQ_0, STATE]"
 
 lemma [simp]:
-  "length inv_nout_FV = 8"
+  "length inv_nout_FV = 6"
   unfolding inv_nout_FV_def by auto
 
 lemma inv_nout_comb_alt_def:
@@ -2894,14 +2911,10 @@ proof -
   have "bval_of (value_of NEXT_OUTREADYREG at_time fst tw + 1 on tw) = bval_of (value_of NEXT_OUTREADYREG at_time fst tw on tw)"
     using * ** unfolding inv_nout2_def by auto
   also have "... = (case wline_of tw STATE (fst tw - 1) of    
-                       V_PROC \<Rightarrow> \<not> bval_of (value_of CTR_NEQ_0 at_time fst tw - 1 on tw) |
-                       V_POST \<Rightarrow> bval_of (value_of OUTREADY_REG at_time fst tw - 1 on tw) |
-                       _      \<Rightarrow>   False)"
+                       V_POST \<Rightarrow> True | _ \<Rightarrow>   False)"
     using `inv_nout tw` unfolding inv_nout_def by auto
   also have "... = (case wline_of tw STATE (fst tw) of    
-                       V_PROC \<Rightarrow> \<not> bval_of (value_of CTR_NEQ_0 at_time fst tw  on tw) |
-                       V_POST \<Rightarrow>   bval_of (value_of OUTREADY_REG at_time fst tw  on tw) |
-                       _      \<Rightarrow>   False)"
+                       V_POST \<Rightarrow> True | _ \<Rightarrow>   False)"
     using `disjnt {STATE, CTR_NEQ_0, OUTREADY_REG} (event_of tw)` unfolding 0 1 2
     by auto
   finally show "inv_nout (fst tw + 1, snd tw)"
@@ -2909,44 +2922,17 @@ proof -
     by (auto split: val.splits signedness.splits list.splits bool.splits)
 qed
 
-lemma inv_nout_vproc_true:
-  fixes tw
-  assumes " curr_value_of STATE on tw = V_PROC"
-  assumes " curr_value_of CTR_NEQ_0 on tw = Bv True"
-  defines "tw' \<equiv> tw[ NEXT_OUTREADYREG, 1 :=\<^sub>2 Bv False]"
-  shows   "inv_nout (fst tw' + 1, snd tw')"
-  using assms unfolding inv_nout_alt_def fst_worldline_upd2
-  by (auto simp add: snd_worldline_upd2)(auto simp add: worldline_upd2_def worldline_upd_def)
-
-lemma inv_nout_vproc_false:
-  fixes tw
-  assumes " curr_value_of STATE on tw = V_PROC"
-  assumes " curr_value_of CTR_NEQ_0 on tw \<noteq> Bv True"
-  defines "tw' \<equiv> tw[ NEXT_OUTREADYREG, 1 :=\<^sub>2 Bv True]"
-  assumes "wityping \<Gamma> (snd tw)"
-  shows   "inv_nout (fst tw' + 1, snd tw')"
-proof -
-  have "type_of (snd (snd tw) CTR_NEQ_0 (get_time tw)) = Bty"
-    using assms(4) cosine_locale_axioms unfolding cosine_locale_def wityping_def wtyping_def
-    by auto
-  hence *: "snd (snd tw) CTR_NEQ_0 (fst tw) = Bv False"
-    using assms(2) by (smt comp_apply ty.distinct(1) type_of.elims)
-  thus ?thesis
-    using assms unfolding inv_nout_alt_def fst_worldline_upd2
-    by (auto simp add: snd_worldline_upd2)(auto simp add: worldline_upd2_def worldline_upd_def)
-qed
-
 lemma inv_nout_vpost:
   fixes tw
   assumes " curr_value_of STATE on tw = V_POST"
-  defines "tw' \<equiv> tw[ NEXT_OUTREADYREG, 1 :=\<^sub>2 eval_world_raw2 tw (Bsig OUTREADY_REG)]"
+  defines "tw' \<equiv> tw[ NEXT_OUTREADYREG, 1 :=\<^sub>2 Bv True]"
+  assumes "wityping \<Gamma> (snd tw)"
   shows   "inv_nout (fst tw' + 1, snd tw')"
   using assms unfolding inv_nout_alt_def fst_worldline_upd2
   by (auto simp add: snd_worldline_upd2)(auto simp add: worldline_upd2_def worldline_upd_def)
 
 lemma inv_nout_others:
   fixes tw
-  assumes " curr_value_of STATE on tw \<noteq> V_PROC"
   assumes " curr_value_of STATE on tw \<noteq> V_POST"
   defines "tw' \<equiv> tw[ NEXT_OUTREADYREG, 1 :=\<^sub>2 Bv False]"
   shows   "inv_nout (fst tw' + 1, snd tw')"
@@ -2965,8 +2951,8 @@ lemma correctness_nout':
                                                                   inv_nout2 (fst tw + 1, snd tw))", rotated])  
   apply (rule wp3_conc_is_pre, rule conc_stmt_wf_next_outready_reg, rule nonneg_delay_conc_next_outready_reg, rule cwt_no, simp)
   unfolding next_outready_reg_def wp3_conc_single'[OF cwt_no[unfolded next_outready_reg_def] nonneg_delay_conc_next_outready_reg[unfolded next_outready_reg_def]] wp3_fun.simps
-  fst_worldline_upd2 using inv_nout_preserved inv_nout2_preserved inv_nout2 inv_nout_vproc_true
-  inv_nout_vproc_false inv_nout_vpost inv_nout_others by force
+  fst_worldline_upd2 using inv_nout_preserved inv_nout2_preserved inv_nout2 inv_nout_vpost
+  inv_nout_others by force
   
 lemma correctness_nout:                          
   "\<Gamma> \<turnstile>\<^sub>s \<lbrace>\<lambda>tw. inv_nout tw \<and> inv_nout2 tw\<rbrace> next_outready_reg \<lbrace>\<lambda>tw. inv_nout tw \<and> inv_nout2 tw\<rbrace>"
@@ -2978,8 +2964,8 @@ lemma init_ensures_nout:
   apply (rule AssignI_suc, rule SingleI)
   apply (rule Conseq3[where Q="\<lambda>tw. inv_nout (fst tw + 1, snd tw) \<and> inv_nout2 (fst tw + 1, snd tw)", rotated])
     apply (rule wp3_fun_is_pre[OF seq_wt_next_outready_reg[unfolded next_outready_reg_def conc_stmt.sel(4)] nonneg_delay_next_outready_reg[unfolded next_outready_reg_def conc_stmt.sel(4)]], simp)
-  unfolding wp3_fun.simps fst_worldline_upd2 using inv_nout2 inv_nout_vproc_true inv_nout_vproc_false
-  inv_nout_vpost inv_nout_others by force
+  unfolding wp3_fun.simps fst_worldline_upd2 using inv_nout2 inv_nout_vpost
+  inv_nout_others by force
 
 lemma 
   assumes "sim_fin2 w (i + 1) next_outready_reg tw'" and "wityping \<Gamma> w"
@@ -3652,54 +3638,59 @@ lemma correctness_output:
   "\<Gamma> \<turnstile>\<^sub>s \<lbrace>\<lambda>tw. inv_output tw \<and> inv_output2 tw\<rbrace> output \<lbrace>\<lambda>tw. inv_output tw \<and> inv_output2 tw\<rbrace>"
   apply (rule While_Suc) using correctness_output' by auto
 
-lemma eval_ncommon_sqr_naccum_term1_output:
-  "eval (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) [tw] ([] @ []) (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) \<longleftrightarrow>
-  (((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_output tw \<and> inv_output2 tw)"
+lemma eval_ncommon_sqr_naccum_term1_nfrac_output:
+  "eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) [tw] (([] @ []) @ []) ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) \<longleftrightarrow> 
+  ((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw)) \<and> (inv_output tw \<and> inv_output2 tw)"
   using inv_ncommon_comb_alt_def'[symmetric] inv_sqr_comb_alt_def[symmetric] inv_naccum_com_alt_def[symmetric]
-    inv_term1_comb_alt_def[symmetric] inv_output_comb_alt_def[symmetric] by auto
+    inv_term1_comb_alt_def[symmetric] inv_output_comb_alt_def[symmetric] inv_nfrac_comb_alt_def[symmetric] by auto
 
-lemma comb_ncommon_sqr_naccum_term1_output:
-  "\<Gamma> \<Turnstile>\<^sub>s\<lbrace>\<lambda>tw. (((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_output tw \<and> inv_output2 tw)\<rbrace>
-          (((next_common || squaring)) || (next_accum || term1)) || output
-        \<lbrace>\<lambda>tw. (((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_output tw \<and> inv_output2 tw)\<rbrace>"  
+lemma comb_ncommon_sqr_naccum_term1_nfrac_output:
+  "\<Gamma> \<Turnstile>\<^sub>s\<lbrace>\<lambda>tw. ((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw)) \<and> (inv_output tw \<and> inv_output2 tw)\<rbrace>
+          ((((next_common || squaring)) || (next_accum || term1)) || next_frac) || output
+        \<lbrace>\<lambda>tw. ((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw)) \<and> (inv_output tw \<and> inv_output2 tw)\<rbrace>"  
 proof -
-  have 0: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) [tw] ([]) ((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV)\<rbrace>
-                    (next_common || squaring) || next_accum || term1
-                 \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) [tw] ([]) ((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV)\<rbrace>"
-    using comb_prop_next_common_squaring_next_accum_term1 unfolding inv_ncommon_sqr_ncounter_naccum_term1_comb by auto
+  have 0: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand ((Rsepand inv_ncommon_comb inv_sqr_comb)) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) [tw] ([] @ [])
+                (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV)\<rbrace>
+                    ((next_common || squaring) || next_accum || term1) || next_frac
+                 \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand ((Rsepand inv_ncommon_comb inv_sqr_comb)) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) [tw] ([] @ [])
+                (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV)\<rbrace>"
+    using comb_inv_ncommon_sqr_ncounter_naccum_term1_nfrac unfolding eval_inv_ncommon_sqr_ncounter_naccum_term1_nfrac by auto
   have  "\<Gamma> \<turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval inv_output_comb [tw] [] inv_output_FV\<rbrace> output \<lbrace>\<lambda>tw. eval inv_output_comb [tw] [] inv_output_FV\<rbrace>"
     using correctness_output unfolding inv_output_comb_alt_def by auto
   have 1: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval inv_output_comb [tw] [] inv_output_FV\<rbrace> output \<lbrace>\<lambda>tw. eval inv_output_comb [tw] [] inv_output_FV\<rbrace>"
     apply (intro conc_sim_soundness[OF correctness_output, unfolded inv_output_comb_alt_def])
     apply (auto simp add: conc_stmt_wf_def output_def)
     using cwt_output  by (simp add: output_def)
-  have 2: "set ((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) \<inter> set (signals_from output) = {}"
-    unfolding inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def output_def by auto
-  have 3: "set (inv_output_FV) \<inter> set (signals_from ((next_common || squaring) || next_accum || term1)) = {}"
-    unfolding inv_output_FV_def next_common_def squaring_def next_accum_def term1_def by auto
-  have 4: "nonneg_delay_conc ((((next_common || squaring)) || (next_accum || term1)) || output)"
+  have 2: "set ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV)) \<inter> set (signals_from output) = {}"
+    unfolding inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def inv_nfrac_FV_def output_def by auto
+  have 3: "set (inv_output_FV) \<inter> set (signals_from (((next_common || squaring) || next_accum || term1) || next_frac)) = {}"
+    unfolding inv_output_FV_def next_common_def squaring_def next_accum_def term1_def next_frac_def by auto
+  have 4: "nonneg_delay_conc ((((next_common || squaring) || next_accum || term1) || next_frac) || output)"
     by auto
-  have 5: "conc_stmt_wf ((((next_common || squaring)) || (next_accum || term1)) || output)"
-    unfolding conc_stmt_wf_def next_common_def squaring_def next_accum_def term1_def output_def
+  have 5: "conc_stmt_wf (((((next_common || squaring)) || (next_accum || term1)) || next_frac) || output)"
+    unfolding conc_stmt_wf_def next_common_def squaring_def next_accum_def term1_def output_def next_frac_def
     by auto
-  have 6: "conc_wt \<Gamma> ((((next_common || squaring)) || (next_accum || term1)) || output)"
+  have 6: "conc_wt \<Gamma> (((((next_common || squaring)) || (next_accum || term1)) || next_frac) || output)"
     by (simp add: conc_wt.intros(2))
   have 7: "wf_form_sig inv_output_comb (length inv_output_FV) 0"
     unfolding inv_output_comb_def inv_output_FV_def by auto
-  have 8: "wf_assertion (Abs (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb))) (length []) (length ((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV))"
-    unfolding inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_def inv_term1_FV_def
+  have 8: "wf_assertion (Abs (Rsepand (Rsepand ((Rsepand inv_ncommon_comb inv_sqr_comb)) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb)) (length ([] @ [])) (length (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV))"
+    unfolding inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_nfrac_comb_def inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_def inv_term1_FV_def inv_nfrac_FV_def
     by auto
   have 9: "wf_assertion (Abs inv_output_comb) (length []) (length inv_output_FV)"
     unfolding inv_output_comb_def inv_output_FV_def by auto
-  have 10: "wf_form_sig (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) (length ((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV)) 0"
-    unfolding inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def 
+  have 10: "wf_form_sig (Rsepand (Rsepand ((Rsepand inv_ncommon_comb inv_sqr_comb)) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) (length (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV)) 0"
+    unfolding inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_nfrac_comb_def inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def inv_nfrac_FV_def
     by auto
-  have "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) [tw] ([] @ []) (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV)\<rbrace>
-  ((next_common || squaring) || next_accum || term1) || output
-  \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) [tw] ([] @ []) (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV)\<rbrace>"
-    using interp_hgoare_sim_parallel[OF 0 1 2 3 4 5 6 7 8 10 9] by satx
+  have "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) [tw] (([] @ []) @ [])
+                ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV)\<rbrace>
+  (((next_common || squaring) || next_accum || term1) || next_frac) || output
+  \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) [tw] (([] @ []) @ [])
+         ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV)\<rbrace>"
+    using interp_hgoare_sim_parallel[OF 0 1 2 3 4 5 6 7 8 10 9] 
+    by auto
   thus ?thesis
-    unfolding eval_ncommon_sqr_naccum_term1_output by auto
+    unfolding eval_ncommon_sqr_naccum_term1_nfrac_output by auto
 qed
 
 lemma init_ensures_output:
@@ -3815,62 +3806,64 @@ lemma correctness_output_ready:
 
 section \<open>Combining everything\<close>
 
-lemma eval_inv_ncommon_naccum_term1_output_ready:
-  " eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) inv_output_ready_comb) [tw] (([] @ []) @ [])
-                ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) @ inv_output_ready_FV) \<longleftrightarrow>
-  ((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_output tw \<and> inv_output2 tw) 
+lemma eval_inv_ncommon_naccum_term1_nfrac_output_ready:
+  "eval (Rsepand (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) inv_output_ready_comb) [tw] ((([] @ []) @ []) @ [])
+                (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) @ inv_output_ready_FV) \<longleftrightarrow> 
+    (((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw)) \<and> (inv_output tw \<and> inv_output2 tw) 
                 \<and> inv_output_ready tw \<and> inv_output2_ready tw)"
   using inv_ncommon_comb_alt_def'[symmetric] inv_sqr_comb_alt_def[symmetric] inv_naccum_com_alt_def[symmetric]
-    inv_term1_comb_alt_def[symmetric] inv_output_comb_alt_def[symmetric] inv_output_ready_comb_alt_def[symmetric] by auto
+    inv_term1_comb_alt_def[symmetric] inv_output_comb_alt_def[symmetric] inv_output_ready_comb_alt_def[symmetric] 
+    inv_nfrac_comb_alt_def[symmetric] by auto
 
-lemma inv_ncommon_sqr_naccum_term1_output_preserved:
-  "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. ((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_output tw \<and> inv_output2 tw) 
+lemma inv_ncommon_sqr_naccum_term1_nfrac_output_preserved:
+  "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw)) \<and> (inv_output tw \<and> inv_output2 tw) 
                 \<and> inv_output_ready tw \<and> inv_output2_ready tw)\<rbrace>
-            (((next_common || squaring) || next_accum || term1) || output) || output_ready
-        \<lbrace>\<lambda>tw. ((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_output tw \<and> inv_output2 tw) 
+            ((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready
+        \<lbrace>\<lambda>tw. (((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw)) \<and> (inv_output tw \<and> inv_output2 tw) 
                 \<and> inv_output_ready tw \<and> inv_output2_ready tw)\<rbrace>"
 proof -
-  have 0: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) [tw] ([] @ []) (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV)\<rbrace>
-  ((next_common || squaring) || next_accum || term1) || output
-  \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) [tw] ([] @ []) (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV)\<rbrace>"
-    using comb_ncommon_sqr_naccum_term1_output unfolding eval_ncommon_sqr_naccum_term1_output[symmetric] by blast
+  have 0: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) [tw] (([] @ []) @ [])
+                ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV)\<rbrace>
+  (((next_common || squaring) || next_accum || term1) || next_frac) || output
+  \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) [tw] (([] @ []) @ [])
+         ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV)\<rbrace>"
+    using comb_ncommon_sqr_naccum_term1_nfrac_output unfolding eval_ncommon_sqr_naccum_term1_nfrac_output[symmetric] by blast
   have 1: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval inv_output_ready_comb [tw] [] inv_output_ready_FV\<rbrace> output_ready \<lbrace>\<lambda>tw. eval inv_output_ready_comb [tw] [] inv_output_ready_FV\<rbrace>"
     apply (intro conc_sim_soundness[OF correctness_output_ready, unfolded inv_output_ready_comb_alt_def])
     apply (auto) unfolding conc_stmt_wf_def output_ready_def by auto
-  have 2: "set (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) \<inter> set (signals_from output_ready) = {}"
-    unfolding inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def inv_output_FV_def output_ready_def by  auto
-  have 3: "set inv_output_ready_FV \<inter> set (signals_from (((next_common || squaring) || next_accum || term1) || output)) = {}"
-    unfolding inv_output_ready_FV_def next_common_def squaring_def next_accum_def term1_def output_def by auto
-  have 4: "nonneg_delay_conc  ((((next_common || squaring) || next_accum || term1) || output) || output_ready) "
+  have 2: "set (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV)) \<inter> set (signals_from output_ready) = {}"
+    unfolding inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def inv_output_FV_def output_ready_def inv_nfrac_FV_def by  auto
+  have 3: "set inv_output_ready_FV \<inter> set (signals_from ( (((next_common || squaring) || next_accum || term1) || next_frac) || output )) = {}"
+    unfolding inv_output_ready_FV_def next_common_def squaring_def next_accum_def term1_def output_def next_frac_def by auto
+  have 4: "nonneg_delay_conc (((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready) "
     by auto
-  have 5: "conc_stmt_wf ((((next_common || squaring) || next_accum || term1) || output) || output_ready)"
-    unfolding inv_output_ready_FV_def next_common_def squaring_def next_accum_def term1_def output_def output_ready_def 
+  have 5: "conc_stmt_wf (((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready)"
+    unfolding inv_output_ready_FV_def next_common_def squaring_def next_accum_def term1_def output_def output_ready_def next_frac_def 
     by (auto simp add: conc_stmt_wf_def)
-  have 6: "conc_wt \<Gamma> ((((next_common || squaring) || next_accum || term1) || output) || output_ready)"
+  have 6: "conc_wt \<Gamma> (((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready)"
     by (simp add: conc_wt.intros(2))
   have 7: "wf_form_sig inv_output_ready_comb (length inv_output_ready_FV) 0"
     unfolding inv_output_ready_comb_def inv_output_ready_FV_def by auto
-  have 8: "wf_assertion (Abs (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb)) 
-                        (length ([] @ [])) (length (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV))"
-    unfolding inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_output_comb_def
-    inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def inv_output_FV_def
+  have 8: "wf_assertion (Abs (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb)) 
+                        (length (([] @ []) @ [])) (length (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV)))"
+    unfolding inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_output_comb_def inv_nfrac_comb_def
     by auto
-  have 9: "wf_form_sig (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb)
-                       (length (((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV)) 0"
-    unfolding inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_output_comb_def
-    inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def inv_output_FV_def
+  have 9: "wf_form_sig (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb)
+                       (length (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV))) 0"
+    unfolding inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_output_comb_def inv_nfrac_comb_def
     by auto
   have 10: "wf_assertion (Abs inv_output_ready_comb) (length []) (length inv_output_ready_FV)"
     unfolding inv_output_ready_comb_def inv_output_ready_FV_def by auto
-  have "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) inv_output_ready_comb) [tw] (([] @ []) @ [])
-                ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) @ inv_output_ready_FV)\<rbrace>
-  (((next_common || squaring) || next_accum || term1) || output) || output_ready
-  \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) inv_output_ready_comb) [tw] (([] @ []) @ [])
-         ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) @ inv_output_ready_FV)\<rbrace>"
+  have "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) inv_output_ready_comb) [tw] ((([] @ []) @ []) @ [])
+                (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) @ inv_output_ready_FV)\<rbrace>
+  ((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready
+  \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) inv_output_ready_comb) [tw] ((([] @ []) @ []) @ [])
+         (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) @ inv_output_ready_FV)\<rbrace>"
     using interp_hgoare_sim_parallel[OF 0 1 2 3 4 5 6 7 8 9 10] by presburger
   thus ?thesis
-    unfolding eval_inv_ncommon_naccum_term1_output_ready by auto
+    unfolding eval_inv_ncommon_naccum_term1_nfrac_output_ready by auto
 qed
+
 
 lemma init_ensures_output_ready:
   "init_sim2_hoare_wt \<Gamma> (\<lambda>tw. fst tw = 0) output_ready (\<lambda>tw. inv_output_ready tw \<and> inv_output2_ready tw)"
@@ -3887,83 +3880,80 @@ lemma
   using grand_correctness[OF assms conc_stmt_wf_output_ready cwt_outready nonneg_delay_conc_output_ready correctness_output_ready init_ensures_output_ready]
   by auto
 
-lemma eval_all_except_registers:
-  "eval (Rsepand (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) inv_output_ready_comb)
+lemma eval_all_except_registers':
+  "eval (Rsepand (Rsepand (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) inv_output_ready_comb)
                       (Rsepand (Rsepand inv_nout_comb inv_nstate_comb) (Rsepand inv_ncounter_comb inv_n0_comb)))
-                [tw] ((([] @ []) @ []) @ [])
-                (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) @ inv_output_ready_FV) @ (inv_nout_FV @ inv_nstate_FV) @ inv_ncounter_FV @ inv_n0_FV)
-   \<longleftrightarrow> (((((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw)) \<and> ((inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw))) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> inv_output_ready tw \<and> inv_output2_ready tw))
-            \<and> (((inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw)) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw))
-  "
+                [tw] (((([] @ []) @ []) @ []) @ []) ((((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) @ inv_output_ready_FV) @ (inv_nout_FV @ inv_nstate_FV) @ inv_ncounter_FV @ inv_n0_FV)
+   \<longleftrightarrow>
+(inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and>  (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+            \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)"
   using inv_ncommon_comb_alt_def' inv_sqr_comb_alt_def inv_naccum_com_alt_def
     inv_term1_comb_alt_def inv_output_comb_alt_def inv_output_ready_comb_alt_def
-    inv_nout_comb_alt_def inv_nstate_comb_alt_def inv_ncounter_comb_alt_def inv_n0_comb_alt_def by auto
+    inv_nout_comb_alt_def inv_nstate_comb_alt_def inv_ncounter_comb_alt_def inv_n0_comb_alt_def inv_nfrac_comb_alt_def by auto
 
-lemma inv_all_except_reg_preserved:
-  "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+lemma inv_all_except_reg_preserved':
+  "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and>  (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
             \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)\<rbrace>
-              ((((next_common || squaring) || next_accum || term1) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))
-        \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+              (((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))
+        \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw)  \<and>  (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
             \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)\<rbrace>"
 proof -
-  have 0: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) inv_output_ready_comb) [tw] (([] @ []) @ [])
-                  ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) @ inv_output_ready_FV)\<rbrace>
-                      (((next_common || squaring) || next_accum || term1) || output) || output_ready
-                \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) inv_output_ready_comb) [tw] (([] @ []) @ [])
-                  ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) @ inv_output_ready_FV)\<rbrace>"
-    using inv_ncommon_sqr_naccum_term1_output_preserved unfolding eval_inv_ncommon_naccum_term1_output_ready by auto
+  have 0: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) inv_output_ready_comb) [tw] ((([] @ []) @ []) @ [])
+                (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) @ inv_output_ready_FV)\<rbrace>
+  ((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready
+  \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) inv_output_ready_comb) [tw] ((([] @ []) @ []) @ [])
+         (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) @ inv_output_ready_FV)\<rbrace>"
+    using inv_ncommon_sqr_naccum_term1_nfrac_output_preserved unfolding eval_inv_ncommon_naccum_term1_nfrac_output_ready by auto
   have 1: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand inv_nout_comb inv_nstate_comb) (Rsepand inv_ncounter_comb inv_n0_comb)) [tw] [] ((inv_nout_FV @ inv_nstate_FV) @ inv_ncounter_FV @ inv_n0_FV)\<rbrace>
                     (next_outready_reg || local.next_state) || next_counter || ctr_neq_0
                  \<lbrace>\<lambda>tw. eval (Rsepand (Rsepand inv_nout_comb inv_nstate_comb) (Rsepand inv_ncounter_comb inv_n0_comb)) [tw] [] ((inv_nout_FV @ inv_nstate_FV) @ inv_ncounter_FV @ inv_n0_FV)\<rbrace>"
     using inv_nout_nstate_ncounter_n0_preserved2 by blast
-  have 2: "set ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) @ inv_output_ready_FV) \<inter> set (signals_from ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))) = {}"
-    unfolding inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def inv_output_FV_def inv_output_ready_FV_def next_outready_reg_def next_state_def next_counter_def ctr_neq_0_def
+  have 2: "set (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) @ inv_output_ready_FV) \<inter> set (signals_from ((next_outready_reg || local.next_state) || next_counter || ctr_neq_0)) = {}"
+    unfolding inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def inv_output_FV_def inv_output_ready_FV_def next_outready_reg_def next_state_def next_counter_def ctr_neq_0_def inv_nfrac_FV_def
     by auto
-  have 3: "set  ((inv_nout_FV @ inv_nstate_FV) @ inv_ncounter_FV @ inv_n0_FV) \<inter> set (signals_from ((((next_common || squaring) || next_accum || term1) || output) || output_ready)) = {}"
-    unfolding inv_nout_FV_def  inv_nstate_FV_def  inv_ncounter_FV_def inv_n0_FV_def next_common_def squaring_def next_accum_def term1_def output_def output_ready_def
+  have 3: "set  ((inv_nout_FV @ inv_nstate_FV) @ inv_ncounter_FV @ inv_n0_FV) \<inter> set (signals_from (((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready)) = {}"
+    unfolding inv_nout_FV_def  inv_nstate_FV_def  inv_ncounter_FV_def inv_n0_FV_def next_common_def squaring_def next_accum_def term1_def output_def output_ready_def next_frac_def
     by auto
-  have 4: "nonneg_delay_conc (((((next_common || squaring) || next_accum || term1) || output) || output_ready) 
+  have 4: "nonneg_delay_conc ((((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready) 
           ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0)))"
     by auto
-  have 5: "conc_stmt_wf (((((next_common || squaring) || next_accum || term1) || output) || output_ready) 
+  have 5: "conc_stmt_wf ((((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready) 
           ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0)))"
-    unfolding next_common_def squaring_def next_accum_def term1_def output_def output_ready_def 
+    unfolding next_common_def squaring_def next_accum_def term1_def output_def output_ready_def next_frac_def 
     next_outready_reg_def next_state_def next_counter_def ctr_neq_0_def by (auto simp add: conc_stmt_wf_def)
-  have 6: " conc_wt \<Gamma> (((((next_common || squaring) || next_accum || term1) || output) || output_ready) 
+  have 6: " conc_wt \<Gamma> ((((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready) 
           ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0)))"
     by (simp add: conc_wt.intros(2))
   have 7: "wf_form_sig (Rsepand (Rsepand inv_nout_comb inv_nstate_comb) (Rsepand inv_ncounter_comb inv_n0_comb)) (length  ((inv_nout_FV @ inv_nstate_FV) @ inv_ncounter_FV @ inv_n0_FV)) 0"
     unfolding inv_nout_FV_def  inv_nstate_FV_def  inv_ncounter_FV_def inv_n0_FV_def inv_nout_comb_def inv_nstate_comb_def inv_ncounter_comb_def inv_n0_comb_def
     by auto
-  have 8: "wf_assertion (Abs (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) inv_output_ready_comb)) 
-                         (length (([] @ []) @ [])) (length ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) @ inv_output_ready_FV))"
-    unfolding inv_ncommon_free_vars_def inv_sqr_FV_def inv_naccum_FV_def inv_term1_FV_def inv_output_FV_def inv_output_ready_FV_def
-              inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_output_comb_def inv_output_ready_comb_def
+  have 8: "wf_assertion (Abs (Rsepand (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) inv_output_ready_comb)) 
+                         (length ((([] @ []) @ []) @ [])) (length (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) @ inv_output_ready_FV))"
+    unfolding inv_nfrac_comb_def inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_output_comb_def inv_output_ready_comb_def
     by auto
-  have 9: "wf_form_sig ((Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_output_comb) inv_output_ready_comb)) 
-                       (length ((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_output_FV) @ inv_output_ready_FV)) 0"
-    unfolding inv_ncommon_free_vars_def  inv_sqr_FV_def  inv_naccum_FV_def inv_term1_FV_def inv_output_FV_def inv_output_ready_FV_def 
-    inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_output_comb_def  inv_output_ready_comb_def  
+  have 9: "wf_form_sig ((Rsepand (Rsepand (Rsepand (Rsepand (Rsepand inv_ncommon_comb inv_sqr_comb) (Rsepand inv_naccum_comb inv_term1_comb)) inv_nfrac_comb) inv_output_comb) inv_output_ready_comb)) 
+                       (length (((((inv_ncommon_free_vars @ inv_sqr_FV) @ inv_naccum_FV @ inv_term1_FV) @ inv_nfrac_FV) @ inv_output_FV) @ inv_output_ready_FV)) 0"
+    unfolding  inv_ncommon_comb_def inv_sqr_comb_def inv_naccum_comb_def inv_term1_comb_def inv_output_comb_def  inv_output_ready_comb_def  inv_nfrac_comb_def
     by auto
   have 10: "wf_assertion (Abs (Rsepand (Rsepand inv_nout_comb inv_nstate_comb) (Rsepand inv_ncounter_comb inv_n0_comb))) (length []) (length ((inv_nout_FV @ inv_nstate_FV) @ inv_ncounter_FV @ inv_n0_FV))"
     unfolding inv_nout_FV_def  inv_nstate_FV_def  inv_ncounter_FV_def inv_n0_FV_def inv_nout_comb_def inv_nstate_comb_def inv_ncounter_comb_def inv_n0_comb_def
     by auto
   show ?thesis
-    using interp_hgoare_sim_parallel[OF 0 1 2 3 4 5 6 7 8 9 10] unfolding eval_all_except_registers
-    by auto
+    using interp_hgoare_sim_parallel[OF 0 1 2 3 4 5 6 7 8 9 10] 
+    unfolding eval_all_except_registers' by auto
 qed
 
-lemma inv_all_imp_wp3_conc_registers:
+lemma inv_all_imp_wp3_conc_registers':
   "\<forall>w. wityping \<Gamma> (snd w) \<and>
         (inv_ncommon w \<and> inv_ncommon2 w) \<and>
         (inv_sqr w \<and> inv_sqr2 w) \<and>
         (inv_naccum w \<and> inv_naccum2 w) \<and>
-        (inv_term1 w \<and> inv_term12 w) \<and> (inv_output w \<and> inv_output2 w) \<and> (inv_output_ready w \<and> inv_output2_ready w) \<and> (inv_nout w \<and> inv_nout2 w) \<and> (inv_nstate w \<and> inv_nstate2 w) \<and> (inv_ncounter w \<and> inv_ncounter2 w) \<and> inv_n0 w \<and> inv_n02 w \<longrightarrow>
+        (inv_term1 w \<and> inv_term12 w) \<and> (inv_nfrac w \<and> inv_nfrac2 w) \<and> (inv_output w \<and> inv_output2 w) \<and> (inv_output_ready w \<and> inv_output2_ready w) \<and> (inv_nout w \<and> inv_nout2 w) \<and> (inv_nstate w \<and> inv_nstate2 w) \<and> (inv_ncounter w \<and> inv_ncounter2 w) \<and> inv_n0 w \<and> inv_n02 w \<longrightarrow>
         wp3_conc \<Gamma> registers
          (\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and>
                (inv_sqr tw \<and> inv_sqr2 tw) \<and>
                (inv_naccum tw \<and> inv_naccum2 tw) \<and>
-               (inv_term1 tw \<and> inv_term12 tw) \<and>
+               (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> 
                (inv_output tw \<and> inv_output2 tw) \<and> (inv_output_ready tw \<and> inv_output2_ready tw) \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> inv_n0 tw \<and> inv_n02 tw)
          w"
   apply (rule, rule, unfold registers_def)
@@ -3974,7 +3964,8 @@ proof -
          (inv_ncommon w \<and> inv_ncommon2 w) \<and>
          (inv_sqr w \<and> inv_sqr2 w) \<and>
          (inv_naccum w \<and> inv_naccum2 w) \<and>
-         (inv_term1 w \<and> inv_term12 w) \<and> (inv_output w \<and> inv_output2 w) \<and> (inv_output_ready w \<and> inv_output2_ready w) \<and> (inv_nout w \<and> inv_nout2 w) \<and> (inv_nstate w \<and> inv_nstate2 w) \<and> (inv_ncounter w \<and> inv_ncounter2 w) \<and> inv_n0 w \<and> inv_n02 w"
+         (inv_term1 w \<and> inv_term12 w) \<and>
+         (inv_nfrac w \<and> inv_nfrac2 w) \<and> (inv_output w \<and> inv_output2 w) \<and> (inv_output_ready w \<and> inv_output2_ready w) \<and> (inv_nout w \<and> inv_nout2 w) \<and> (inv_nstate w \<and> inv_nstate2 w) \<and> (inv_ncounter w \<and> inv_ncounter2 w) \<and> inv_n0 w \<and> inv_n02 w"
   hence "wityping \<Gamma> (snd w)"
     by auto
   consider "disjnt {CLK} (event_of w)" | "\<not> disjnt {CLK} (event_of w) \<and> (eval_world_raw2 w (Band (Bsig CLK) (Bsig_event CLK)) = Bv True) \<and> eval_world_raw2 w (Bsig RST) = Bv True" 
@@ -3986,6 +3977,7 @@ proof -
                (inv_sqr w \<and> inv_sqr2 w) \<and>
                (inv_naccum w \<and> inv_naccum2 w) \<and>
                (inv_term1 w \<and> inv_term12 w) \<and>
+               (inv_nfrac w \<and> inv_nfrac2 w) \<and>
                (inv_output w \<and> inv_output2 w) \<and> (inv_output_ready w \<and> inv_output2_ready w) \<and> (inv_nout w \<and> inv_nout2 w) \<and> (inv_nstate w \<and> inv_nstate2 w) \<and> (inv_ncounter w \<and> inv_ncounter2 w) \<and> inv_n0 w \<and> inv_n02 w) \<and>
               wityping \<Gamma> (snd w)
          else if eval_world_raw2 w (Band (Bsig CLK) (Bsig_event CLK)) = Bv True
@@ -3998,6 +3990,7 @@ proof -
                                (inv_sqr tw \<and> inv_sqr2 tw) \<and>
                                (inv_naccum tw \<and> inv_naccum2 tw) \<and>
                                (inv_term1 tw \<and> inv_term12 tw) \<and>
+                               (inv_nfrac tw \<and> inv_nfrac2 tw) \<and>
                                (inv_output tw \<and> inv_output2 tw) \<and> (inv_output_ready tw \<and> inv_output2_ready tw) \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> inv_n0 tw \<and> inv_n02 tw)
                          w
                    else wp3_fun \<Gamma>
@@ -4008,6 +4001,7 @@ proof -
                                (inv_sqr tw \<and> inv_sqr2 tw) \<and>
                                (inv_naccum tw \<and> inv_naccum2 tw) \<and>
                                (inv_term1 tw \<and> inv_term12 tw) \<and>
+                               (inv_nfrac tw \<and> inv_nfrac2 tw) \<and>
                                (inv_output tw \<and> inv_output2 tw) \<and> (inv_output_ready tw \<and> inv_output2_ready tw) \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> inv_n0 tw \<and> inv_n02 tw)
                          w
               else wp3_fun \<Gamma> Bnull
@@ -4015,6 +4009,7 @@ proof -
                           (inv_sqr tw \<and> inv_sqr2 tw) \<and>
                           (inv_naccum tw \<and> inv_naccum2 tw) \<and>
                           (inv_term1 tw \<and> inv_term12 tw) \<and>
+                          (inv_nfrac tw \<and> inv_nfrac2 tw) \<and>
                           (inv_output tw \<and> inv_output2 tw) \<and> (inv_output_ready tw \<and> inv_output2_ready tw) \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> inv_n0 tw \<and> inv_n02 tw)
                     w"
   proof (cases)
@@ -4068,6 +4063,12 @@ proof -
    have o: "(inv_term12 ?w)"
      using * unfolding inv_term12_def fst_worldline_upd2
      by (auto simp add: event_of_worldline_upd2 snd_worldline_upd2 snd_worldline_upd2')
+   have n2: "(inv_nfrac ?w)"
+     using * unfolding inv_nfrac_def fst_worldline_upd2
+     by (auto simp add: snd_worldline_upd2 snd_worldline_upd2')
+   have o2: "(inv_nfrac2 ?w)"
+     using * unfolding inv_nfrac2_def fst_worldline_upd2
+     by (auto simp add: event_of_worldline_upd2 snd_worldline_upd2 snd_worldline_upd2')
    have p: "(inv_output ?w)"
      using * unfolding inv_output_def fst_worldline_upd2
      by (auto simp add: snd_worldline_upd2 snd_worldline_upd2')
@@ -4108,8 +4109,8 @@ proof -
      by (auto simp add: event_of_worldline_upd2 snd_worldline_upd2 snd_worldline_upd2')
    then show ?thesis 
      unfolding wp3_fun.simps eval_world_raw2_suc      
-     using a b c d e f g h i l m n o p q r s t u v w x y z 2
-     using \<open>wityping \<Gamma> (snd w)\<close> by presburger
+     using a b c d e f g h i l m n o n2 o2 p q r s t u v w x y z 2
+     using \<open>wityping \<Gamma> (snd w)\<close>  using "*" by presburger
   next
     case 3
     have a: "wityping \<Gamma> (snd w[ ACCUM, 1 :=\<^sub>2 eval_world_raw2 w (Bsig NEXT_ACCUM)])"
@@ -4163,6 +4164,12 @@ proof -
    have o: "(inv_term12 ?w)"
      using * unfolding inv_term12_def fst_worldline_upd2
      by (auto simp add: event_of_worldline_upd2 snd_worldline_upd2 snd_worldline_upd2')
+   have n2: "(inv_nfrac ?w)"
+     using * unfolding inv_nfrac_def fst_worldline_upd2
+     by (auto simp add: snd_worldline_upd2 snd_worldline_upd2')
+   have o2: "(inv_nfrac2 ?w)"
+     using * unfolding inv_nfrac2_def fst_worldline_upd2
+     by (auto simp add: event_of_worldline_upd2 snd_worldline_upd2 snd_worldline_upd2')
    have p: "(inv_output ?w)"
      using * unfolding inv_output_def fst_worldline_upd2
      by (auto simp add: snd_worldline_upd2 snd_worldline_upd2')
@@ -4203,7 +4210,7 @@ proof -
      by (auto simp add: event_of_worldline_upd2 snd_worldline_upd2 snd_worldline_upd2')
   then show ?thesis  
      unfolding wp3_fun.simps eval_world_raw2_suc      
-     using a b c d e f g h i l m n o p q r s t u v w x y z 3
+     using a b c d e f g h i l m n o n2 o2 p q r s t u v w x y z 3
      using \<open>wityping \<Gamma> (snd w)\<close> by presburger
   next
     case 4
@@ -4212,28 +4219,28 @@ proof -
   qed
 qed
 
-lemma inv_all_except_reg_preserved2:
-  "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+lemma inv_all_except_reg_preserved2':
+  "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
             \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)\<rbrace>
-              registers || ((((next_common || squaring) || next_accum || term1) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))
-        \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+              registers || (((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))
+        \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
             \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)\<rbrace>"
   apply (rule  While_Suc')
      apply simp
-    apply (simp add: conc_stmt_wf_def registers_def next_common_def squaring_def next_accum_def term1_def output_def output_ready_def next_outready_reg_def next_state_def next_counter_def ctr_neq_0_def)
+    apply (simp add: conc_stmt_wf_def registers_def next_common_def squaring_def next_accum_def term1_def output_def output_ready_def next_outready_reg_def next_state_def next_counter_def ctr_neq_0_def next_frac_def)
    apply (simp add: conc_wt.intros(2))
-  apply (rule parallel_valid[where R="\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+  apply (rule parallel_valid[where R="\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw)\<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
             \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)"])
-  apply (rule conseq_valid[where Q="\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+  apply (rule conseq_valid[where Q="\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw)\<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
             \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)", rotated])
   apply (rule wp3_conc_is_pre_valid[OF conc_stmt_wf_registers nonneg_delay_conc_registers cwt_reg], simp)
-  using inv_all_imp_wp3_conc_registers apply (simp)
+  using inv_all_imp_wp3_conc_registers' apply (simp)
   apply (rule simulation_semi_complete)
-  apply (rule inv_all_except_reg_preserved)
+  apply (rule inv_all_except_reg_preserved')
        apply simp
-    apply (simp add: conc_stmt_wf_def registers_def next_common_def squaring_def next_accum_def term1_def output_def output_ready_def next_outready_reg_def next_state_def next_counter_def ctr_neq_0_def)
+    apply (simp add: conc_stmt_wf_def circuit_defs)
      apply (simp add: conc_wt.intros(2))
-    apply (simp add: conc_stmt_wf_def registers_def next_common_def squaring_def next_accum_def term1_def output_def output_ready_def next_outready_reg_def next_state_def next_counter_def ctr_neq_0_def)
+    apply (simp add: conc_stmt_wf_def circuit_defs)
    apply simp
   apply (simp add: conc_wt.intros(2))
   done
@@ -4308,6 +4315,23 @@ proof (rule, rule)
     using inv_reg_helper ** ` wityping \<Gamma> (snd w) \<and> inv_reg w \<and> inv_reg2 w` 
     unfolding term1_def
     wp3_conc_single'[OF cwt_t1[unfolded term1_def] nonneg_delay_conc_term1[unfolded term1_def]]
+    wp3_fun.simps by presburger
+qed
+
+lemma inv_reg_comb_preserved_by_next_frac:
+  " \<Gamma> \<turnstile> \<lbrace>\<lambda>tw. inv_reg tw \<and> inv_reg2 tw\<rbrace> next_frac \<lbrace>\<lambda>tw. inv_reg tw \<and> inv_reg2 tw\<rbrace>"
+  apply (rule Conseq'[where Q="\<lambda>tw. inv_reg tw \<and> inv_reg2 tw", rotated])
+    apply (rule wp3_conc_is_pre[OF conc_stmt_wf_next_frac nonneg_delay_conc_next_frac cwt_nf], simp)
+proof (rule, rule)
+  fix w
+  assume " wityping \<Gamma> (snd w) \<and> inv_reg w \<and> inv_reg2 w"
+  have **: "\<And>expr. inv_reg2 (w[NEXT_FRAC, 1 :=\<^sub>2 eval_world_raw2 w expr]) \<longleftrightarrow> inv_reg2 w"
+    unfolding inv_reg2_def fst_worldline_upd2
+    by (auto simp add: event_of_worldline_upd2 snd_worldline_upd2 snd_worldline_upd2')
+  then show "wp3_conc \<Gamma> next_frac (\<lambda>tw. inv_reg tw \<and> inv_reg2 tw) w"
+    using inv_reg_helper ** ` wityping \<Gamma> (snd w) \<and> inv_reg w \<and> inv_reg2 w` 
+    unfolding next_frac_def
+    wp3_conc_single'[OF cwt_nf[unfolded next_frac_def] nonneg_delay_conc_next_frac[unfolded next_frac_def]]
     wp3_fun.simps by presburger
 qed
 
@@ -4417,42 +4441,348 @@ lemmas collection = inv_reg_comb_preserved_by_next_common inv_reg_comb_preserved
 inv_reg_comb_preserved_by_next_accum inv_reg_comb_preserved_by_term1 inv_reg_comb_preserved_by_output
 inv_reg_comb_preserved_by_output_ready inv_reg_comb_preserved_by_next_outready_reg
 inv_reg_comb_preserved_by_next_state inv_reg_comb_preserved_by_next_counter inv_reg_comb_preserved_by_ctr_neq_0
+inv_reg_comb_preserved_by_next_frac
 correctness_registers'
 
 lemma inv_reg_preserved_by_all:
   "\<Gamma> \<turnstile>\<^sub>s \<lbrace>\<lambda>tw. inv_reg tw \<and> inv_reg2 tw\<rbrace> 
-         (((((next_common || squaring) || next_accum || term1) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))) || registers
+         ((((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))) || registers
         \<lbrace>\<lambda>tw. inv_reg tw \<and> inv_reg2 tw\<rbrace>"
   apply (rule While_Suc)
   by (auto intro!: Parallel[where R="\<lambda>tw. inv_reg tw \<and> inv_reg2 tw"] simp add: collection)
      (auto simp add: conc_stmt_wf_def circuit_defs)
 
-theorem
-  "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. ((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+theorem inv_all_preserved_arch:
+  "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. ((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
             \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)) \<and> (inv_reg tw \<and> inv_reg2 tw)\<rbrace>
           architecture
-        \<lbrace>\<lambda>tw. ((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+        \<lbrace>\<lambda>tw. ((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
             \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)) \<and> (inv_reg tw \<and> inv_reg2 tw)\<rbrace>"
 proof -
   have *: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. inv_reg tw \<and> inv_reg2 tw\<rbrace> 
-         (((((next_common || squaring) || next_accum || term1) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))) || registers
+         ((((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))) || registers
         \<lbrace>\<lambda>tw. inv_reg tw \<and> inv_reg2 tw\<rbrace>"
     apply (intro conc_sim_soundness[OF inv_reg_preserved_by_all])
     by (auto intro!: conc_wt.intros)(auto simp add: conc_stmt_wf_def circuit_defs)
-  have **: "conc_stmt_wf ((((((next_common || squaring) || next_accum || term1) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))) || registers)"
+  have **: "conc_stmt_wf (((((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))) || registers)"
     unfolding conc_stmt_wf_def circuit_defs by auto
-  have ***: "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
-            \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)\<rbrace>
-              (((((next_common || squaring) || next_accum || term1) || output) || output_ready)  ||  ((next_outready_reg || next_state) || (next_counter || ctr_neq_0))) || registers
-        \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
-            \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)\<rbrace>"
-    using inv_all_except_reg_preserved2  unfolding sim_hoare_valid_wt_parallel_commute[OF **, symmetric]
+  have ***: " \<Gamma> \<Turnstile>\<^sub>s \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and>
+               (inv_sqr tw \<and> inv_sqr2 tw) \<and>
+               (inv_naccum tw \<and> inv_naccum2 tw) \<and>
+               (inv_term1 tw \<and> inv_term12 tw) \<and>
+               (inv_nfrac tw \<and> inv_nfrac2 tw) \<and>
+               (inv_output tw \<and> inv_output2 tw) \<and> (inv_output_ready tw \<and> inv_output2_ready tw) \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> inv_n0 tw \<and> inv_n02 tw\<rbrace>
+  ((((((next_common || squaring) || next_accum || term1) || next_frac) || output) || output_ready) || (next_outready_reg || local.next_state) || next_counter || ctr_neq_0) || registers
+  \<lbrace>\<lambda>tw. (inv_ncommon tw \<and> inv_ncommon2 tw) \<and>
+        (inv_sqr tw \<and> inv_sqr2 tw) \<and>
+        (inv_naccum tw \<and> inv_naccum2 tw) \<and>
+        (inv_term1 tw \<and> inv_term12 tw) \<and>
+        (inv_nfrac tw \<and> inv_nfrac2 tw) \<and>
+        (inv_output tw \<and> inv_output2 tw) \<and> (inv_output_ready tw \<and> inv_output2_ready tw) \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> inv_n0 tw \<and> inv_n02 tw\<rbrace>"
+    using inv_all_except_reg_preserved2'  unfolding sim_hoare_valid_wt_parallel_commute[OF **, symmetric]
     by auto
   show ?thesis
     using comb_sim_hoare_valid_wt[OF *** *]  unfolding architecture_def by auto
 qed
 
+lemma init_sat_inv_all:
+  "init_sim2_hoare_wt \<Gamma> (\<lambda>tw. fst tw = 0) architecture (\<lambda>tw. ((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+            \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)) \<and> (inv_reg tw \<and> inv_reg2 tw))"
+  sorry
+
+abbreviation "Inv \<equiv> \<lambda>tw. ((inv_ncommon tw \<and> inv_ncommon2 tw) \<and> (inv_sqr tw \<and> inv_sqr2 tw) \<and> (inv_naccum tw \<and> inv_naccum2 tw) \<and> (inv_term1 tw \<and> inv_term12 tw) \<and> (inv_output tw \<and> inv_output2 tw)  \<and> (inv_nfrac tw \<and> inv_nfrac2 tw) \<and> (inv_output_ready tw \<and> inv_output2_ready tw)
+            \<and> (inv_nout tw \<and> inv_nout2 tw) \<and> (inv_nstate tw \<and> inv_nstate2 tw) \<and> (inv_ncounter tw \<and> inv_ncounter2 tw) \<and> (inv_n0 tw \<and> inv_n02 tw)) \<and> (inv_reg tw \<and> inv_reg2 tw)"
+
+abbreviation "Inv_core \<equiv> \<lambda>tw. ((inv_ncommon tw) \<and> (inv_sqr tw) \<and> (inv_naccum tw) \<and> (inv_term1 tw) \<and> (inv_nfrac tw) \<and> (inv_output tw)  \<and> (inv_output_ready tw)
+            \<and> (inv_nout tw) \<and> (inv_nstate tw) \<and> (inv_ncounter tw) \<and> (inv_n0 tw)) \<and> (inv_reg tw)"
+
+(* fun approx_div_fact :: "nat \<Rightarrow> (1, 31) fixed" where
+  "approx_div_fact 0                          = Fixed (approx_one :: (1 + 31) word)   "
+| "approx_div_fact (Suc 0)                    = Fixed (approx_half :: (1 + 31) word)  "
+| "approx_div_fact (Suc (Suc 0))              = Fixed (approx_fourth :: (1 + 31) word)"
+| "approx_div_fact (Suc (Suc (Suc 0)))        = Fixed (approx_sixth :: (1 + 31) word) "
+| "approx_div_fact (Suc (Suc (Suc (Suc 0))))  = Fixed (approx_eighth :: (1 + 31) word)"
+
+fun fixed_of_sval :: "val \<Rightarrow> ('a::len0, 'b::len0) fixed" where
+  "fixed_of_sval (Lv ki bl) = Fixed (of_bl bl :: ('a + 'b) word)"
+
+fun nat_of_val :: "val \<Rightarrow> nat" where
+  "nat_of_val (Lv ki bl) = nat (bl_to_bin bl)"
+
+declare [[coercion nat_of_val]]
+
+fun val_of_fixed :: "('a::len0, 'b::len0) fixed \<Rightarrow> val" where
+  "val_of_fixed fi = Lv Sig (to_bl (word_of_fixed fi))"
+
+abbreviation "last_posedge tw sig \<equiv> (GREATEST k. k < fst tw \<and> is_posedge2 (snd tw) sig k)"
+
+definition inv_math :: "sig assn2" where
+  "inv_math tw =   ((\<exists>n. n < fst tw \<and> is_posedge2 (snd tw) CLK n) \<and> (wline_of tw STATE (fst tw) = V_PROC \<or> wline_of tw STATE (fst tw) = V_POST)  \<longrightarrow> 
+                      fixed_of_sval (wline_of tw ACCUM (fst tw)) = 
+                        (foldr (\<lambda>a b. approx_div_fact a + fixed_of_sval (wline_of tw COMMON (last_posedge tw CLK - 1)) * b) [wline_of tw COUNTER (last_posedge tw CLK - 1) ..< 5]  0))"
+
+definition "Inv' \<equiv> Inv"
+
+lemma type_of_bty_cases:
+  assumes "type_of v = Bty"
+  shows   "v = Bv False \<or> v = Bv True"
+  using assms type_of.elims by force
+
+lemma 
+  "\<Gamma> \<Turnstile> \<lbrace>\<lambda>tw. Inv' tw \<and> inv_math tw\<rbrace> architecture \<lbrace>\<lambda>tw. inv_math (fst tw + 1, snd tw)\<rbrace>"
+  unfolding conc_hoare_valid_wt_def
+proof (rule, rule, rule)
+  fix tw tw'
+  assume "wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')"
+  moreover have "\<Gamma> \<Turnstile> \<lbrace>Inv'\<rbrace> architecture \<lbrace>\<lambda>tw. Inv' (fst tw + 1, snd tw)\<rbrace>" 
+    using simulation_semi_complete[OF inv_all_preserved_arch nonneg_delay_conc_architecture conc_stmt_wf_arch cwt_arch]
+    unfolding Inv'_def by blast
+  ultimately have "Inv' (fst tw' + 1, snd tw')" 
+    unfolding conc_hoare_valid_wt_def by metis
+  have "0 < fst tw"
+    using \<open>wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')\<close> 
+    unfolding Inv'_def inv_reg_alt_def by auto
+
+  have "world_conc_exec_alt tw architecture tw'"
+    using \<open>wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')\<close> 
+    world_conc_exec_imp_world_conc_exec_alt[OF _ conc_stmt_wf_arch nonneg_delay_conc_architecture]
+    by auto
+  hence "wityping \<Gamma> (snd tw')"
+    using \<open>wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')\<close> world_conc_exec_preserves_wityping 
+    cwt_arch by blast
+  hence "\<And>k. type_of (wline_of tw' RST k) = Bty"
+    unfolding wityping_def wtyping_def comp_def using cosine_locale_axioms unfolding cosine_locale_def
+    by auto
+  hence "\<And>k. (wline_of tw' RST k = Bv False) \<or> (wline_of tw' RST k = Bv True)"
+    using type_of_bty_cases by blast
+              
+  have "inv_nstate (fst tw' + 1, snd tw')" and "inv_reg (fst tw' + 1, snd tw')"
+    using \<open>Inv' (fst tw' + 1, snd tw')\<close> unfolding Inv'_def by auto
+  have "inv_math (fst tw' + 1, snd tw')"
+    unfolding inv_math_def snd_conv fst_conv comp_def
+  proof (rule)
+    assume "(\<exists>n<fst tw' + 1. snd (snd tw') CLK (n - 1) = Bv False \<and> snd (snd tw') CLK n = Bv True) 
+           \<and> (snd (snd tw') STATE (get_time tw' + 1) = V_PROC \<or> snd (snd tw') STATE (get_time tw' + 1) = V_POST)"
+    hence  "wline_of tw' STATE (fst tw' + 1) = V_PROC \<or> wline_of tw' STATE (fst tw' + 1) = V_POST" and 
+      exist: "(\<exists>n<fst tw' + 1. is_posedge2 (snd tw') CLK n)"
+      unfolding comp_def by auto
+    have "is_posedge2 (snd tw') CLK (last_posedge (fst tw' + 1, snd tw') CLK)" and "last_posedge (fst tw' + 1, snd tw') CLK < get_time tw' + 1"
+      using GreatestI_ex_nat[OF exist, where b="fst tw' + 1"] unfolding fst_conv snd_conv by auto
+
+    \<comment> \<open>Showing that there is no reset previously\<close>
+    have "wline_of tw' RST (last_posedge (fst tw' + 1, snd tw') CLK) = Bv False"
+    proof (rule ccontr)
+      assume "wline_of tw' RST (last_posedge (fst tw' + 1, snd tw') CLK) \<noteq> Bv False"
+      hence "wline_of tw' RST (last_posedge (fst tw' + 1, snd tw') CLK) = Bv True"
+        using \<open>\<And>k. (wline_of tw' RST k = Bv False) \<or> (wline_of tw' RST k = Bv True)\<close> by blast
+      hence "wline_of tw' STATE (last_posedge (fst tw' + 1, snd tw') CLK + 1) = V_INIT"
+        using \<open>inv_reg (fst tw' + 1, snd tw')\<close>  \<open>is_posedge2 (snd tw') CLK (last_posedge (fst tw' + 1, snd tw') CLK)\<close>
+        unfolding inv_reg_alt_def fst_conv comp_def snd_conv 
+
+
+
+      with \<open>wline_of tw' STATE (fst tw' + 1) = V_PROC \<or> wline_of tw' STATE (fst tw' + 1) = V_POST\<close>
+      show False by auto
+    qed
+
+
+    have "wline_of tw' RST (fst tw') = Bv False"
+    proof (rule ccontr)
+      assume "wline_of tw' RST (fst tw') \<noteq> Bv False"
+      hence "wline_of tw' RST (fst tw') = Bv True"
+        using \<open>\<And>k. (wline_of tw' RST k = Bv False) \<or> (wline_of tw' RST k = Bv True)\<close> by blast
+      hence "wline_of tw' STATE (fst tw' + 1) = V_INIT"
+        using \<open>inv_reg (fst tw' + 1, snd tw')\<close>  \<open>wline_of tw' CLK (fst tw' - 1) = Bv False\<close>
+          \<open>wline_of tw' CLK (fst tw') = Bv True\<close>
+        unfolding inv_reg_alt_def fst_conv comp_def snd_conv by auto
+      with \<open>wline_of tw' STATE (fst tw' + 1) = V_PROC \<or> wline_of tw' STATE (fst tw' + 1) = V_POST\<close>
+      show False by auto
+    qed
+
+    \<comment> \<open>Obtaining previous state\<close>
+    { assume "wline_of tw' STATE (fst tw' + 1) = V_POST"
+      hence "wline_of tw' NEXT_STATE (fst tw') = V_POST"
+        using \<open>inv_reg (fst tw' + 1, snd tw')\<close> \<open>0 < fst tw' + 1\<close> \<open>wline_of tw' CLK (fst tw' - 1) = Bv False\<close>
+          \<open>wline_of tw' CLK (fst tw') = Bv True\<close> \<open>wline_of tw' RST (fst tw') = Bv False\<close>
+        unfolding inv_reg_alt_def fst_conv comp_def snd_conv by auto
+      moreover have "fst tw = fst tw'"
+        using \<open>world_conc_exec_alt tw architecture tw'\<close> fst_world_conc_exec_alt by blast
+      ultimately have "wline_of tw NEXT_STATE (fst tw) = V_POST"
+        using world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture]
+        by auto
+      hence  "wline_of tw STATE (fst tw - 1) = V_PROC" and " \<not> bval_of (wline_of tw CTR_NEQ_0 (get_time tw - 1))"
+        using `wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')` 
+        unfolding Inv'_def inv_nstate_alt_def  by (smt list.inject val.inject(2))+
+      have "wline_of tw CLK (fst tw - 1) = Bv False"
+        using \<open>fst tw = fst tw'\<close> world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture]
+        `wline_of tw' CLK (fst tw' - 1) = Bv False` by fastforce
+      hence "\<not> is_posedge2 (snd tw) CLK (fst tw - 1)" by auto
+      hence "wline_of tw STATE (fst tw) = V_PROC"
+        using `wline_of tw STATE (fst tw - 1) = V_PROC` `0 < fst tw`
+        using `wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')` 
+        unfolding Inv'_def inv_reg_alt_def by auto }
+    moreover
+    { assume "wline_of tw' STATE (fst tw' + 1) = V_PROC"
+      hence "wline_of tw' NEXT_STATE (fst tw') = V_PROC"
+        using \<open>inv_reg (fst tw' + 1, snd tw')\<close> \<open>0 < fst tw' + 1\<close> \<open>wline_of tw' CLK (fst tw' - 1) = Bv False\<close>
+          \<open>wline_of tw' CLK (fst tw') = Bv True\<close> \<open>wline_of tw' RST (fst tw') = Bv False\<close>
+        unfolding inv_reg_alt_def fst_conv comp_def snd_conv by auto
+      moreover have "fst tw = fst tw'"
+        using \<open>world_conc_exec_alt tw architecture tw'\<close> fst_world_conc_exec_alt by blast
+      ultimately have "wline_of tw NEXT_STATE (fst tw) = V_PROC"
+        using world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture]
+        by auto    
+      hence "wline_of tw STATE (fst tw - 1) = V_PROC \<or> wline_of tw STATE (fst tw - 1) = V_PRE"      
+        using `wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')` 
+        unfolding Inv'_def inv_nstate_alt_def  by (smt list.inject val.inject(2))+
+      have "wline_of tw CLK (fst tw - 1) = Bv False"
+        using \<open>fst tw = fst tw'\<close> world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture]
+        `wline_of tw' CLK (fst tw' - 1) = Bv False` by fastforce
+      hence "\<not> is_posedge2 (snd tw) CLK (fst tw - 1)" by auto
+      hence "wline_of tw STATE (fst tw) = V_PROC \<or> wline_of tw STATE (fst tw) = V_PRE"
+        using `wline_of tw STATE (fst tw - 1) = V_PROC \<or> wline_of tw STATE (fst tw - 1) = V_PRE` `0 < fst tw`
+        using `wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')` 
+        unfolding Inv'_def inv_reg_alt_def by auto }
+    ultimately have "wline_of tw STATE (fst tw) = V_PROC \<or> wline_of tw STATE (fst tw) = V_PRE"
+      using \<open>wline_of tw' STATE (fst tw' + 1) = V_PROC \<or> wline_of tw' STATE (fst tw' + 1) = V_POST\<close>
+      by blast
+    moreover
+    { assume "wline_of tw STATE (fst tw) = V_PRE"
+      have "  inv_ncounter tw"
+        using \<open>wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')\<close> 
+        unfolding Inv'_def by auto
+      have "wline_of tw' COUNTER (fst tw') = wline_of tw COUNTER (fst tw)"
+        using world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture] fst_world_conc_exec_alt 
+        by (metis (no_types, hide_lams) \<open>world_conc_exec_alt tw architecture tw'\<close> order_refl)
+      also have "... = wline_of tw COUNTER (fst tw - 1)"
+
+    
+    }
+
+
+
+
+
+
+    have "(inv_naccum (fst tw' + 1, snd tw') \<and> inv_naccum2 (fst tw' + 1, snd tw'))"
+      using \<open>Inv' (fst tw' + 1, snd tw')\<close> unfolding Inv'_def by auto
+    hence "bin_of NEXT_ACCUM at_time fst tw' + 1 on (fst tw' + 1, snd tw') = undefined"
+      unfolding inv_naccum_alt_def
+
+
+
+
+
+
+
+
 end
+ *)
+
+definition "Inv' \<equiv> Inv"
+
+lemma type_of_bty_cases:
+  assumes "type_of v = Bty"
+  shows   "v = Bv False \<or> v = Bv True"
+  using assms type_of.elims by force
+
+lemma my_nat_induct:
+  fixes n :: nat
+  assumes "0 < period"
+  assumes "\<And>k. k \<in> {0..< period} \<Longrightarrow> P k"
+  assumes "\<And>k. P k \<Longrightarrow> P (k + period)"
+  shows "P n"
+  using assms
+proof (induction n)
+  case 0
+  then show ?case by auto
+next
+  case (Suc n)
+  have "Suc n mod period < period"
+    using pos_mod_bound assms(1) by blast
+  hence "P (Suc n mod period)"
+    using Suc(3) by auto
+  have "\<And>k m. P k \<Longrightarrow> P (k + m * period)"
+  proof -
+    fix k m
+    assume "P k"
+    show "P (k + m * period)"
+    proof (induction m)
+      case 0
+      then show ?case using `P k` by auto
+    next
+      case (Suc m)
+      then show ?case 
+        using \<open>\<And>k. P k \<Longrightarrow> P (k + period)\<close> 
+        by (metis (full_types) add.commute add.left_commute mult.commute mult_Suc_right)
+    qed
+  qed
+  have "Suc n = Suc n mod period + (Suc n div period) * period"
+    by auto
+  then show ?case 
+    by (metis \<open>P (Suc n mod period)\<close> \<open>\<And>m k. P k \<Longrightarrow> P (k + m * period)\<close>)
+qed
+
+lemma wline_of_mod:
+  assumes "\<forall>k \<ge> clk_period. wline_of tw sig k = wline_of tw sig (k - clk_period)"
+  assumes "0 < clk_period"
+  shows   "wline_of tw sig k = wline_of tw sig (k mod clk_period)"
+  using assms by  (induction k rule: my_nat_induct[OF assms(2)]) auto
+
+lemma wline_of_mod2:
+  assumes "\<forall>k \<ge> clk_period. wline_of tw sig k = wline_of tw sig (k - clk_period)"
+  assumes "0 < clk_period"
+  shows   "wline_of tw sig k = wline_of tw sig (k + m * clk_period)"
+  using wline_of_mod[OF assms]  by (metis mod_mult_self2 mult.commute)
+
+lemma world_sim_fin2_no_posedge_in_betw:
+  assumes "world_sim_fin2_alt tw T cs tw'"
+  assumes "\<And>n. fst tw \<le> n \<Longrightarrow> n < T \<Longrightarrow> \<not> is_posedge2 (snd tw) CLK n"
+  assumes "cs = architecture"
+  assumes "Inv tw"
+  assumes "wityping \<Gamma> (snd tw)"
+  assumes "sig \<in> {STATE, COUNTER}"
+  shows   "wline_of tw' sig T = wline_of tw sig (fst tw)"
+  using assms
+proof (induction rule:world_sim_fin2_alt.inducts)
+  case (1 tw T cs tw2 tw3)
+  hence "fst tw2 = fst tw"
+    by (metis fst_world_conc_exec_alt)
+  have "CLK \<notin> set (signals_from architecture)"
+    unfolding architecture_def circuit_defs by auto
+  hence "\<And>n. wline_of tw CLK n = wline_of tw2 CLK n"
+    using world_conc_exec_alt_unaffected[OF 1(2)] 1(6) by blast
+  hence *: "\<And>n. get_time (get_time tw2 + 1, snd tw2) \<le> n \<Longrightarrow>
+          n < T \<Longrightarrow> \<not> (snd (snd (get_time tw2 + 1, snd tw2)) CLK (n - 1) = Bv False \<and> snd (snd (get_time tw2 + 1, snd tw2)) CLK n = Bv True)"
+    unfolding fst_conv snd_conv `fst tw2 = fst tw` using 1(5)  by simp
+  have "tw, cs \<Rightarrow>\<^sub>c tw2"
+    using 1(2) "1.prems"(2) cosine_locale.conc_stmt_wf_arch
+    cosine_locale.nonneg_delay_conc_architecture cosine_locale_axioms
+    world_conc_exec_alt_imp_world_conc_exec by blast
+  have "Inv (fst tw2 + 1, snd tw2)"
+    using simulation_semi_complete[OF inv_all_preserved_arch nonneg_delay_conc_architecture conc_stmt_wf_arch cwt_arch]
+    \<open>Inv tw\<close> \<open>wityping \<Gamma> (snd tw)\<close> `tw, cs \<Rightarrow>\<^sub>c tw2` unfolding conc_hoare_valid_wt_def 
+    by (metis "1.prems"(2))
+  hence "wline_of tw3 sig T = wline_of (get_time tw2 + 1, snd tw2) sig (get_time (get_time tw2 + 1, snd tw2))"
+    using * 1(4) 1(6) `tw, cs \<Rightarrow>\<^sub>c tw2` `sig \<in> {STATE, COUNTER}`unfolding snd_conv 
+    by (metis (no_types, lifting) "1.prems"(4) cosine_locale.conc_stmt_wf_arch
+    cosine_locale.cwt_arch cosine_locale.nonneg_delay_conc_architecture cosine_locale_axioms
+    world_conc_exec_imp_world_conc_exec_alt world_conc_exec_preserves_wityping)
+  also have "... = wline_of tw2 sig (fst tw2 + 1)"
+    unfolding comp_def fst_conv snd_conv by auto
+  also have "... = wline_of tw2 sig (fst tw2)"
+    using `sig \<in> {STATE, COUNTER}`unfolding inv_reg_alt_def
+    by (smt "1.hyps"(1) "1.prems"(1) \<open>Inv (fst tw2 + 1, snd tw2)\<close> \<open>\<And>n. wline_of tw CLK n = wline_of tw2 CLK n\<close> \<open>get_time tw2 = get_time tw\<close>
+    diff_add_inverse2 fst_conv insert_iff inv_reg_def le_refl o_def snd_conv)
+  also have "... = wline_of tw2 sig (fst tw)"
+    using fst_world_conc_exec[OF `tw, cs\<Rightarrow>\<^sub>c tw2`] by auto
+  finally show ?case 
+    using world_conc_exec_alt_unaffected_before_curr[OF 1(2)] 
+    by (simp add: "1.prems"(2) nonneg_delay_conc_architecture)
+qed (auto)
+
+end
+
 
 end
  

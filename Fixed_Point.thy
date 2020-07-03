@@ -57,6 +57,15 @@ instance ..
 
 end
 
+lemma fixed_mult_zero:
+  "(x :: ('a ::len,'b :: len) fixed) * 0 = 0"
+  by transfer' auto
+
+lemma fixed_add_zero:
+  "(x :: ('a ::len,'b :: len) fixed) + 0 = x"
+  by transfer' auto
+
+
 abbreviation "uint_of_fixed \<equiv> uint o word_of_fixed" 
 abbreviation "sint_of_fixed \<equiv> sint o word_of_fixed"
 

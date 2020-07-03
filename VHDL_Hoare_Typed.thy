@@ -2464,6 +2464,94 @@ next
     using `tw' = (fst tw2 + 1 , snd tw2)` by auto
 qed
 
+lemma world_seq_exec_preserves_wityping:
+  assumes "world_seq_exec_alt tw seq tw2" and "seq_wt \<Gamma> seq"
+  assumes "wityping \<Gamma> (snd tw)"
+  shows   "wityping \<Gamma> (snd tw2)"
+  using assms
+proof (induction rule:world_seq_exec_alt.inducts)
+  case (7 tw exp x exp' ss tw' choices)
+  then show ?case 
+    using seq_wt_cases_bcase by auto
+next
+  case (8 tw exp x exp' x' choices tw' ss)
+  then show ?case 
+    using seq_wt_cases_bcase by fastforce
+next
+  case (9 tw ss tw' exp choices)
+  then show ?case 
+    using seq_wt_cases_bcase by auto
+next
+  case (5 tw exp x tw' sig dly)
+  hence "bexp_wt \<Gamma> exp (\<Gamma> sig)"
+    by blast
+  hence "type_of x = \<Gamma> sig"
+    by (metis "5.hyps"(1) "5.prems"(2) beval_world_raw2_def eval_world_raw_correctness_only_if type_of_eval_world_raw2)
+  then show ?case 
+    using worldline_upd_eval_world_raw_preserve_wityping2 
+    by (simp add: worldline_upd_eval_world_raw_preserve_wityping2 "5.hyps"(2) "5.prems"(2))
+next
+  case (6 tw exp x tw' sig dly)
+  then show ?case 
+   by (smt beval_world_raw2_def eval_world_raw_correctness_only_if seq_wt_cases(5) sndI type_of_eval_world_raw2 worldline_inert_upd2_def worldline_inert_upd_preserve_wityping)
+qed auto
+
+
+lemma world_conc_exec_preserves_wityping:
+  assumes "world_conc_exec_alt tw cs tw2" and "conc_wt \<Gamma> cs"
+  assumes "wityping \<Gamma> (snd tw)"
+  shows   "wityping \<Gamma> (snd tw2)"
+  using assms
+proof (induction rule:world_conc_exec_alt.inducts)
+  case (2 tw ss tw' sl)
+  then show ?case 
+    using world_seq_exec_preserves_wityping by blast
+qed auto
+
+lemma world_sim_fin_preserves_wityping:
+  assumes "tw, x, cs \<Rightarrow>\<^sub>S tw'" and "conc_wt \<Gamma> cs" and "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  assumes "wityping \<Gamma> (snd tw)"
+  shows   "wityping \<Gamma> (snd tw')"
+proof -
+  have "world_sim_fin2_alt tw x cs tw'"
+    using assms only_context_matters_for_sim_fin2 world_sim_fin2_imp_world_sim_fin2_alt
+    world_sim_fin_semi_equivalent by blast
+  thus ?thesis
+    using assms(2-5)
+  proof (induction rule:world_sim_fin2_alt.induct)
+    case (1 tw T cs tw2 tw3)
+    hence "wityping \<Gamma> (snd tw2)"
+      using world_conc_exec_preserves_wityping by blast
+    then show ?case 
+      using 1 by auto
+  next
+    case (2 tw T cs)
+    then show ?case by auto
+  qed
+qed
+
+lemma world_sim_fin2_alt_preserves_wityping:
+  assumes "world_sim_fin2_alt tw x cs tw'" and "conc_wt \<Gamma> cs" and "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  assumes "wityping \<Gamma> (snd tw)"
+  shows   "wityping \<Gamma> (snd tw')"  
+  using world_sim_fin_preserves_wityping[OF _ assms(2-)] world_sim_fin_eq_world_sim_fin2_alt[OF assms(3-4)]
+  assms(1) by auto
+
+lemma sim_fin2_preserves_wityping:
+  assumes "sim_fin2 w x cs tw'" and "conc_wt \<Gamma> cs" and "conc_stmt_wf cs" and "nonneg_delay_conc cs"
+  assumes "wityping \<Gamma> w"
+  shows   "wityping \<Gamma> (snd tw')"
+proof (rule sim_fin2_ic[OF assms(1)])
+  fix tw
+  assume "init_sim2 (0, w) cs tw"
+  hence "wityping \<Gamma> (snd tw)"
+    using init_sim2_preserves_wityping 
+    by (metis assms(2) assms(3) assms(4) assms(5) snd_conv)  
+  assume "tw, x, cs \<Rightarrow>\<^sub>S tw'"
+  thus "wityping \<Gamma> (snd tw')"
+    using world_sim_fin_preserves_wityping \<open>wityping \<Gamma> (snd tw)\<close> assms(2) assms(3) assms(4) by blast  
+qed
+
 lemma grand_correctness:
   assumes "sim_fin2 w (i + 1) cs tw'" and "wityping \<Gamma> w"
   assumes "conc_stmt_wf cs" and "conc_wt \<Gamma> cs" and "nonneg_delay_conc cs"
@@ -2517,6 +2605,33 @@ proof -
   ultimately have "Inv tw'"
     using \<open>tw, endtime, cs \<Rightarrow>\<^sub>S tw'\<close> `wityping \<Gamma> (snd tw)` unfolding sim_hoare_valid_wt_def 
     by blast
+  thus ?thesis
+    by auto
+qed
+
+lemma grand_correctness2_sem:
+  assumes "sim_fin2 w endtime cs tw'" and "wityping \<Gamma> w"
+  assumes "conc_stmt_wf cs" and "conc_wt \<Gamma> cs" and "nonneg_delay_conc cs"
+  assumes "\<Gamma> \<Turnstile>\<^sub>s \<lbrace>Inv\<rbrace> cs \<lbrace>Inv\<rbrace>"
+  assumes "Q (0, w)"
+  assumes "init_sim2_hoare_wt \<Gamma> (\<lambda>tw. fst tw = 0 \<and> Q tw) cs Inv"
+  shows   "Inv tw'"
+proof -
+  obtain tw where "init_sim2 (0, w) cs tw" and  "tw, endtime, cs \<Rightarrow>\<^sub>S tw'"
+    using sim_fin2.cases[OF `sim_fin2 w endtime cs tw'`]  by metis
+  hence "endtime = fst tw'"
+    using world_maxtime_lt_fst_tres  by blast  
+  have "wityping \<Gamma> (snd tw)"
+    using init_sim2_preserves_wityping 
+    by (metis \<open>init_sim2 (0, w) cs tw\<close> assms(2-5) snd_conv)  
+  have "init_sim2_valid_wt \<Gamma> (\<lambda>tw. fst tw = 0 \<and> Q tw) cs Inv"
+    using init_sim2_hoare_wt_soundness[OF assms(8)] assms(2-5)  by auto
+  hence "Inv tw"
+    using \<open>init_sim2 (0, w) cs tw\<close> fst_conv assms(2) unfolding init_sim2_valid_wt_def
+    by (metis assms(7) snd_conv)
+  hence "Inv tw'"
+    using \<open>tw, endtime, cs \<Rightarrow>\<^sub>S tw'\<close> `wityping \<Gamma> (snd tw)` unfolding sim_hoare_valid_wt_def 
+    using assms sim_hoare_valid_wt_def by fast
   thus ?thesis
     by auto
 qed
