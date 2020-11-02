@@ -1,12 +1,12 @@
 # vhdl-semantics
 
-How can we be sure that our hardware blocks designed in VHDL are mathematically correct? Even if we prove it mathematically on paper, how can we be sure that the proofs are indeed correct? The answer to these two questions is by using a theorem prover. 
+How can we be sure that our hardware blocks designed in VHDL are mathematically correct? Even if we prove them mathematically on paper, how can we be sure that their proofs are indeed correct? The answer to these two questions is by using a theorem prover. 
 
-This project chooses the [Isabelle][isabelle-link] theorem prover --- one of the most powerful theorem provers in the world. If you want to prove that a program is correct mathematically, you need to know the *semantics* of that language in which the program is written. A large part of this project consists of the formalisation of the language VHDL in the Isabelle theorem prover.
+This project  opts for the theorem prover [Isabelle][isabelle-link] --- one of the most powerful theorem provers in the world. If you want to prove programs are correct mathematically, you need to know the *semantics* of that language in which the programs are written. A large part of this project consists of the formalisation of the language VHDL in Isabelle.
 
 ### Why use a theorem prover? 
 
-Formal verification of hardware is definitely not a new thing. Model checking and other automated theorem proving techniques have been very powerful for formally verifying hardware designs. But we think that there is a semantic gap between how our designs look concretely (VHDL, Verilog, SystemVerilog, Cλash, Lava, Bluespec, Chisel, etc.) and how they are represented mathematically in model checkers (Transition Systems) --- let alone the state space explosion problem. 
+Formal verification of hardware is definitely not a new thing. Model checking and other automated theorem proving techniques have been very successful. But we think that there is a semantic gap between how our designs look concretely (VHDL, Verilog, SystemVerilog, Cλash, Lava, Bluespec, Chisel, etc.) and how they are represented mathematically in model checkers (Transition Systems) --- let alone the state space explosion problem. 
 
 Another reason for using a theorem prover such as Isabelle is the ability to access the vast library of formalised mathematics. Cryptographic primitives implemented in hardware such as encryption, decryption and hash function could access libraries such as _probability theory_ or _number theory_ in Isabelle. A digital  controller designed in VHDL could make use real analysis theories such as _limits_, _differentials_, and _integrals_ in Isabelle. This means that we can prove **strong properties** about our hardware designs.
 
@@ -23,9 +23,9 @@ This project supports the following flavours of semantics:
 
 Because we want to have a semantics with which is _easy to reason_ and _executable_. The operational semantics is geared towards executability while the axiomatic  semantics makes the reasoning easier. 
 
-In the early phase of our design, we probably are not sure that our design behaves as we expect and in this situation the operational semantics comes handy. Because the operational semantics is executable, we can simulate the design **within** the Isabelle theorem prover. This is possible because we can execute ML program  **inside** the Isabelle theorem prover. After we are satisfied with the behaviour, we can then start to think of the proof that it is correct. 
+During the early phases of our design, we probably are not sure that they behave as we expect and the operational semantics comes handy in this situation. Because it is executable, we can simulate the design **within** the Isabelle theorem prover. This is possible because we can execute ML program  **inside** the Isabelle theorem prover. After we are satisfied with their behaviour, we can then start to think of the proofs that they are correct. 
 
-Proving the correctness of a hardware design with operational semantics is painful and awkward as shown in the theory `NAND_Femto.thy`; here is where axiomatic semantics comes in handy. This semantics is heavily based on the famous Floyd--Hoare Logic for formally verifying imperative programs. Another _raison d'etre_ for axiomatic semantic is to make those who are familiar with Hoare logic comfortable proving the correctness of a VHDL program.
+Proving the correctness of a hardware design with operational semantics is painful and awkward as shown in the theory `NAND_Femto.thy`; here is where axiomatic semantics proves to be useful. This semantics is heavily based on the famous Floyd--Hoare Logic for formally verifying imperative programs. Another _raison d'etre_ for axiomatic semantic is to make those who are familiar with Hoare logic comfortable proving the correctness of VHDL programs.
 
 ### Any example I can browse on? 
 
@@ -54,7 +54,7 @@ The formalisation is still ongoing and currently we do not have proofs of strong
 
 ### Installation
 
-You only need to install the latest version of Isabelle theorem prover, i.e. [Isabelle2019][isabelle-link] and open these theories in the theorem prover. 
+You only need to install the latest version of Isabelle theorem prover, i.e. [Isabelle2020][isabelle-link] and open these theories in the theorem prover. Make sure also that you have the latest version of Archived of Formal Proofs (AFP) linked with your Isabelle installation.
 
 ### Authors 
 
