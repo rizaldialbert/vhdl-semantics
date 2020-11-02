@@ -43,7 +43,7 @@ proof (rule seq_wt_cases_bcase[OF assms, rotated 2])
   have "ty = Lty Neu 2"
     by (rule bexp_wt_cases_lit[OF 0]) auto
   with \<open>bexp_wt \<Gamma> (Bsig IN) ty\<close> have "\<Gamma> IN = Lty Neu 2"
-    by (metis bexp_wt_cases(9))
+    by (metis bexp_wt_cases_slice(2))
   hence 1: "seq_wt \<Gamma> (Bassign_trans OUT (Bliteral Neu (to_bl (0x1 :: 4 word))) 1)"
     using \<open>seq_wt \<Gamma> ss\<close> unfolding ss_def by auto
   have "\<Gamma> OUT = Lty Neu 4"

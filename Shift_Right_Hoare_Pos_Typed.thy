@@ -20,8 +20,8 @@ definition shiftr :: "nat \<Rightarrow> sig conc_stmt" where
 lemma potential_tyenv:
   assumes "seq_wt \<Gamma> (Bassign_trans OUT (Bshiftr (Bsig IN) n) 1)"
   shows "\<exists>len>0. \<Gamma> IN = Lty Uns len \<and> \<Gamma> OUT = Lty Uns len \<or> \<Gamma> IN = Lty Sig len \<and> \<Gamma> OUT = Lty Sig len"
-  by (rule seq_wt_cases(4)[OF assms])
-     (metis bexp_wt_cases(15) bexp_wt_cases(9))
+  apply (rule seq_wt_cases(4)[OF assms])
+  by (metis bexp_wt_cases_shiftr bexp_wt_cases_slice(2))
 
 locale unsigned_shift_right =
   fixes \<Gamma> :: "sig tyenv"

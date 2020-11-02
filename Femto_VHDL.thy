@@ -37,6 +37,48 @@ lift_definition to_transaction_sig :: "'signal transaction \<Rightarrow> 'signal
   by (metis (mono_tags, lifting) finite_subset mem_Collect_eq subsetI to_trans_raw_sig_def
   zero_fun_def)
 
+lift_definition to_transaction_sig_bit :: "val \<Rightarrow> 'signal transaction \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> 'signal transaction"
+  is to_trans_raw_bit
+  unfolding to_trans_raw_bit_def sym[OF eventually_cofinite] zero_fun_def zero_option_def 
+  using zero_map
+proof -
+  fix val
+  fix "fun" :: "nat \<Rightarrow> 'signal \<Rightarrow> val option" and nat :: nat and signal :: 'signal
+  assume a1: "\<forall>\<^sub>\<infinity>x. fun x = Map.empty"
+  obtain nn :: "(nat \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> bool) \<Rightarrow> nat" where
+    f2: "\<And>p f pa fa. (\<not> eventually p f \<or> eventually pa f \<or> p (nn p pa)) \<and> (\<not> eventually p fa \<or> \<not> pa (nn p pa) \<or> eventually pa fa)"
+    by (metis (no_types) eventually_mono)
+  then have f3: "\<And>p. Alm_all p \<or> (\<forall>s. fun (nn (\<lambda>n. \<forall>s. fun n s = None) p) s = None)"
+    using a1  by (metis (mono_tags, lifting))
+  have f4: "\<And>n. (\<exists>s. fun n s \<noteq> None) \<or> (\<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some (Bv xa) \<Rightarrow> Map.empty xa | Some (Lv s bs) \<Rightarrow> (Some \<circ> Bv) (bs ! nat)) = None))"
+    by force
+  { assume "(\<forall>\<^sub>\<infinity>n. \<forall>s. fun n s = None) \<and> \<not> (\<forall>\<^sub>\<infinity>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some (Bv xa) \<Rightarrow> Map.empty xa | Some (Lv s bs) \<Rightarrow> (Some \<circ> Bv) (bs ! nat)) = None))"
+    then have "\<exists>p. (\<forall>s. (s = signal \<or> fun (nn p (\<lambda>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some (Bv xa) \<Rightarrow> Map.empty xa | Some (Lv s bs) \<Rightarrow> (Some \<circ> Bv) (bs ! nat)) = None))) s = None) \<and> (s \<noteq> signal \<or> (case fun (nn p (\<lambda>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some (Bv xa) \<Rightarrow> Map.empty xa | Some (Lv s bs) \<Rightarrow> (Some \<circ> Bv) (bs ! nat)) = None))) s of None \<Rightarrow> None | Some (Bv xa) \<Rightarrow> Map.empty xa | Some (Lv s bs) \<Rightarrow> (Some \<circ> Bv) (bs ! nat)) = None)) \<and> Alm_all p"
+      using f4 f3 by meson
+    then have "\<forall>\<^sub>\<infinity>n. (\<lambda>s. if s \<noteq> signal then fun n s else case fun n s of None \<Rightarrow> None | Some (Bv xa) \<Rightarrow> Map.empty xa | Some (Lv s bs) \<Rightarrow> (Some \<circ> Bv) (bs ! nat)) = Map.empty"
+      using f2
+      by (smt \<open>(\<forall>\<^sub>\<infinity>n. \<forall>s. fun n s = None) \<and> \<not> (\<forall>\<^sub>\<infinity>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some (Bv x) \<Rightarrow> Map.empty x | Some (Lv s bs) \<Rightarrow> (Some \<circ> Bv) (bs ! nat)) = None))\<close>) }
+  then show "\<forall>\<^sub>\<infinity>x. (\<lambda>sig. if sig \<noteq> signal then fun x sig
+                     else case fun x sig of None \<Rightarrow> None
+                          | Some v \<Rightarrow>
+                              if 0 < x \<and> to_bit nat (signal_of val fun sig (x - 1)) = to_bit nat v then None
+                              else if x = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) =
+              Map.empty"
+  proof -
+    have f1: "\<And>p. Alm_all p \<or> (\<forall>s. fun (nn (\<lambda>n. \<forall>s. fun n s = None) p) s = None)"
+      by (simp add: f3)
+    { assume "\<not> (\<forall>\<^sub>\<infinity>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit nat (signal_of val fun s (n - 1)) = to_bit nat v then None else if n = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) = None))"
+      then have "(\<forall>\<^sub>\<infinity>n. \<forall>s. fun n s = None) \<and> \<not> (\<forall>\<^sub>\<infinity>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit nat (signal_of val fun s (n - 1)) = to_bit nat v then None else if n = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) = None))"
+        by (metis a1)
+      then have "\<exists>p. Alm_all p \<and> (\<forall>s. (s = signal \<or> fun (nn p (\<lambda>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit nat (signal_of val fun s (n - 1)) = to_bit nat v then None else if n = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) = None))) s = None) \<and> (s \<noteq> signal \<or> (case fun (nn p (\<lambda>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit nat (signal_of val fun s (n - 1)) = to_bit nat v then None else if n = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) = None))) s of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < nn p (\<lambda>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit nat (signal_of val fun s (n - 1)) = to_bit nat v then None else if n = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) = None)) \<and> to_bit nat (signal_of val fun s (nn p (\<lambda>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit nat (signal_of val fun s (n - 1)) = to_bit nat v then None else if n = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) = None)) - 1)) = to_bit nat v then None else if nn p (\<lambda>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit nat (signal_of val fun s (n - 1)) = to_bit nat v then None else if n = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) = None)) = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) = None))"
+        using f1 by fastforce
+      then have ?thesis
+        by (smt MOST_mono \<open>(\<forall>\<^sub>\<infinity>n. \<forall>s. fun n s = None) \<and> \<not> (\<forall>\<^sub>\<infinity>n. \<forall>s. (s \<noteq> signal \<longrightarrow> fun n s = None) \<and> (s = signal \<longrightarrow> (case fun n s of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit nat (signal_of val fun s (n - 1)) = to_bit nat v then None else if n = 0 \<and> to_bit nat val = to_bit nat v then None else Some (to_bit nat v)) = None))\<close> option.simps(4)) }
+    then show ?thesis
+      by meson
+  qed
+qed
+
 lemma finite_keys_to_transaction_sig:
   "finite (Poly_Mapping.keys (to_transaction_sig \<tau> s))"
   by auto
@@ -449,18 +491,81 @@ lift_definition purge :: "'signal transaction \<Rightarrow> nat \<Rightarrow> na
   purge_raw unfolding purge_raw_def sym[OF eventually_cofinite]
   by (metis purge_raw_almost_all_zero purge_raw_def)
 
-(* TODO move the code equation for purge here *)
+lift_definition purge' :: "'signal transaction \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow> 'signal transaction" is
+  purge_raw' unfolding purge_raw'_def sym[OF eventually_cofinite]
+  by (metis (no_types) purge_raw'_def purge_raw_almost_all_zero')
+
+(* TODO: remove the following proof since it  is duplicated from Femto_VHDL_raw.thy *)
+
+lift_definition combine_trans_bit_lifted :: "'signal transaction \<Rightarrow> (val \<times> 'signal transaction) list \<Rightarrow> signedness \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal transaction" is
+  combine_trans_bit unfolding combine_trans_bit_def Let_def 
+proof -
+  fix f :: "nat \<Rightarrow> 'signal \<Rightarrow> val option"
+  fix list :: "(val \<times> (nat \<Rightarrow> 'signal \<Rightarrow> val option)) list" 
+  fix signedness signal now dly
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) list"
+  assume "finite {x. f x \<noteq> 0}"
+  hence "\<forall>\<^sub>\<infinity>x. f x = 0"
+    unfolding sym[OF eventually_cofinite] by auto
+  assume "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) list"  
+  have "(\<lambda>x sig. if x \<le> now \<or> now + dly < x \<or> sig \<noteq> signal then f x sig
+                 else if x \<in> fold (\<union>) (map (Femto_VHDL_raw.keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> signal) \<circ> snd) list) {}
+                 then Some (Lv signedness (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig x)) list)) else None) = 
+        (override_on (\<lambda>x. if x \<le> now \<or> now + dly < x then f x else (f x)(signal := None)) 
+                     (\<lambda>x. \<lambda>sig. if x \<le> now \<or> now + dly < x \<or> sig \<noteq> signal then f x sig else 
+                               Some (Lv signedness (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig x)) list))) 
+                     (fold (\<union>) (map (Femto_VHDL_raw.keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> signal) \<circ> snd) list) {}))"
+      (is "?fun = ?fun'") by (auto intro!: ext)
+  have "finite {x. ?fun' x \<noteq> 0}"
+    unfolding sym[OF eventually_cofinite] 
+  proof (intro upd_eventually_cofinite_override_on_finite)
+    have "\<And>init. finite init \<Longrightarrow> finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) signal k \<noteq> 0}) list) init)"
+      using *
+    proof (induction list)
+      case Nil
+      then show ?case by auto
+    next
+      case (Cons a ps)
+      have "pred_prod (\<lambda>a. True) (\<lambda>f. finite {x. f x \<noteq> 0}) a"
+        using Cons(3) by auto
+      hence "finite {x. snd a x \<noteq> 0}"
+        using pred_prod_inject surjective_pairing[of "a"] by metis
+      have **: " (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) signal k \<noteq> 0}) (a # ps)) init) = 
+             fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) signal k \<noteq> 0}) ps) ({k. to_trans_raw_sig (snd a) signal k \<noteq> 0} \<union> init)"
+        unfolding list.map(2) fold_Cons comp_def Un_empty_right by auto
+      have "finite  ({k. to_trans_raw_sig (snd a) signal k \<noteq> 0} \<union> init)"
+        using `finite init` `finite {x. snd a x \<noteq> 0}` unfolding finite_Un 
+        to_trans_raw_sig_def
+        by (metis (mono_tags, lifting) finite_nat_iff_bounded mem_Collect_eq subset_eq zero_map zero_option_def)
+      thus ?case
+        using Cons by auto
+    qed
+    hence fin: "finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) signal k \<noteq> 0}) list) {})"
+      by auto
+    thus " finite (fold (\<union>) (map (Femto_VHDL_raw.keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> signal) \<circ> snd) list) {})"
+      unfolding keys_def comp_def by auto
+  next
+    show " \<forall>\<^sub>\<infinity>x. (if x \<le> now \<or> now + dly < x then f x else (f x)(signal := None)) = 0"
+      using `\<forall>\<^sub>\<infinity>x. f x = 0` by (smt MOST_mono fun_upd_idem zero_map)
+  qed
+  thus "finite                                                                
+        {x. (\<lambda>sig. if x \<le> now \<or> now + dly < x \<or> sig \<noteq> signal then f x sig
+                   else if x \<in> fold (\<union>) (map (Femto_VHDL_raw.keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> signal) \<circ> snd) list) {}
+                        then Some (Lv signedness (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig x)) list)) else None) \<noteq>
+            0}"
+    using `?fun = ?fun'` by metis
+qed
 
 lift_definition inr_post ::
   "'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow> 'signal transaction \<Rightarrow> nat \<Rightarrow> delay \<Rightarrow> 'signal transaction"
-  is inr_post_raw
-  unfolding sym[OF eventually_cofinite] using inr_post_raw_almost_all_zero
+  is inr_post_raw'
+  unfolding sym[OF eventually_cofinite] using inr_post_raw_almost_all_zero'
   by metis
 
 lemma [code]:
   "inr_post sig val def \<tau> now dly =
-      trans_post sig val def (purge \<tau> now dly sig def val) now dly"
-  by (transfer', auto simp add: Femto_VHDL_raw.inr_post_raw_def)
+      trans_post sig val def (purge' \<tau> now dly sig def val) now dly"
+  by (transfer', auto simp add: Femto_VHDL_raw.inr_post_raw'_def)
 
 lift_definition seq_exec :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal event \<Rightarrow> 'signal transaction \<Rightarrow> 'signal state \<Rightarrow>
                                     'signal seq_stmt \<Rightarrow> 'signal transaction \<Rightarrow> 'signal transaction \<Rightarrow> bool" is
@@ -629,7 +734,7 @@ next
     case (6 t \<sigma> \<gamma> \<theta> def e x sig \<tau> dly \<tau>')
     have "beval_raw t \<sigma> \<gamma> (lookup \<theta>) def e x"
       using 6(1) unfolding sym[OF beval_eq_beval_ind] by transfer' auto
-    have "inr_post_raw sig x (\<sigma> sig) (lookup \<tau>) t dly = lookup \<tau>'"
+    have "inr_post_raw' sig x (\<sigma> sig) (lookup \<tau>) t dly = lookup \<tau>'"
       using 6(2) by transfer' auto
     then show ?case
       by (metis \<open>t , \<sigma> , \<gamma> , lookup \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b x\<close> b_seq_exec.intros(6))

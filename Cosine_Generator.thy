@@ -2446,9 +2446,9 @@ schematic_goal inv_nfrac_concrete:
   unfolding inv_nfrac_alt_def approx_one_def approx_half_def approx_fourth_def approx_eighth_def approx_sixth_def
   apply (reify eval.simps Irwline.simps Irnat_simps Irsig_simps Irval_simps Irset.simps Irint_simps
          ("(if bl_to_bin (lval_of (wline_of tw COUNTER (get_time tw - 1))) = 0 then sbl_to_bin (lval_of (wline_of tw NEXT_FRAC (get_time tw))) = 2147483647
-     else if bl_to_bin (lval_of (wline_of tw COUNTER (get_time tw - 1))) = 1 then sbl_to_bin (lval_of (wline_of tw NEXT_FRAC (get_time tw))) = 1073741824
+     else if bl_to_bin (lval_of (wline_of tw COUNTER (get_time tw - 1))) = 1 then sbl_to_bin (lval_of (wline_of tw NEXT_FRAC (get_time tw))) = - 1073741824
           else if bl_to_bin (lval_of (wline_of tw COUNTER (get_time tw - 1))) = 2 then sbl_to_bin (lval_of (wline_of tw NEXT_FRAC (get_time tw))) = 89478484
-               else if bl_to_bin (lval_of (wline_of tw COUNTER (get_time tw - 1))) = 3 then sbl_to_bin (lval_of (wline_of tw NEXT_FRAC (get_time tw))) = 2982616
+               else if bl_to_bin (lval_of (wline_of tw COUNTER (get_time tw - 1))) = 3 then sbl_to_bin (lval_of (wline_of tw NEXT_FRAC (get_time tw))) = - 2982616
                     else if bl_to_bin (lval_of (wline_of tw COUNTER (get_time tw - 1))) = 4 then sbl_to_bin (lval_of (wline_of tw NEXT_FRAC (get_time tw))) = 53261
                          else sbl_to_bin (lval_of (wline_of tw NEXT_FRAC (get_time tw))) = 0)"))
   by rule
@@ -2464,10 +2464,11 @@ schematic_goal inv_nfrac2_concrete:
   by rule
 
 definition 
-  "inv_nfrac_comb \<equiv> RAnd  (RIfte (RIEq (Iubin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NDec (NFst (Wvar 0))))) (IC 0)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (IC 2147483647))
-       (RIfte (RIEq (Iubin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NDec (NFst (Wvar 0))))) (IC 1)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (IC 1073741824))
+  "inv_nfrac_comb \<equiv> RAnd  
+     (RIfte (RIEq (Iubin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NDec (NFst (Wvar 0))))) (IC 0)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (IC 2147483647))
+       (RIfte (RIEq (Iubin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NDec (NFst (Wvar 0))))) (IC 1)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (INeg (IC 1073741824)))
          (RIfte (RIEq (Iubin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NDec (NFst (Wvar 0))))) (IC 2)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (IC 89478484))
-           (RIfte (RIEq (Iubin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NDec (NFst (Wvar 0))))) (IC 3)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (IC 2982616))
+           (RIfte (RIEq (Iubin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NDec (NFst (Wvar 0))))) (IC 3)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (INeg (IC 2982616)))
              (RIfte (RIEq (Iubin_of (Vwline (Wvar 0) (Svar (Suc 0)) (NDec (NFst (Wvar 0))))) (IC 4)) (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (IC 53261))
                (RIEq (Ibin_of (Vwline (Wvar 0) (Svar 0) (NFst (Wvar 0)))) (IC 0)))))))
 (RImp (RDisevt (LCons (Svar (Suc 0)) LEmpty) (Wvar 0))
@@ -4495,189 +4496,6 @@ abbreviation "Inv \<equiv> \<lambda>tw. ((inv_ncommon tw \<and> inv_ncommon2 tw)
 
 abbreviation "Inv_core \<equiv> \<lambda>tw. ((inv_ncommon tw) \<and> (inv_sqr tw) \<and> (inv_naccum tw) \<and> (inv_term1 tw) \<and> (inv_nfrac tw) \<and> (inv_output tw)  \<and> (inv_output_ready tw)
             \<and> (inv_nout tw) \<and> (inv_nstate tw) \<and> (inv_ncounter tw) \<and> (inv_n0 tw)) \<and> (inv_reg tw)"
-
-(* fun approx_div_fact :: "nat \<Rightarrow> (1, 31) fixed" where
-  "approx_div_fact 0                          = Fixed (approx_one :: (1 + 31) word)   "
-| "approx_div_fact (Suc 0)                    = Fixed (approx_half :: (1 + 31) word)  "
-| "approx_div_fact (Suc (Suc 0))              = Fixed (approx_fourth :: (1 + 31) word)"
-| "approx_div_fact (Suc (Suc (Suc 0)))        = Fixed (approx_sixth :: (1 + 31) word) "
-| "approx_div_fact (Suc (Suc (Suc (Suc 0))))  = Fixed (approx_eighth :: (1 + 31) word)"
-
-fun fixed_of_sval :: "val \<Rightarrow> ('a::len0, 'b::len0) fixed" where
-  "fixed_of_sval (Lv ki bl) = Fixed (of_bl bl :: ('a + 'b) word)"
-
-fun nat_of_val :: "val \<Rightarrow> nat" where
-  "nat_of_val (Lv ki bl) = nat (bl_to_bin bl)"
-
-declare [[coercion nat_of_val]]
-
-fun val_of_fixed :: "('a::len0, 'b::len0) fixed \<Rightarrow> val" where
-  "val_of_fixed fi = Lv Sig (to_bl (word_of_fixed fi))"
-
-abbreviation "last_posedge tw sig \<equiv> (GREATEST k. k < fst tw \<and> is_posedge2 (snd tw) sig k)"
-
-definition inv_math :: "sig assn2" where
-  "inv_math tw =   ((\<exists>n. n < fst tw \<and> is_posedge2 (snd tw) CLK n) \<and> (wline_of tw STATE (fst tw) = V_PROC \<or> wline_of tw STATE (fst tw) = V_POST)  \<longrightarrow> 
-                      fixed_of_sval (wline_of tw ACCUM (fst tw)) = 
-                        (foldr (\<lambda>a b. approx_div_fact a + fixed_of_sval (wline_of tw COMMON (last_posedge tw CLK - 1)) * b) [wline_of tw COUNTER (last_posedge tw CLK - 1) ..< 5]  0))"
-
-definition "Inv' \<equiv> Inv"
-
-lemma type_of_bty_cases:
-  assumes "type_of v = Bty"
-  shows   "v = Bv False \<or> v = Bv True"
-  using assms type_of.elims by force
-
-lemma 
-  "\<Gamma> \<Turnstile> \<lbrace>\<lambda>tw. Inv' tw \<and> inv_math tw\<rbrace> architecture \<lbrace>\<lambda>tw. inv_math (fst tw + 1, snd tw)\<rbrace>"
-  unfolding conc_hoare_valid_wt_def
-proof (rule, rule, rule)
-  fix tw tw'
-  assume "wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')"
-  moreover have "\<Gamma> \<Turnstile> \<lbrace>Inv'\<rbrace> architecture \<lbrace>\<lambda>tw. Inv' (fst tw + 1, snd tw)\<rbrace>" 
-    using simulation_semi_complete[OF inv_all_preserved_arch nonneg_delay_conc_architecture conc_stmt_wf_arch cwt_arch]
-    unfolding Inv'_def by blast
-  ultimately have "Inv' (fst tw' + 1, snd tw')" 
-    unfolding conc_hoare_valid_wt_def by metis
-  have "0 < fst tw"
-    using \<open>wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')\<close> 
-    unfolding Inv'_def inv_reg_alt_def by auto
-
-  have "world_conc_exec_alt tw architecture tw'"
-    using \<open>wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')\<close> 
-    world_conc_exec_imp_world_conc_exec_alt[OF _ conc_stmt_wf_arch nonneg_delay_conc_architecture]
-    by auto
-  hence "wityping \<Gamma> (snd tw')"
-    using \<open>wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')\<close> world_conc_exec_preserves_wityping 
-    cwt_arch by blast
-  hence "\<And>k. type_of (wline_of tw' RST k) = Bty"
-    unfolding wityping_def wtyping_def comp_def using cosine_locale_axioms unfolding cosine_locale_def
-    by auto
-  hence "\<And>k. (wline_of tw' RST k = Bv False) \<or> (wline_of tw' RST k = Bv True)"
-    using type_of_bty_cases by blast
-              
-  have "inv_nstate (fst tw' + 1, snd tw')" and "inv_reg (fst tw' + 1, snd tw')"
-    using \<open>Inv' (fst tw' + 1, snd tw')\<close> unfolding Inv'_def by auto
-  have "inv_math (fst tw' + 1, snd tw')"
-    unfolding inv_math_def snd_conv fst_conv comp_def
-  proof (rule)
-    assume "(\<exists>n<fst tw' + 1. snd (snd tw') CLK (n - 1) = Bv False \<and> snd (snd tw') CLK n = Bv True) 
-           \<and> (snd (snd tw') STATE (get_time tw' + 1) = V_PROC \<or> snd (snd tw') STATE (get_time tw' + 1) = V_POST)"
-    hence  "wline_of tw' STATE (fst tw' + 1) = V_PROC \<or> wline_of tw' STATE (fst tw' + 1) = V_POST" and 
-      exist: "(\<exists>n<fst tw' + 1. is_posedge2 (snd tw') CLK n)"
-      unfolding comp_def by auto
-    have "is_posedge2 (snd tw') CLK (last_posedge (fst tw' + 1, snd tw') CLK)" and "last_posedge (fst tw' + 1, snd tw') CLK < get_time tw' + 1"
-      using GreatestI_ex_nat[OF exist, where b="fst tw' + 1"] unfolding fst_conv snd_conv by auto
-
-    \<comment> \<open>Showing that there is no reset previously\<close>
-    have "wline_of tw' RST (last_posedge (fst tw' + 1, snd tw') CLK) = Bv False"
-    proof (rule ccontr)
-      assume "wline_of tw' RST (last_posedge (fst tw' + 1, snd tw') CLK) \<noteq> Bv False"
-      hence "wline_of tw' RST (last_posedge (fst tw' + 1, snd tw') CLK) = Bv True"
-        using \<open>\<And>k. (wline_of tw' RST k = Bv False) \<or> (wline_of tw' RST k = Bv True)\<close> by blast
-      hence "wline_of tw' STATE (last_posedge (fst tw' + 1, snd tw') CLK + 1) = V_INIT"
-        using \<open>inv_reg (fst tw' + 1, snd tw')\<close>  \<open>is_posedge2 (snd tw') CLK (last_posedge (fst tw' + 1, snd tw') CLK)\<close>
-        unfolding inv_reg_alt_def fst_conv comp_def snd_conv 
-
-
-
-      with \<open>wline_of tw' STATE (fst tw' + 1) = V_PROC \<or> wline_of tw' STATE (fst tw' + 1) = V_POST\<close>
-      show False by auto
-    qed
-
-
-    have "wline_of tw' RST (fst tw') = Bv False"
-    proof (rule ccontr)
-      assume "wline_of tw' RST (fst tw') \<noteq> Bv False"
-      hence "wline_of tw' RST (fst tw') = Bv True"
-        using \<open>\<And>k. (wline_of tw' RST k = Bv False) \<or> (wline_of tw' RST k = Bv True)\<close> by blast
-      hence "wline_of tw' STATE (fst tw' + 1) = V_INIT"
-        using \<open>inv_reg (fst tw' + 1, snd tw')\<close>  \<open>wline_of tw' CLK (fst tw' - 1) = Bv False\<close>
-          \<open>wline_of tw' CLK (fst tw') = Bv True\<close>
-        unfolding inv_reg_alt_def fst_conv comp_def snd_conv by auto
-      with \<open>wline_of tw' STATE (fst tw' + 1) = V_PROC \<or> wline_of tw' STATE (fst tw' + 1) = V_POST\<close>
-      show False by auto
-    qed
-
-    \<comment> \<open>Obtaining previous state\<close>
-    { assume "wline_of tw' STATE (fst tw' + 1) = V_POST"
-      hence "wline_of tw' NEXT_STATE (fst tw') = V_POST"
-        using \<open>inv_reg (fst tw' + 1, snd tw')\<close> \<open>0 < fst tw' + 1\<close> \<open>wline_of tw' CLK (fst tw' - 1) = Bv False\<close>
-          \<open>wline_of tw' CLK (fst tw') = Bv True\<close> \<open>wline_of tw' RST (fst tw') = Bv False\<close>
-        unfolding inv_reg_alt_def fst_conv comp_def snd_conv by auto
-      moreover have "fst tw = fst tw'"
-        using \<open>world_conc_exec_alt tw architecture tw'\<close> fst_world_conc_exec_alt by blast
-      ultimately have "wline_of tw NEXT_STATE (fst tw) = V_POST"
-        using world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture]
-        by auto
-      hence  "wline_of tw STATE (fst tw - 1) = V_PROC" and " \<not> bval_of (wline_of tw CTR_NEQ_0 (get_time tw - 1))"
-        using `wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')` 
-        unfolding Inv'_def inv_nstate_alt_def  by (smt list.inject val.inject(2))+
-      have "wline_of tw CLK (fst tw - 1) = Bv False"
-        using \<open>fst tw = fst tw'\<close> world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture]
-        `wline_of tw' CLK (fst tw' - 1) = Bv False` by fastforce
-      hence "\<not> is_posedge2 (snd tw) CLK (fst tw - 1)" by auto
-      hence "wline_of tw STATE (fst tw) = V_PROC"
-        using `wline_of tw STATE (fst tw - 1) = V_PROC` `0 < fst tw`
-        using `wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')` 
-        unfolding Inv'_def inv_reg_alt_def by auto }
-    moreover
-    { assume "wline_of tw' STATE (fst tw' + 1) = V_PROC"
-      hence "wline_of tw' NEXT_STATE (fst tw') = V_PROC"
-        using \<open>inv_reg (fst tw' + 1, snd tw')\<close> \<open>0 < fst tw' + 1\<close> \<open>wline_of tw' CLK (fst tw' - 1) = Bv False\<close>
-          \<open>wline_of tw' CLK (fst tw') = Bv True\<close> \<open>wline_of tw' RST (fst tw') = Bv False\<close>
-        unfolding inv_reg_alt_def fst_conv comp_def snd_conv by auto
-      moreover have "fst tw = fst tw'"
-        using \<open>world_conc_exec_alt tw architecture tw'\<close> fst_world_conc_exec_alt by blast
-      ultimately have "wline_of tw NEXT_STATE (fst tw) = V_PROC"
-        using world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture]
-        by auto    
-      hence "wline_of tw STATE (fst tw - 1) = V_PROC \<or> wline_of tw STATE (fst tw - 1) = V_PRE"      
-        using `wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')` 
-        unfolding Inv'_def inv_nstate_alt_def  by (smt list.inject val.inject(2))+
-      have "wline_of tw CLK (fst tw - 1) = Bv False"
-        using \<open>fst tw = fst tw'\<close> world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture]
-        `wline_of tw' CLK (fst tw' - 1) = Bv False` by fastforce
-      hence "\<not> is_posedge2 (snd tw) CLK (fst tw - 1)" by auto
-      hence "wline_of tw STATE (fst tw) = V_PROC \<or> wline_of tw STATE (fst tw) = V_PRE"
-        using `wline_of tw STATE (fst tw - 1) = V_PROC \<or> wline_of tw STATE (fst tw - 1) = V_PRE` `0 < fst tw`
-        using `wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')` 
-        unfolding Inv'_def inv_reg_alt_def by auto }
-    ultimately have "wline_of tw STATE (fst tw) = V_PROC \<or> wline_of tw STATE (fst tw) = V_PRE"
-      using \<open>wline_of tw' STATE (fst tw' + 1) = V_PROC \<or> wline_of tw' STATE (fst tw' + 1) = V_POST\<close>
-      by blast
-    moreover
-    { assume "wline_of tw STATE (fst tw) = V_PRE"
-      have "  inv_ncounter tw"
-        using \<open>wityping \<Gamma> (snd tw) \<and> (Inv' tw \<and> inv_math tw) \<and> (tw, architecture \<Rightarrow>\<^sub>c tw')\<close> 
-        unfolding Inv'_def by auto
-      have "wline_of tw' COUNTER (fst tw') = wline_of tw COUNTER (fst tw)"
-        using world_conc_exec_alt_unaffected_before_curr[OF `world_conc_exec_alt tw architecture tw'` nonneg_delay_conc_architecture] fst_world_conc_exec_alt 
-        by (metis (no_types, hide_lams) \<open>world_conc_exec_alt tw architecture tw'\<close> order_refl)
-      also have "... = wline_of tw COUNTER (fst tw - 1)"
-
-    
-    }
-
-
-
-
-
-
-    have "(inv_naccum (fst tw' + 1, snd tw') \<and> inv_naccum2 (fst tw' + 1, snd tw'))"
-      using \<open>Inv' (fst tw' + 1, snd tw')\<close> unfolding Inv'_def by auto
-    hence "bin_of NEXT_ACCUM at_time fst tw' + 1 on (fst tw' + 1, snd tw') = undefined"
-      unfolding inv_naccum_alt_def
-
-
-
-
-
-
-
-
-end
- *)
 
 definition "Inv' \<equiv> Inv"
 

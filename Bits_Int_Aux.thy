@@ -66,7 +66,7 @@ lemma bl_to_bin_correctness:
   "bl_to_bin bs = (\<Sum>i = 0..<length bs. (int \<circ> of_bool) (rev bs ! i) * 2 ^ i)"
   unfolding bl_to_bin_def using bl_to_bin_aux_correctness by auto
 
-text \<open> In case it is interpreted as unsigned number, the equation is
+text \<open> In case it is interpreted as a signed number, the equation is
 
     B2S (x) \<equiv> - x_{n-1} * 2 ^ {n - 1} + \<Sum>i=0..<n-1. x_i * 2 ^ i .
 

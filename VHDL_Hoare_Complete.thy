@@ -73,82 +73,82 @@ lemma snd_worldline_upd2':
 
 definition worldline_inert_upd2 ::
   "nat \<times> 'signal worldline_init \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> nat \<times> 'signal worldline_init" ("_\<lbrakk> _, _ :=\<^sub>2 _\<rbrakk>")
-  where "worldline_inert_upd2 \<equiv> \<lambda>tw sig dly v. (fst tw, worldline_inert_upd (snd tw) sig (fst tw) dly v)"
+  where "worldline_inert_upd2 \<equiv> \<lambda>tw sig dly v. (fst tw, VHDL_Hoare.worldline_inert_upd2 (snd tw) sig (fst tw) dly v)"
 
 lemma fst_worldline_inert_upd2:
   "fst (worldline_inert_upd2 tw sig dly v) = fst tw"
   unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
 
-lemma snd_worldline_inert_upd2':
-  "0 < t \<Longrightarrow> t' \<le> fst tw \<Longrightarrow> snd (snd (tw\<lbrakk>sig, t :=\<^sub>2 v\<rbrakk>)) sig' t' = snd (snd tw) sig' t'"
+lemma snd_worldline_inert_upd2_bv:
+  "0 < t \<Longrightarrow> t' \<le> fst tw \<Longrightarrow> snd (snd (tw\<lbrakk>sig, t :=\<^sub>2 Bv b\<rbrakk>)) sig' t' = snd (snd tw) sig' t'"
 proof -
   assume "0 < t" and "t' \<le> fst tw"
-  have "snd (snd (tw\<lbrakk>sig, t :=\<^sub>2 v\<rbrakk>)) sig' t' = (let time =
-           if snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v then get_time tw + t
-           else GREATEST n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v
-     in if sig' \<noteq> sig \<or> t' < get_time tw then snd (snd tw) sig' t' else if t' < time then snd (snd tw) sig' (get_time tw) else v)"
+  have "snd (snd (tw\<lbrakk>sig, t :=\<^sub>2 Bv b\<rbrakk>)) sig' t' = (let time =
+           if snd (snd tw) sig (get_time tw) = Bv b \<or> snd (snd tw) sig (get_time tw + t) \<noteq> Bv b then get_time tw + t
+           else GREATEST n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> Bv b \<and> snd (snd tw) sig n = Bv b
+     in if sig' \<noteq> sig \<or> t' < get_time tw then snd (snd tw) sig' t' else if t' < time then snd (snd tw) sig' (get_time tw) else Bv b)"
     (is "_ = ?comp")
-    unfolding worldline_inert_upd2_def snd_conv worldline_inert_upd_def by auto
-  have "(snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v) \<or> 
-      \<not> (snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v)"
+    unfolding worldline_inert_upd2_def snd_conv VHDL_Hoare.worldline_inert_upd2.simps worldline_inert_upd_def by auto
+  have "(snd (snd tw) sig (get_time tw) = Bv b \<or> snd (snd tw) sig (get_time tw + t) \<noteq> Bv b) \<or> 
+      \<not> (snd (snd tw) sig (get_time tw) = Bv b \<or> snd (snd tw) sig (get_time tw + t) \<noteq> Bv b)"
     by auto
   moreover
-  { assume "snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v"
-    hence "?comp = (if sig' \<noteq> sig \<or> t' < get_time tw then snd (snd tw) sig' t' else if t' < fst tw + t then snd (snd tw) sig' (get_time tw) else v)"
+  { assume "snd (snd tw) sig (get_time tw) = Bv b \<or> snd (snd tw) sig (get_time tw + t) \<noteq> Bv b"
+    hence "?comp = (if sig' \<noteq> sig \<or> t' < get_time tw then snd (snd tw) sig' t' else if t' < fst tw + t then snd (snd tw) sig' (get_time tw) else Bv b)"
       by auto
     also have "... = snd (snd tw) sig' t'"
       using \<open>0 < t\<close> \<open>t' \<le> get_time tw\<close> by auto
     finally have "?comp = snd (snd tw) sig' t'"
       by auto }
   moreover
-  { let ?t = "GREATEST n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v"
-    assume "\<not> (snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v)"
-    hence temp: "?comp = (if sig' \<noteq> sig \<or> t' < get_time tw then snd (snd tw) sig' t' else if t' < ?t then snd (snd tw) sig' (get_time tw) else v)"
+  { let ?t = "GREATEST n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> Bv b \<and> snd (snd tw) sig n = Bv b"
+    assume "\<not> (snd (snd tw) sig (get_time tw) = Bv b \<or> snd (snd tw) sig (get_time tw + t) \<noteq> Bv b)"
+    hence temp: "?comp = (if sig' \<noteq> sig \<or> t' < get_time tw then snd (snd tw) sig' t' else if t' < ?t then snd (snd tw) sig' (get_time tw) else Bv b)"
       by auto
-    have "snd (snd tw) sig (fst tw) \<noteq> v" and "snd (snd tw) sig (fst tw + t) = v"
-      using \<open>\<not> (snd (snd tw) sig (get_time tw) = v \<or> snd (snd tw) sig (get_time tw + t) \<noteq> v)\<close> by auto
-    have *: "\<exists>n. fst tw \<le> n \<and> n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v"
+    have "snd (snd tw) sig (fst tw) \<noteq> Bv b" and "snd (snd tw) sig (fst tw + t) = Bv b"
+      using \<open>\<not> (snd (snd tw) sig (get_time tw) = Bv b \<or> snd (snd tw) sig (get_time tw + t) \<noteq> Bv b)\<close> by auto
+    have *: "\<exists>n. fst tw \<le> n \<and> n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> Bv b \<and> snd (snd tw) sig n = Bv b"
     proof (rule ccontr)
-      assume "\<not> (\<exists>n. fst tw \<le> n \<and> n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v)"
-      hence "\<forall>n. fst tw \<le> n \<and> n \<le> fst tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<longrightarrow> snd (snd tw) sig n \<noteq> v"
+      assume "\<not> (\<exists>n. fst tw \<le> n \<and> n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> Bv b \<and> snd (snd tw) sig n = Bv b)"
+      hence "\<forall>n. fst tw \<le> n \<and> n \<le> fst tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> Bv b \<longrightarrow> snd (snd tw) sig n \<noteq> Bv b"
         by auto
-      have "(\<forall>n. fst tw \<le> n \<and> n \<le> fst tw + t \<longrightarrow> snd (snd tw) sig n \<noteq> v) \<longleftrightarrow> 
-            (\<forall>j. j \<le> t \<longrightarrow> snd (snd tw) sig (j + fst tw) \<noteq> v)"
-        by (metis \<open>snd (snd tw) sig (get_time tw + t) = v\<close> add.commute add_leD2 order_refl)
-      have "(\<forall>j. j \<le> t \<longrightarrow> snd (snd tw) sig (j + fst tw) \<noteq> v)"
+      have "(\<forall>n. fst tw \<le> n \<and> n \<le> fst tw + t \<longrightarrow> snd (snd tw) sig n \<noteq> Bv b) \<longleftrightarrow> 
+            (\<forall>j. j \<le> t \<longrightarrow> snd (snd tw) sig (j + fst tw) \<noteq> Bv b)"
+        by (metis \<open>snd (snd tw) sig (get_time tw + t) = Bv b\<close> add.commute add_leD2 order_refl)
+      have "(\<forall>j. j \<le> t \<longrightarrow> snd (snd tw) sig (j + fst tw) \<noteq> Bv b)"
       proof (rule, rule)
         fix j 
-        show "j \<le> t  \<Longrightarrow> snd (snd tw) sig (j + get_time tw) \<noteq> v"
+        show "j \<le> t  \<Longrightarrow> snd (snd tw) sig (j + get_time tw) \<noteq> Bv b"
         proof (induction j)
           case 0
-          then show ?case using \<open>snd (snd tw) sig (fst tw) \<noteq> v\<close> by auto
+          then show ?case using \<open>snd (snd tw) sig (fst tw) \<noteq> Bv b\<close> by auto
         next
           case (Suc j)
           hence "j \<le> t" by  linarith
-          hence "snd (snd tw) sig (j + get_time tw) \<noteq> v"
+          hence "snd (snd tw) sig (j + get_time tw) \<noteq> Bv b"
             using Suc by auto
           then show ?case 
-            using \<open>\<forall>n. fst tw \<le> n \<and> n \<le> fst tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<longrightarrow> snd (snd tw) sig n \<noteq> v\<close> \<open>j \<le> t\<close> Suc(2)
-            by (simp add: \<open>snd (snd tw) sig (j + get_time tw) \<noteq> v\<close>)
+            using \<open>\<forall>n. fst tw \<le> n \<and> n \<le> fst tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> Bv b \<longrightarrow> snd (snd tw) sig n \<noteq> Bv b\<close> \<open>j \<le> t\<close> Suc(2)
+            by (simp add: \<open>snd (snd tw) sig (j + get_time tw) \<noteq> Bv b\<close>)
         qed
       qed
       thus False
-        by (metis (full_types) \<open>snd (snd tw) sig (get_time tw + t) = v\<close> add.commute order_refl)
+        by (metis (full_types) \<open>snd (snd tw) sig (get_time tw + t) = Bv b\<close> add.commute order_refl)
     qed
-    hence ***: "\<exists>n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd (snd tw) sig n = v"
+    hence ***: "\<exists>n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> Bv b \<and> snd (snd tw) sig n = Bv b"
       by blast
-    have **: "\<forall>y. y \<le> get_time tw + t \<and> snd (snd tw) sig (y - 1) \<noteq> v \<and> snd (snd tw) sig y = v \<longrightarrow> y \<le> fst tw + t"
+    have **: "\<forall>y. y \<le> get_time tw + t \<and> snd (snd tw) sig (y - 1) \<noteq> Bv b \<and> snd (snd tw) sig y = Bv b \<longrightarrow> y \<le> fst tw + t"
       by blast
-    hence "?t \<le> fst tw + t" and "snd (snd tw) sig (?t - 1) \<noteq> v " and " snd (snd tw) sig ?t = v"
+    hence "?t \<le> fst tw + t" and "snd (snd tw) sig (?t - 1) \<noteq> Bv b " and " snd (snd tw) sig ?t = Bv b"
       using GreatestI_ex_nat[OF *** **] by auto
     have "?t \<noteq> fst tw"
-      using \<open>snd (snd tw) sig (GREATEST n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> v \<and> snd
-      (snd tw) sig n = v) = v\<close> \<open>snd (snd tw) sig (get_time tw) \<noteq> v\<close> by auto
+      using \<open>snd (snd tw) sig (GREATEST n. n \<le> get_time tw + t \<and> snd (snd tw) sig (n - 1) \<noteq> Bv b \<and> snd
+      (snd tw) sig n = Bv b) = Bv b\<close> \<open>snd (snd tw) sig (get_time tw) \<noteq> Bv b\<close> by auto
     have "fst tw < ?t"
     proof (rule ccontr)
       assume "\<not> fst tw < ?t" hence "?t \<le> fst tw" by auto hence "?t < fst tw" using `?t \<noteq> fst tw` by auto
-      obtain n where "fst tw \<le> n" and "n \<le> fst tw + t" and "snd (snd tw) sig (n - 1) \<noteq> v" and 
-        "snd (snd tw) sig n = v" using * by blast
+      obtain n where "fst tw \<le> n" and "n \<le> fst tw + t" and "snd (snd tw) sig (n - 1) \<noteq> Bv b" and 
+        "snd (snd tw) sig n = Bv b" using * by blast
       hence "n \<le> ?t"
         using Greatest_le_nat[where b="fst tw + t"] by auto
       hence "n < fst tw"
@@ -168,11 +168,66 @@ proof -
   ultimately have "?comp = snd (snd tw) sig' t'"
     by auto
   thus ?thesis
-    by (simp add: \<open>snd (snd tw\<lbrakk> sig, t :=\<^sub>2 v\<rbrakk>) sig' t' = ?comp\<close>)
+    by (simp add: \<open>snd (snd tw\<lbrakk> sig, t :=\<^sub>2 Bv b\<rbrakk>) sig' t' = ?comp\<close>)
 qed
 
+lemma snd_worldline_inert_upd2_lv:
+  "0 < t \<Longrightarrow> t' \<le> fst tw \<Longrightarrow> snd (snd (tw\<lbrakk>sig, t :=\<^sub>2 Lv sign bs\<rbrakk>)) sig' t' = snd (snd tw) sig' t'"
+proof -
+  assume "0 < t" and "t' \<le> fst tw"
+  have "sig = sig' \<or> sig \<noteq> sig'"
+    by auto
+  moreover
+  { assume "sig \<noteq> sig'"
+    hence ?thesis
+      unfolding worldline_inert_upd2_def snd_conv VHDL_Hoare.worldline_inert_upd2.simps fun_upd_def
+      by auto }
+  moreover
+  { assume "sig = sig'"
+    hence *: "snd (snd (tw\<lbrakk>sig, t :=\<^sub>2 Lv sign bs\<rbrakk>)) sig' t' = (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, t := Bv (bs ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + t \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig (n - 1) \<noteq> w' b sig n)
+                    then LEAST n. get_time tw < n \<and> n \<le> get_time tw + t \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig (n - 1) \<noteq> w' b sig n) else get_time tw + t
+              in if t' < get_time tw then snd (snd tw) sig t'
+                 else if t' < time then snd (snd tw) sig (get_time tw)
+                      else Lv sign (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, t := Bv (bs ! b)] sig t')) [0..<length bs]))"
+      unfolding worldline_inert_upd2_def snd_conv VHDL_Hoare.worldline_inert_upd2.simps fun_upd_def
+      by auto
+    have "t' < fst tw \<or> t' = fst tw"
+      using \<open>t' \<le> fst tw\<close> by auto
+    moreover
+    { assume "t' < fst tw"
+      hence ?thesis
+        unfolding * using \<open>sig = sig'\<close> by auto }
+    moreover
+    { assume "t' = fst tw"
+      let ?w' = "\<lambda>b. snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, t := Bv (bs ! b)]"
+      have "(\<exists>n>get_time tw. n \<le> get_time tw + t \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n)) \<or> 
+          \<not> (\<exists>n>get_time tw. n \<le> get_time tw + t \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n))"
+        by auto
+      moreover
+      { assume exist: "\<exists>n>get_time tw. n \<le> get_time tw + t \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n)"
+        hence "t' < (LEAST n. get_time tw < n \<and> n \<le> get_time tw + t \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n))"
+          by (metis (mono_tags, lifting) LeastI_ex \<open>t' = get_time tw\<close>)
+        hence ?thesis
+          using exist unfolding *  by (simp add: \<open>sig = sig'\<close> \<open>t' = get_time tw\<close>) }
+      moreover
+      { assume nonexist: "\<not> (\<exists>n>get_time tw. n \<le> get_time tw + t \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n))"
+        hence ?thesis
+          unfolding * using \<open>t' \<le> fst tw\<close> \<open>0 < t\<close>  using \<open>sig = sig'\<close> by auto }
+      ultimately have ?thesis
+        by auto }
+    ultimately have ?thesis
+      by auto }
+  ultimately show ?thesis
+    by auto
+qed
 
-
+lemma snd_worldline_inert_upd2:
+  "0 < t \<Longrightarrow> t' \<le> fst tw \<Longrightarrow> snd (snd (tw\<lbrakk>sig, t :=\<^sub>2 v\<rbrakk>)) sig' t' = snd (snd tw) sig' t'"
+  using snd_worldline_inert_upd2_bv snd_worldline_inert_upd2_lv
+  by (induction v)
+  
 lemma switch_worldline_inert_upd2:
   assumes "sig \<noteq> sig'"
   shows "(tw\<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>)\<lbrakk>sig', dly' :=\<^sub>2 v'\<rbrakk> = (tw\<lbrakk>sig', dly' :=\<^sub>2 v'\<rbrakk>)\<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>"
@@ -180,7 +235,17 @@ lemma switch_worldline_inert_upd2:
   subgoal by (auto simp add: fst_worldline_inert_upd2)
   subgoal 
     apply (rule)
-    subgoal unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+    subgoal unfolding worldline_inert_upd2_def worldline_inert_upd_def fst_conv snd_conv
+      apply (induction v)
+       apply (induction v')
+      unfolding VHDL_Hoare.worldline_inert_upd2.simps 
+        apply (simp add: worldline_inert_upd_def)
+       apply (simp add: worldline_inert_upd_def)
+      apply (induction v')
+      unfolding VHDL_Hoare.worldline_inert_upd2.simps 
+        apply (simp add: worldline_inert_upd_def)
+       apply (simp add: worldline_inert_upd_def)
+      done
     apply (rule ext)
     apply (rule ext)
   proof -
@@ -190,26 +255,310 @@ lemma switch_worldline_inert_upd2:
     moreover
     { assume "s' \<noteq> sig' \<and> s' \<noteq> sig"
       hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw) s' t'"
-        unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+        unfolding worldline_inert_upd2_def worldline_inert_upd_def snd_conv fst_conv
+        apply (induction v)
+         apply (induction v')
+          apply (simp add: worldline_inert_upd_def)
+         apply (simp add: worldline_inert_upd_def)
+        apply (induction v')
+          apply (simp add: worldline_inert_upd_def)
+         apply (simp add: worldline_inert_upd_def)
+        done
       also have "... = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
         using `s' \<noteq> sig' \<and> s' \<noteq> sig`
-        unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+        unfolding worldline_inert_upd2_def worldline_inert_upd_def 
+        apply (induction v)
+         apply (induction v')
+          apply (simp add: worldline_inert_upd_def)
+         apply (simp add: worldline_inert_upd_def)
+        apply (induction v')
+          apply (simp add: worldline_inert_upd_def)
+         apply (simp add: worldline_inert_upd_def)
+        done
       finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
         by auto }
     moreover
     { assume "s' = sig" hence "s' \<noteq> sig'" using assms by auto
       hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-        unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+        unfolding worldline_inert_upd2_def worldline_inert_upd_def 
+        apply (induction v)
+         apply (induction v')
+          apply (simp add: worldline_inert_upd_def)
+         apply (simp add: worldline_inert_upd_def)
+        apply (induction v')
+          apply (simp add: worldline_inert_upd_def)
+         apply (simp add: worldline_inert_upd_def)
+        done
       moreover have "snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-        using `s' = sig` `s' \<noteq> sig'` unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+        using `s' = sig` `s' \<noteq> sig'` unfolding worldline_inert_upd2_def worldline_inert_upd_def 
+        apply (induction v)
+         apply (induction v')
+          apply (simp add: worldline_inert_upd_def)
+         apply (simp add: worldline_inert_upd_def)
+      proof (induction v')
+        case (Bv x)
+        define exp where "exp = (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig' (get_time tw) dly' (Bv x))"
+        have "snd (VHDL_Hoare.worldline_inert_upd2 (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig' (get_time tw) dly' (Bv x)) sig (get_time tw) dly (Lv x1a x2)) s' t' = 
+              snd (VHDL_Hoare.worldline_inert_upd2 exp sig (get_time tw) dly (Lv x1a x2)) s' t'"
+          unfolding exp_def by auto
+        also have "... = ((snd exp) (sig := \<lambda>n. let w' = \<lambda>b. snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                                                    time =
+                                                      if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                                                      then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                                                      else get_time tw + dly
+                                                in if n < get_time tw then snd exp sig n
+                                                   else if n < time then snd exp sig (get_time tw)
+                                                        else Lv x1a
+                                                              (map (\<lambda>b. bval_of (snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig n))
+                                                                [0..<length x2])))
+                                         s' t'"
+          unfolding VHDL_Hoare.worldline_inert_upd2.simps snd_conv by auto
+        also have "... = (let w' = \<lambda>b. snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                    then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                    else get_time tw + dly
+              in if t' < get_time tw then snd exp sig t'
+                 else if t' < time then snd exp sig (get_time tw)
+                      else Lv x1a
+                            (map (\<lambda>b. bval_of (snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig t'))
+                              [0..<length x2]))"
+          unfolding fun_upd_def \<open>s' = sig\<close> by auto
+        also have "... = (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                    then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                    else get_time tw + dly
+              in if t' < get_time tw then snd (snd tw) sig t'
+                 else if t' < time then snd (snd tw) sig (get_time tw)
+                      else Lv x1a
+                            (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig t'))
+                              [0..<length x2]))"        
+        proof -
+          have "\<And>b k. ((snd exp)(sig := to_bit b \<circ> snd exp sig)) sig k = ((snd (snd tw))(sig := to_bit b \<circ> snd (snd tw) sig)) sig k"
+            unfolding exp_def apply auto 
+            using assms unfolding worldline_inert_upd_def snd_conv by auto
+          hence *: "\<And>b . snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig  = 
+                       snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig "
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          have **: "snd exp sig = snd (snd tw) sig "
+            unfolding exp_def using assms by (auto simp add: worldline_inert_upd_def)
+          show ?thesis
+            unfolding Let_def * ** by auto
+        qed
+        also have "... =  snd (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig (get_time tw) dly (Lv x1a x2)) s' t'"
+          unfolding  VHDL_Hoare.worldline_inert_upd2.simps snd_conv fun_upd_def \<open>s' = sig\<close> by auto
+        finally show ?case 
+          by auto
+      next
+        case (Lv sign bs)
+        define exp where "exp = (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig' (get_time tw) dly' (Lv sign bs))"
+        have "snd (VHDL_Hoare.worldline_inert_upd2 (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig' (get_time tw) dly' (Lv sign bs)) sig (get_time tw) dly (Lv x1a x2)) s' t' = 
+              snd (VHDL_Hoare.worldline_inert_upd2 exp sig (get_time tw) dly (Lv x1a x2)) s' t'"
+          unfolding exp_def by auto
+        also have "... = ((snd exp) (sig := \<lambda>n. let w' = \<lambda>b. snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                                                    time =
+                                                      if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                                                      then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                                                      else get_time tw + dly
+                                                in if n < get_time tw then snd exp sig n
+                                                   else if n < time then snd exp sig (get_time tw)
+                                                        else Lv x1a
+                                                              (map (\<lambda>b. bval_of (snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig n))
+                                                                [0..<length x2])))
+                                         s' t'"
+          unfolding VHDL_Hoare.worldline_inert_upd2.simps snd_conv by auto
+        also have "... = (let w' = \<lambda>b. snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                    then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                    else get_time tw + dly
+              in if t' < get_time tw then snd exp sig t'
+                 else if t' < time then snd exp sig (get_time tw)
+                      else Lv x1a
+                            (map (\<lambda>b. bval_of (snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig t'))
+                              [0..<length x2]))"
+          unfolding fun_upd_def \<open>s' = sig\<close> by auto
+        also have "... = (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                    then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                    else get_time tw + dly
+              in if t' < get_time tw then snd (snd tw) sig t'
+                 else if t' < time then snd (snd tw) sig (get_time tw)
+                      else Lv x1a
+                            (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig t'))
+                              [0..<length x2]))"        
+        proof -
+          have "\<And>b k. ((snd exp)(sig := to_bit b \<circ> snd exp sig)) sig k = ((snd (snd tw))(sig := to_bit b \<circ> snd (snd tw) sig)) sig k"
+            unfolding exp_def apply auto 
+            using assms unfolding worldline_inert_upd_def snd_conv by auto
+          hence *: "\<And>b . snd to_worldline_init_bit exp sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig  = 
+                       snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig "
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          have **: "snd exp sig = snd (snd tw) sig "
+            unfolding exp_def using assms by (auto simp add: worldline_inert_upd_def)
+          show ?thesis
+            unfolding Let_def * ** by auto
+        qed
+        also have "... =  snd (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig (get_time tw) dly (Lv x1a x2)) s' t'"
+          unfolding  VHDL_Hoare.worldline_inert_upd2.simps snd_conv fun_upd_def \<open>s' = sig\<close> by auto
+        finally show ?case 
+          by auto
+      qed
       ultimately have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
         by auto }
     moreover
     { assume "s' = sig'" hence "s' \<noteq> sig" using assms by auto
       hence "snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t'"
-        unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+        unfolding worldline_inert_upd2_def worldline_inert_upd_def 
+        apply (induction v)
+         apply (induction v')
+          apply (simp add: worldline_inert_upd_def)
+         apply (simp add: worldline_inert_upd_def)
+        apply (induction v')
+          apply (simp add: worldline_inert_upd_def)
+         apply (simp add: worldline_inert_upd_def)
+        done
       moreover have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' =  snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t'"
-        using `s' = sig'` `s' \<noteq> sig` unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+        using `s' = sig'` `s' \<noteq> sig` unfolding worldline_inert_upd2_def worldline_inert_upd_def 
+      proof (induction v)
+        case (Bv x)
+        then show ?case 
+        proof (induction v')
+          case (Bv x')
+          then show ?case 
+            using \<open>s' \<noteq> sig\<close>
+            unfolding snd_conv fst_conv VHDL_Hoare.worldline_inert_upd2.simps \<open>s' = sig'\<close> 
+            worldline_inert_upd_def by auto
+        next
+          case (Lv sign bs)
+          define exp where "exp = (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig (get_time tw) dly (Bv x))"
+          hence "snd (VHDL_Hoare.worldline_inert_upd2 (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig (get_time tw) dly (Bv x)) sig' (get_time tw) dly' (Lv sign bs)) s' t' = 
+                 snd (VHDL_Hoare.worldline_inert_upd2 exp sig' (get_time tw) dly' (Lv sign bs)) s' t'"
+            by auto
+          also have "... = ((snd exp) (sig' := \<lambda>n. let w' = \<lambda>b. snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs ! b)];
+                                                        time =
+                                                          if \<exists>n>get_time tw. n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                                                          then LEAST n.
+                                                                  get_time tw < n \<and> n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                                                          else get_time tw + dly'
+                                                    in if n < get_time tw then snd exp sig' n
+                                                       else if n < time then snd exp sig' (get_time tw)
+                                                            else Lv sign
+                                                                  (map (\<lambda>b. bval_of (snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs ! b)] sig' n))
+                                                                    [0..<length bs])))
+                                             s' t'"
+            unfolding VHDL_Hoare.worldline_inert_upd2.simps snd_conv by auto
+          also have "... = (let w' = \<lambda>b. snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                    then LEAST n.
+                            get_time tw < n \<and> n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                    else get_time tw + dly'
+              in if t' < get_time tw then snd exp sig' t'
+                 else if t' < time then snd exp sig' (get_time tw)
+                      else Lv sign
+                            (map (\<lambda>b. bval_of (snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs ! b)] sig' t'))
+                              [0..<length bs]))"
+            unfolding `s' = sig'` fun_upd_def by auto
+          also have "... = (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig' b[sig', get_time tw, dly' := Bv (bs ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                    then LEAST n.
+                            get_time tw < n \<and> n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                    else get_time tw + dly'
+              in if t' < get_time tw then snd (snd tw) sig' t'
+                 else if t' < time then snd (snd tw) sig' (get_time tw)
+                      else Lv sign
+                            (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig' b[sig', get_time tw, dly' := Bv (bs ! b)] sig' t'))
+                              [0..<length bs]))"
+          proof -
+            have "\<And>b k. ((snd exp)(sig' := to_bit b \<circ> snd exp sig')) sig' k = ((snd (snd tw))(sig' := to_bit b \<circ> snd (snd tw) sig')) sig' k"
+              unfolding exp_def apply auto 
+              using assms unfolding worldline_inert_upd_def snd_conv by auto
+            hence *: "\<And>b . snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs ! b)] sig'  = 
+                         snd to_worldline_init_bit (snd tw) sig' b[sig', get_time tw, dly' := Bv (bs ! b)] sig' "
+              unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+            have **: "snd exp sig' = snd (snd tw) sig' "
+              unfolding exp_def using assms by (auto simp add: worldline_inert_upd_def)
+            show ?thesis
+              unfolding Let_def * ** by auto
+          qed
+          also have "... = snd (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig' (get_time tw) dly' (Lv sign bs)) s' t'"
+              unfolding VHDL_Hoare.worldline_inert_upd2.simps snd_conv `s' = sig'` fun_upd_def Let_def by auto
+          finally show ?case
+            unfolding snd_conv fst_conv by auto
+        qed
+      next
+        case (Lv sign bs)
+        then show ?case  
+        proof (induction v')
+          case (Bv x')
+          then show ?case 
+            using \<open>s' \<noteq> sig\<close>
+            unfolding snd_conv fst_conv VHDL_Hoare.worldline_inert_upd2.simps \<open>s' = sig'\<close> 
+            worldline_inert_upd_def by auto
+        next
+          case (Lv sign' bs')
+          define exp where "exp = (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig (get_time tw) dly (Lv sign bs))"
+          hence "snd (VHDL_Hoare.worldline_inert_upd2 (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig (get_time tw) dly (Lv sign bs)) sig' (get_time tw) dly' (Lv sign' bs')) s' t' = 
+                 snd (VHDL_Hoare.worldline_inert_upd2 exp sig' (get_time tw) dly' (Lv sign' bs')) s' t'"
+            by auto
+          also have "... = ((snd exp) (sig' := \<lambda>n. let w' = \<lambda>b. snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs' ! b)];
+                                                        time =
+                                                          if \<exists>n>get_time tw. n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs']. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                                                          then LEAST n.
+                                                                  get_time tw < n \<and> n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs']. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                                                          else get_time tw + dly'
+                                                    in if n < get_time tw then snd exp sig' n
+                                                       else if n < time then snd exp sig' (get_time tw)
+                                                            else Lv sign'
+                                                                  (map (\<lambda>b. bval_of (snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs' ! b)] sig' n))
+                                                                    [0..<length bs'])))
+                                             s' t'"
+            unfolding VHDL_Hoare.worldline_inert_upd2.simps snd_conv by auto
+          also have "... = (let w' = \<lambda>b. snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs' ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs']. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                    then LEAST n.
+                            get_time tw < n \<and> n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs']. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                    else get_time tw + dly'
+              in if t' < get_time tw then snd exp sig' t'
+                 else if t' < time then snd exp sig' (get_time tw)
+                      else Lv sign'
+                            (map (\<lambda>b. bval_of (snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs' ! b)] sig' t'))
+                              [0..<length bs']))"
+            unfolding `s' = sig'` fun_upd_def by auto
+          also have "... = (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig' b[sig', get_time tw, dly' := Bv (bs' ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs']. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                    then LEAST n.
+                            get_time tw < n \<and> n \<le> get_time tw + dly' \<and> (\<exists>b\<in>set [0..<length bs']. w' b sig' (n - 1) \<noteq> w' b sig' n)
+                    else get_time tw + dly'
+              in if t' < get_time tw then snd (snd tw) sig' t'
+                 else if t' < time then snd (snd tw) sig' (get_time tw)
+                      else Lv sign'
+                            (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig' b[sig', get_time tw, dly' := Bv (bs' ! b)] sig' t'))
+                              [0..<length bs']))"
+          proof -
+            have "\<And>b k. ((snd exp)(sig' := to_bit b \<circ> snd exp sig')) sig' k = ((snd (snd tw))(sig' := to_bit b \<circ> snd (snd tw) sig')) sig' k"
+              unfolding exp_def apply auto 
+              using assms unfolding worldline_inert_upd_def snd_conv by auto
+            hence *: "\<And>b . snd to_worldline_init_bit exp sig' b[sig', get_time tw, dly' := Bv (bs' ! b)] sig'  = 
+                         snd to_worldline_init_bit (snd tw) sig' b[sig', get_time tw, dly' := Bv (bs' ! b)] sig' "
+              unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+            have **: "snd exp sig' = snd (snd tw) sig' "
+              unfolding exp_def using assms by (auto simp add: worldline_inert_upd_def)
+            show ?thesis
+              unfolding Let_def * ** by auto
+          qed
+          also have "... = snd (VHDL_Hoare.worldline_inert_upd2 (snd tw) sig' (get_time tw) dly' (Lv sign' bs')) s' t'"
+              unfolding VHDL_Hoare.worldline_inert_upd2.simps snd_conv `s' = sig'` fun_upd_def Let_def by auto
+          finally show ?case
+            unfolding snd_conv fst_conv by auto
+        qed
+      qed
       ultimately have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
         by auto } 
     ultimately show "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>) s' t' = snd (snd tw\<lbrakk> sig', dly' :=\<^sub>2 v'\<rbrakk>\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
@@ -223,41 +572,111 @@ lemma switch_worldline_inert_non_inert:
   apply (rule)
    apply (simp add: fst_worldline_inert_upd2)
   apply (rule)
-   apply (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-proof (rule ext)+
-  fix s' t'
-  have "s' \<noteq> sig' \<and> s' \<noteq> sig \<or> s' = sig \<or> s' = sig'"
-    by auto  
-  moreover
-  { assume "s' \<noteq> sig' \<and> s' \<noteq> sig"
-    hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw) s' t'"
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    also have "... = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      using `s' \<noteq> sig' \<and> s' \<noteq> sig` 
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      by auto }
-  moreover
-  { assume "s' = sig" hence "s' \<noteq> sig'" using assms by auto
-    hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    also have "... = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      using `s' = sig` `s' \<noteq> sig'`
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      by auto }
-  moreover
-  { assume "s' = sig'" hence "s' \<noteq> sig" using assms by auto
-    hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']) s' t'"
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    also have "... = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      using `s' \<noteq> sig` `s' = sig'`
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      by auto }
-  ultimately show "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-    by auto
-qed
+  subgoal
+  proof (induction v)
+    case (Bv x)
+    then show ?case 
+      by (auto simp add: worldline_inert_upd2_def  worldline_inert_upd_def worldline_upd2_def worldline_upd_def)
+  next
+    case (Lv x1a x2)
+    then show ?case 
+      by (auto simp add: worldline_inert_upd2_def  worldline_inert_upd_def worldline_upd2_def worldline_upd_def)
+  qed
+  subgoal
+  proof (rule ext)+
+    fix s' t'
+    have "s' \<noteq> sig' \<and> s' \<noteq> sig \<or> s' = sig \<or> s' = sig'"
+      by auto  
+    moreover
+    { assume "s' \<noteq> sig' \<and> s' \<noteq> sig"
+      hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw) s' t'"
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      also have "... = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        using `s' \<noteq> sig' \<and> s' \<noteq> sig` 
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto }
+    moreover
+    { assume "s' = sig" hence "s' \<noteq> sig'" using assms by auto
+      hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      also have "... = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        using `s' = sig` `s' \<noteq> sig'`
+      proof (induction v)
+        case (Bv x)
+        then show ?case 
+          unfolding worldline_upd2_def worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps snd_conv fst_conv
+          worldline_upd_def worldline_inert_upd_def by auto
+      next
+        case (Lv x1a x2)
+        have " (snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 Lv x1a x2\<rbrakk>) s' t') = 
+              (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw[ sig', dly' :=\<^sub>2 v']) sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                    time =
+                      if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                      then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n) else get_time tw + dly
+                in if t' < get_time tw then snd (snd tw[ sig', dly' :=\<^sub>2 v']) sig t'
+                   else if t' < time then snd (snd tw[ sig', dly' :=\<^sub>2 v']) sig (get_time tw)
+                        else Lv x1a (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw[ sig', dly' :=\<^sub>2 v']) sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig t')) [0..<length x2]))"
+          unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps \<open>s' = sig\<close> snd_conv
+            fun_upd_def fst_worldline_upd2 by auto
+        also have "... = 
+              (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                    time =
+                      if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                      then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n) else get_time tw + dly
+                in if t' < get_time tw then snd (snd tw) sig t'
+                   else if t' < time then snd (snd tw) sig (get_time tw)
+                        else Lv x1a (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig t')) [0..<length x2]))"
+        proof -
+          let ?w1 = "\<lambda>b. snd to_worldline_init_bit (snd tw[ sig', dly' :=\<^sub>2 v']) sig b[sig, get_time tw, dly := Bv (x2 ! b)]"
+          let ?w2 = "\<lambda>b. snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)]"
+          have *: "\<And>k b. ?w1 b sig k = ?w2 b sig k"
+            using assms unfolding to_worldline_init_bit_def snd_conv fst_conv worldline_inert_upd_def
+            worldline_upd2_def fun_upd_def worldline_upd_def by auto
+          have **: "snd (snd tw[ sig', dly' :=\<^sub>2 v']) sig t' = snd (snd tw) sig t'"
+            unfolding worldline_upd2_def worldline_upd_def using assms by auto
+          have ***: " snd (snd tw[ sig', dly' :=\<^sub>2 v']) sig (get_time tw) =  snd (snd tw) sig (get_time tw)"
+            unfolding worldline_upd2_def worldline_upd_def using assms by auto
+          show ?thesis
+            unfolding Let_def * ** *** by auto
+        qed
+        finally have h: "(snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 Lv x1a x2\<rbrakk>) s' t') = 
+              (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                    time =
+                      if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                      then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n) else get_time tw + dly
+                in if t' < get_time tw then snd (snd tw) sig t'
+                   else if t' < time then snd (snd tw) sig (get_time tw)
+                        else Lv x1a (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig t')) [0..<length x2]))"
+          by auto
+        have h': "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 Lv x1a x2\<rbrakk>) s' t' = 
+  (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)];
+                    time =
+                      if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n)
+                      then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig (n - 1) \<noteq> w' b sig n) else get_time tw + dly
+                in if t' < get_time tw then snd (snd tw) sig t'
+                   else if t' < time then snd (snd tw) sig (get_time tw)
+                        else Lv x1a (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig b[sig, get_time tw, dly := Bv (x2 ! b)] sig t')) [0..<length x2]))"
+          unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps \<open>s' = sig\<close> snd_conv
+            fun_upd_def fst_worldline_upd2 by auto
+        show ?case 
+          unfolding h h' by auto
+      qed
+      finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto }
+    moreover
+    { assume "s' = sig'" hence "s' \<noteq> sig" using assms by auto
+      hence "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']) s' t'"
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      also have "... = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        using `s' \<noteq> sig` `s' = sig'`
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      finally have "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto }
+    ultimately show "snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>[ sig', dly' :=\<^sub>2 v']) s' t' = snd (snd tw[ sig', dly' :=\<^sub>2 v']\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto
+  qed
+  done
 
 lemma switch_worldline_inert_non_inert3:
   assumes "sig1 \<noteq> sig2" and "sig2 \<noteq> sig3" and "sig1 \<noteq> sig3"
@@ -266,55 +685,134 @@ lemma switch_worldline_inert_non_inert3:
   apply (rule)
    apply (simp add: fst_worldline_inert_upd2)
   apply (rule)
-   apply (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-proof (rule ext)+
-  fix s' t'
-  have "s' \<noteq> sig1 \<and> s' \<noteq> sig2 \<and> s' \<noteq> sig3 \<or> s' = sig1 \<or> s' = sig2 \<or> s' = sig3"
-    by auto
-  moreover
-  { assume "s' \<noteq> sig1 \<and> s' \<noteq> sig2 \<and> s' \<noteq> sig3"
-    hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw) s' t'"
-      by (auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      using `s' \<noteq> sig1 \<and> s' \<noteq> sig2 \<and> s' \<noteq> sig3`
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
-                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      by auto }
-  moreover
-  { assume "s' = sig1" hence "s' \<noteq> sig2" and "s' \<noteq> sig3" using assms by auto
-    hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      by (auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      using `s' = sig1` `s' \<noteq> sig2`  `s' \<noteq> sig3`
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
-                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      by auto }
-  moreover
-  { assume "s' = sig2" hence "s' \<noteq> sig1" and "s' \<noteq> sig3" using assms by auto
-    hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2]) s' t'"
-      by (auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      using `s' = sig2` `s' \<noteq> sig1`  `s' \<noteq> sig3`
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
-                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      by auto }
-  moreover
-  { assume "s' = sig3" hence "s' \<noteq> sig1" and "s' \<noteq> sig2" using assms by auto
-    hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw[ sig3, dly3 :=\<^sub>2 v3]) s' t'"
-      by (auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      using `s' = sig3` `s' \<noteq> sig1`  `s' \<noteq> sig2`
-      by (simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
-    finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
-                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-      by auto }
-  ultimately show "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
-                  snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
-    by auto 
-qed
+  subgoal
+  proof (induction v)
+    case (Bv x)
+    then show ?case 
+      by (auto simp add: worldline_inert_upd2_def  worldline_inert_upd_def worldline_upd2_def worldline_upd_def)
+  next
+    case (Lv x1a x2)
+    then show ?case 
+      by (auto simp add: worldline_inert_upd2_def  worldline_inert_upd_def worldline_upd2_def worldline_upd_def)
+  qed
+  subgoal
+  proof (rule ext)+
+    fix s' t'
+    have "s' \<noteq> sig1 \<and> s' \<noteq> sig2 \<and> s' \<noteq> sig3 \<or> s' = sig1 \<or> s' = sig2 \<or> s' = sig3"
+      by auto
+    moreover
+    { assume "s' \<noteq> sig1 \<and> s' \<noteq> sig2 \<and> s' \<noteq> sig3"
+      hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw) s' t'"
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        using `s' \<noteq> sig1 \<and> s' \<noteq> sig2 \<and> s' \<noteq> sig3`
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                    snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto }
+    moreover
+    { assume "s' = sig1" hence "s' \<noteq> sig2" and "s' \<noteq> sig3" using assms by auto
+      hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by (auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        using `s' = sig1` `s' \<noteq> sig2`  `s' \<noteq> sig3`
+      proof (induction v)
+        case (Bv x)
+        then show ?case 
+          unfolding worldline_upd2_def worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps snd_conv fst_conv
+          worldline_upd_def worldline_inert_upd_def by auto
+      next
+        case (Lv x1a x2)
+        have "snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 Lv x1a x2\<rbrakk>) s' t' = 
+              (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) sig1
+                                b[sig1, get_time tw, dly := Bv (x2 ! b)];
+                  time =
+                    if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig1 (n - 1) \<noteq> w' b sig1 n)
+                    then LEAST n.
+                            get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig1 (n - 1) \<noteq> w' b sig1 n)
+                    else get_time tw + dly
+              in if t' < get_time tw then snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) sig1 t'
+                 else if t' < time then snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) sig1 (get_time tw)
+                      else Lv x1a
+                            (map (\<lambda>b. bval_of
+                                       (snd to_worldline_init_bit (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) sig1
+                                             b[sig1, get_time tw, dly := Bv (x2 ! b)]
+                                         sig1 t'))
+                              [0..<length x2]))"
+          unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps \<open>s' = sig1\<close> snd_conv
+            fun_upd_def fst_worldline_upd2 by auto
+        also have "... = 
+              (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig1 b[sig1, get_time tw, dly := Bv (x2 ! b)];
+                    time =
+                      if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig1 (n - 1) \<noteq> w' b sig1 n)
+                      then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig1 (n - 1) \<noteq> w' b sig1 n) else get_time tw + dly
+                in if t' < get_time tw then snd (snd tw) sig1 t'
+                   else if t' < time then snd (snd tw) sig1 (get_time tw)
+                        else Lv x1a (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig1 b[sig1, get_time tw, dly := Bv (x2 ! b)] sig1 t')) [0..<length x2]))"
+        proof -
+          let ?w1 = "\<lambda>b.  snd to_worldline_init_bit (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) sig1
+                       b[sig1, get_time tw, dly := Bv (x2 ! b)]"
+          let ?w2 = "\<lambda>b. snd to_worldline_init_bit (snd tw) sig1 b[sig1, get_time tw, dly := Bv (x2 ! b)]"
+          have *: "\<And>k b. ?w1 b sig1 k = ?w2 b sig1 k"
+            using assms unfolding to_worldline_init_bit_def snd_conv fst_conv worldline_inert_upd_def
+            worldline_upd2_def fun_upd_def worldline_upd_def by auto
+          have **: "snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) sig1 t' = snd (snd tw) sig1 t'"
+            unfolding worldline_upd2_def worldline_upd_def using assms by auto
+          have *** : "snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) sig1 (get_time tw) = snd (snd tw) sig1 (get_time tw)"
+            unfolding worldline_upd2_def worldline_upd_def using assms by auto
+          show ?thesis
+            unfolding Let_def * ** *** by auto
+        qed         
+        finally have h: "snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 Lv x1a x2\<rbrakk>) s' t' = 
+(let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig1 b[sig1, get_time tw, dly := Bv (x2 ! b)];
+                    time =
+                      if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig1 (n - 1) \<noteq> w' b sig1 n)
+                      then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig1 (n - 1) \<noteq> w' b sig1 n) else get_time tw + dly
+                in if t' < get_time tw then snd (snd tw) sig1 t'
+                   else if t' < time then snd (snd tw) sig1 (get_time tw)
+                        else Lv x1a (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig1 b[sig1, get_time tw, dly := Bv (x2 ! b)] sig1 t')) [0..<length x2]))"
+          by auto
+        have h': "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 Lv x1a x2\<rbrakk>) s' t' = 
+  (let w' = \<lambda>b. snd to_worldline_init_bit (snd tw) sig1 b[sig1, get_time tw, dly := Bv (x2 ! b)];
+                    time =
+                      if \<exists>n>get_time tw. n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig1 (n - 1) \<noteq> w' b sig1 n)
+                      then LEAST n. get_time tw < n \<and> n \<le> get_time tw + dly \<and> (\<exists>b\<in>set [0..<length x2]. w' b sig1 (n - 1) \<noteq> w' b sig1 n) else get_time tw + dly
+                in if t' < get_time tw then snd (snd tw) sig1 t'
+                   else if t' < time then snd (snd tw) sig1 (get_time tw)
+                        else Lv x1a (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) sig1 b[sig1, get_time tw, dly := Bv (x2 ! b)] sig1 t')) [0..<length x2]))"
+          unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps \<open>s' = sig1\<close> snd_conv
+            fun_upd_def fst_worldline_upd2 by auto
+        show ?case
+          unfolding h h' by auto
+      qed
+      finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                    snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto }
+    moreover
+    { assume "s' = sig2" hence "s' \<noteq> sig1" and "s' \<noteq> sig3" using assms by auto
+      hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2]) s' t'"
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        using `s' = sig2` `s' \<noteq> sig1`  `s' \<noteq> sig3`
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                    snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto }
+    moreover
+    { assume "s' = sig3" hence "s' \<noteq> sig1" and "s' \<noteq> sig2" using assms by auto
+      hence "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = snd (snd tw[ sig3, dly3 :=\<^sub>2 v3]) s' t'"
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      also have "... = snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        using `s' = sig3` `s' \<noteq> sig1`  `s' \<noteq> sig2`
+        by (induction v)(auto simp add: worldline_upd2_def worldline_upd_def worldline_inert_upd2_def worldline_inert_upd_def)
+      finally have "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                    snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+        by auto }
+    ultimately show "snd (snd tw\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]) s' t' = 
+                    snd (snd tw[ sig2, dly2 :=\<^sub>2 v2][ sig3, dly3 :=\<^sub>2 v3]\<lbrakk> sig1, dly :=\<^sub>2 v\<rbrakk>) s' t'"
+      by auto 
+  qed
+  done
 
 definition beval_world_raw2 :: "nat \<times> 'signal worldline_init \<Rightarrow> 'signal bexp \<Rightarrow> val \<Rightarrow> bool" where
   "beval_world_raw2 \<equiv> \<lambda>tw exp. beval_world_raw (snd tw) (fst tw) exp"
@@ -1127,6 +1625,150 @@ proof -
     by (meson \<open>\<And>n. to_trans_raw_sig (purge_raw \<tau>1 t dly sig def val) s n = to_trans_raw_sig \<tau>1 s n\<close> signal_of_equal_when_trans_sig_equal_upto)
 qed
 
+lemma non_stut_unique:
+  assumes "\<And>s. non_stuttering (to_trans_raw_sig \<tau>1) \<sigma> s"
+  assumes "\<And>s. non_stuttering (to_trans_raw_sig \<tau>2) \<sigma> s"
+  assumes "\<And>k s. signal_of (\<sigma> s) \<tau>1 s k = signal_of (\<sigma> s) \<tau>2 s k"
+  shows   "\<And>k s. k \<le> time \<Longrightarrow> \<tau>1 k s = \<tau>2 k s"
+  using assms
+proof (induction time)
+  case 0
+  hence "k = 0"
+    by auto
+  obtain v where  "\<tau>1 0 s = None \<or> \<tau>1 0 s = Some v"
+    by (meson not_Some_eq)
+  moreover
+  { assume "\<tau>1 0 s = None"
+    hence "signal_of (\<sigma> s) \<tau>2 s 0 = (\<sigma> s)"
+      using assms(3)  by (metis signal_of_zero zero_option_def)
+    obtain v' where "\<tau>2 0 s = None \<or> \<tau>2 0 s = Some v'"
+      by (meson not_Some_eq)
+    moreover
+    { assume "\<tau>2 0 s = None"
+      hence ?case
+        using \<open>\<tau>1 0 s = None\<close> unfolding \<open>k = 0\<close> by auto }
+    moreover  
+    { assume "\<tau>2 0 s = Some v'"
+      have "v' \<noteq> \<sigma> s"
+        using assms(2) unfolding non_stuttering_def 
+        by (metis Least_eq_0 \<open>\<tau>2 0 s = Some v'\<close> equals0D inf_time_some_exists option.sel some_inf_time' to_trans_raw_sig_def)
+      have "signal_of (\<sigma> s) \<tau>2 s 0 = v'"
+        by (metis (no_types, hide_lams) \<open>\<tau>2 0 s = Some v'\<close> le_zero_eq option.distinct(1) option.sel signal_of_elim to_trans_raw_sig_def)
+      hence False
+        using \<open>signal_of (\<sigma> s) \<tau>2 s 0 = (\<sigma> s)\<close> \<open>v' \<noteq> \<sigma> s\<close> by blast 
+      hence ?case
+        by auto }
+    ultimately have ?case
+      by auto }
+  moreover
+  { assume "\<tau>1 0 s = Some v"
+    hence "signal_of (\<sigma> s) \<tau>1 s 0 = v"
+      by (metis comp_apply domIff inf_time_someI option.discI option.sel option.simps(5) order_refl to_signal_def to_trans_raw_sig_def)
+    hence "signal_of (\<sigma> s) \<tau>2 s 0 = v"
+      using assms(3) by auto
+    obtain v' where "\<tau>2 0 s = None \<or> \<tau>2 0 s = Some v'"
+      by (meson not_Some_eq)
+    moreover
+    { assume "\<tau>2 0 s = Some v'"
+      hence "v' = v"
+        by (metis (mono_tags, hide_lams) \<open>signal_of (\<sigma> s) \<tau>1 s 0 = v\<close> assms(3) le_zero_eq option.discI option.inject signal_of_elim to_trans_raw_sig_def)
+      hence ?case
+        by (simp add: \<open>\<tau>1 0 s = Some v\<close> \<open>\<tau>2 0 s = Some v'\<close> \<open>k = 0\<close>) }
+    moreover
+    { assume "\<tau>2 0 s = None"
+      hence "\<sigma> s = v"
+        by (metis \<open>signal_of (\<sigma> s) \<tau>2 s 0 = v\<close> signal_of_zero zero_option_def)
+      moreover have "\<sigma> s \<noteq> v"
+        using \<open>\<tau>1 0 s = Some v\<close> assms(1) unfolding non_stuttering_def 
+        by (metis Least_eq_0 all_not_in_conv inf_time_some_exists option.sel some_inf_time' to_trans_raw_sig_def)
+      ultimately have False
+        by auto
+      hence ?case
+        by auto }
+    ultimately have ?case
+      by auto }
+  ultimately show ?case 
+    by auto
+next
+  case (Suc time)
+  hence "\<And>k s. k \<le> time \<Longrightarrow> \<tau>1 k s = \<tau>2 k s"
+    by auto
+  have "k \<le> time \<or> k = Suc time"
+    using Suc by auto
+  moreover
+  { assume "k \<le> time"
+    hence ?case
+      using \<open>\<And>k s. k \<le> time \<Longrightarrow> \<tau>1 k s = \<tau>2 k s\<close> by auto }
+  moreover
+  { assume "k = Suc time"
+    obtain v where "\<tau>1 (Suc time) s = None \<or> \<tau>1 (Suc time) s = Some v"
+      by (meson not_Some_eq)
+    moreover
+    { assume "\<tau>1 (Suc time) s = None"
+      hence "signal_of (\<sigma> s) \<tau>1 s (Suc time) = signal_of (\<sigma> s) \<tau>1 s time"
+        by (metis signal_of_suc_sig zero_option_def)
+      also have "... = signal_of (\<sigma> s) \<tau>2 s time"
+        using assms(3) by auto
+      finally have "signal_of (\<sigma> s) \<tau>1 s (Suc time) = signal_of (\<sigma> s) \<tau>2 s (time)"
+        by auto
+
+      obtain v' where "\<tau>2 (Suc time) s = None \<or> \<tau>2 (Suc time) s = Some v'"
+        by (meson not_Some_eq)
+      moreover
+      { assume "\<tau>2 (Suc time) s = None"
+        hence ?case
+          using \<open>\<tau>1 (Suc time) s = None\<close> \<open>k = Suc time\<close> by auto }
+      moreover
+      { assume "\<tau>2 (Suc time) s = Some v'"
+        hence False
+          by (metis \<open>signal_of (\<sigma> s) \<tau>1 s (Suc time) = signal_of (\<sigma> s) \<tau>2 s time\<close> assms(2) assms(3) current_sig_and_prev_same diff_Suc_1 option.discI zero_less_Suc zero_option_def)
+        hence ?case 
+          by auto }
+      ultimately have ?case
+        by auto }
+    moreover
+    { assume "\<tau>1 (Suc time) s = Some v"
+      hence "signal_of (\<sigma> s) \<tau>1 s (Suc time) = v"
+        by (metis comp_apply domIff inf_time_someI option.case(2) option.discI option.sel order_refl to_signal_def to_trans_raw_sig_def)
+      hence "signal_of (\<sigma> s) \<tau>2 s (Suc time) = v"
+        using assms(3) by auto
+      obtain v' where "\<tau>2 (Suc time) s = None \<or> \<tau>2 (Suc time) s = Some v'"
+        by (meson not_Some_eq)
+      moreover
+      { assume "\<tau>2 (Suc time) s = Some v'"
+        hence "signal_of (\<sigma> s) \<tau>2 s (Suc time) = v'"
+          by (metis comp_apply domIff inf_time_someI option.case(2) option.discI option.sel order_refl to_signal_def to_trans_raw_sig_def)
+        with `signal_of (\<sigma> s) \<tau>2 s (Suc time) = v` have "v = v'"
+          by auto
+        hence ?case
+          by (simp add: \<open>\<tau>1 (Suc time) s = Some v\<close> \<open>\<tau>2 (Suc time) s = Some v'\<close> \<open>k = Suc time\<close>) }
+      moreover
+      { assume "\<tau>2 (Suc time) s = None"
+        hence "signal_of (\<sigma> s) \<tau>2 s (Suc time) = signal_of (\<sigma> s) \<tau>2 s time"
+          by (metis signal_of_suc_sig zero_option_def)
+        also have "... = signal_of (\<sigma> s) \<tau>1 s time"
+          using assms(3) by auto
+        finally have "signal_of (\<sigma> s) \<tau>2 s (Suc time) = signal_of (\<sigma> s) \<tau>1 s (time)"
+          by auto        
+        with \<open>\<tau>1 (Suc time) s = Some v\<close> have False
+          by (metis \<open>signal_of (\<sigma> s) \<tau>1 s (Suc time) = v\<close> \<open>signal_of (\<sigma> s) \<tau>2 s (Suc time) = v\<close> assms(1) current_sig_and_prev_same diff_Suc_1 option.discI zero_less_Suc zero_option_def)
+        hence ?case
+          by auto }
+      ultimately have ?case
+        by auto }
+    ultimately have ?case
+      by auto }
+  ultimately show ?case 
+    by auto
+qed
+
+lemma non_stut_unique': 
+  assumes "\<And>s. non_stuttering (to_trans_raw_sig \<tau>1) \<sigma> s"
+  assumes "\<And>s. non_stuttering (to_trans_raw_sig \<tau>2) \<sigma> s"
+  assumes "\<And>k s. signal_of (\<sigma> s) \<tau>1 s k = signal_of (\<sigma> s) \<tau>2 s k"
+  shows   " \<tau>1 = \<tau>2 "
+  using  non_stut_unique [OF assms] by blast
+
 lemma helper':
   assumes "t, \<sigma>, \<gamma>, \<theta>1, def \<turnstile> < ss, \<tau>1> \<longrightarrow>\<^sub>s \<tau>1'"
   assumes "\<And>k s. signal_of (def s) \<theta>1 s k = signal_of (def s) \<theta>2 s k"
@@ -1225,225 +1867,16 @@ next
   case (6 t \<sigma> \<gamma> \<theta> def e x sig \<tau>1 dly \<tau>1')
   hence "beval_raw t \<sigma> \<gamma> \<theta>2 def e x"
     using beval_cong by metis
-  have tau1: "\<tau>1' = inr_post_raw sig x (\<sigma> sig) \<tau>1 t dly"
+  have tau1: "\<tau>1' = inr_post_raw' sig x (\<sigma> sig) \<tau>1 t dly"
     using beval_raw_deterministic  using "6.hyps"(2) by blast
-  have tau2:  "\<tau>2' = inr_post_raw sig x (\<sigma> sig) \<tau>2 t dly"
+  have tau2:  "\<tau>2' = inr_post_raw' sig x (\<sigma> sig) \<tau>2 t dly"
     using `beval_raw t \<sigma> \<gamma> \<theta>2 def e x`  beval_raw_deterministic
     by (metis "6.prems"(3) seq_cases_inert)
-  have "s \<noteq> sig \<or> s = sig"
-    by auto
-  moreover
-  { assume "s \<noteq> sig"
-    hence ?case
-      unfolding tau1 tau2
-      by (metis "6.prems"(2) inr_post_raw_def signal_of_purge_not_affected signal_of_trans_post) }
-  moreover
-  { assume "s = sig"
-    have "signal_of (\<sigma> s) \<tau>1 s t \<noteq> x \<and> signal_of (\<sigma> s) \<tau>1 s (t + dly) = x
-        \<or> (signal_of (\<sigma> s) \<tau>1 s t = x \<or> signal_of (\<sigma> s) \<tau>1 s (t + dly) \<noteq> x)" (is "?earlier \<or> ?later")
-      by auto
-    moreover
-    { assume "?earlier"
-      hence earlier': "signal_of (\<sigma> s) \<tau>2 s t \<noteq> x" and "signal_of (\<sigma> s) \<tau>2  s (t + dly) = x"
-        using "6.prems"(2) apply blast
-        using "6.prems"(2) \<open>signal_of (\<sigma> s) \<tau>1 s t \<noteq> x \<and> signal_of (\<sigma> s) \<tau>1 s (t + dly) = x\<close> by auto
-      hence "\<exists>n>t. n \<le> t + dly \<and> \<tau>2 n s = Some x"
-        using switch_signal_ex_mapping[of "\<sigma>", OF earlier']
-        by (simp add: "6.prems"(5) zero_fun_def)
-      have "\<exists>n > t. n \<le> t + dly \<and> \<tau>1 n s = Some x"
-        by (metis "6.prems"(4) \<open>signal_of (\<sigma> s) \<tau>1 s t \<noteq> x \<and> signal_of (\<sigma> s) \<tau>1 s (t + dly) = x\<close>
-        switch_signal_ex_mapping zero_fun_def)
-      let ?time = "GREATEST n. n \<le> t + dly \<and> \<tau>1 n s = Some x"
-      let ?time2 = "GREATEST n. n \<le> t + dly \<and> \<tau>2 n s = Some x"
-      have "?time \<le> ?time2"
-      proof (rule Greatest_le_nat[where b="t + dly"])
-        have "?time \<le> t + dly" and "\<tau>1 ?time s = Some x"
-          using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau>1 n s = Some x" and b="t + dly"]
-          `\<exists>n > t. n \<le> t + dly \<and> \<tau>1 n s = Some x` by blast+
-        hence "0 < ?time"
-          by (metis (no_types, lifting) "6.prems"(4) gr_zeroI le_add2 le_add_same_cancel2
-          option.distinct(1) zero_fun_def zero_option_def)
-        have "\<tau>2 ?time s = Some x"
-        proof (rule ccontr)
-          assume "\<not> \<tau>2 ?time s = Some x"
-          then obtain x' where "\<tau>2 ?time s = None \<or> \<tau>2 ?time s = Some x' \<and> x' \<noteq> x"
-            using option.inject by fastforce
-          moreover
-          { assume "\<tau>2 ?time s = Some x' \<and> x' \<noteq> x"
-            hence "\<tau>2 ?time s = Some x'" and "x' \<noteq> x"
-              by auto
-            hence "signal_of (\<sigma> s) \<tau>2 s ?time = x'"
-              using trans_some_signal_of'[of "\<tau>2" "?time" "s" "(\<lambda>s. Bv False)(s := x')" "\<sigma> s"]
-              by auto
-            moreover have "signal_of (\<sigma> s) \<tau>1 s ?time = x"
-              using `\<tau>1 ?time s = Some x`  trans_some_signal_of'[of "\<tau>1" "?time" "s" "(\<lambda>s. Bv False)(s := x)" "\<sigma> s"]
-              by auto
-            ultimately have "False"
-              using "6.prems"(2) \<open>x' \<noteq> x\<close> by auto }
-          moreover
-          { assume "\<tau>2 ?time s = None"
-            hence "signal_of (\<sigma> s) \<tau>2 s ?time = signal_of (\<sigma> s) \<tau>2 s (?time - 1)"
-              by (metis (no_types, lifting) signal_of_less_sig zero_option_def)
-            also have "... = signal_of (\<sigma> s) \<tau>1 s (?time - 1)"
-              using "6.prems"(2) by auto
-            also have "... \<noteq> signal_of (\<sigma> s) \<tau>1 s ?time"
-            proof (rule ccontr)
-              assume "\<not> signal_of (\<sigma> s) \<tau>1 s (?time - 1) \<noteq> signal_of (\<sigma> s) \<tau>1 s ?time"
-              hence th: "signal_of (\<sigma> s) \<tau>1 s ?time = signal_of (\<sigma> s) \<tau>1 s (?time - 1)"
-                by auto
-              have "non_stuttering (to_trans_raw_sig \<tau>1) \<sigma> s"
-                by (simp add: "6.prems"(9))
-              hence "\<tau>1 ?time s = 0"
-                using current_sig_and_prev_same[where state="\<sigma>", OF th `0 < ?time`] by auto
-              with `\<tau>1 ?time s = Some x` show False
-                by (simp add: zero_option_def)
-            qed
-            finally have "signal_of (\<sigma> s) \<tau>2 s ?time \<noteq> signal_of (\<sigma> s) \<tau>1 s ?time"
-              by auto
-            hence False
-              using "6.prems"(2) by auto }
-          ultimately show False
-            by auto
-        qed
-        show "?time \<le> t + dly \<and> \<tau>2 ?time s = Some x"
-          using `?time \<le> t + dly`
-          using \<open>\<tau>2 (GREATEST n. n \<le> t + dly \<and> \<tau>1 n s = Some x) s = Some x\<close> by blast
-      next
-        show " \<forall>y. y \<le> t + dly \<and> \<tau>2 y s = Some x \<longrightarrow> y \<le> t + dly"
-          by auto
-      qed
-      have "?time2 \<le> ?time"
-      proof (rule Greatest_le_nat[where b= "t + dly"])
-        have "?time2 \<le> t + dly" and "\<tau>2 ?time2 s = Some x"
-          using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau>2 n s = Some x" and b="t + dly"]
-          `\<exists>n>t. n \<le> t + dly \<and> \<tau>2 n s = Some x`  by blast+
-        hence "signal_of (\<sigma> s) \<tau>2 s ?time2 = x"
-          using trans_some_signal_of' by fastforce
-        have "\<tau>1 ?time2 s = Some x"
-        proof (rule ccontr)
-          assume "\<not> \<tau>1 ?time2 s = Some x"
-          then obtain x' where "\<tau>1 ?time2 s = None \<or> \<tau>1 ?time2 s = Some x' \<and> x' \<noteq> x"
-            using option.inject  by fastforce
-          moreover
-          { assume "\<tau>1 ?time2 s = Some x' \<and> x' \<noteq> x"
-            hence "\<tau>1 ?time2 s  = Some x'" and "x' \<noteq> x"
-              by auto
-            hence "signal_of (\<sigma> s) \<tau>1 s ?time2 = x'"
-              using trans_some_signal_of'[of "\<tau>1" "?time2" "s" "(\<lambda>s. Bv False)(s := x')" "\<sigma> s"]
-              by simp
-            with `signal_of (\<sigma> s) \<tau>2 s ?time2 = x` have False
-              using \<open>x' \<noteq> x\<close> "6.prems"(2) by auto }
-          moreover
-          { assume "\<tau>1 ?time2 s = None"
-            hence "signal_of (\<sigma> s) \<tau>1 s ?time2 = signal_of (\<sigma> s) \<tau>1 s (?time2 - 1)"
-              by (metis (no_types, lifting) signal_of_less_sig zero_option_def)
-            also have "... = signal_of (\<sigma> s) \<tau>2 s (?time2 - 1)"
-              using "6.prems"(2) by blast
-            also have "... \<noteq> signal_of (\<sigma> s) \<tau>2 s ?time2"
-              using current_sig_and_prev_same
-              by (metis (mono_tags) "6.prems"(10) "6.prems"(5) \<open>\<tau>2 (GREATEST n. n \<le> t + dly \<and> \<tau>2 n s
-              = Some x) s = Some x\<close> not_gr_zero option.distinct(1) zero_fun_def zero_le
-              zero_option_def)
-            finally have "False"
-              using "6.prems"(2) by blast }
-          ultimately show False by auto
-        qed
-        thus "(GREATEST n. n \<le> t + dly \<and> \<tau>2 n s = Some x) \<le> t + dly \<and> \<tau>1 (GREATEST n. n \<le> t + dly \<and> \<tau>2 n s = Some x) s = Some x"
-          using \<open>(GREATEST n. n \<le> t + dly \<and> \<tau>2 n s = Some x) \<le> t + dly\<close> by auto
-      next
-        show "\<forall>y. y \<le> t + dly \<and> \<tau>1 y s = Some x \<longrightarrow> y \<le> t + dly"
-          by auto
-      qed
-      have "k < t \<or> t \<le> k \<and> k < ?time \<or> ?time \<le> k \<and> k < t + dly \<or> t + dly \<le> k"
-        by auto
-      moreover
-      { assume "k < t"
-        hence ?case
-          unfolding tau1 tau2
-          using signal_of_inr_post_before_now[OF `k < t`]
-          by (metis "6.prems"(4) "6.prems"(5) \<open>s = sig\<close> less_imp_le_nat) }
-      moreover
-      { assume "t \<le> k \<and> k < ?time"
-        moreover have "\<sigma> s \<noteq> x"
-          using `?earlier`
-          by (metis "6.prems"(4) signal_of_def zero_fun_def)
-        moreover have "signal_of (\<sigma> s) \<tau>1 s (t + dly) = x" and  "signal_of (\<sigma> s) \<tau>2 s (t + dly) = x"
-          using `?earlier` earlier' \<open>signal_of (\<sigma> s) \<tau>2 s (t + dly) = x\<close> by blast+
-        ultimately have "signal_of (\<sigma> s) (inr_post_raw s x (\<sigma> s) \<tau>1 t dly) s k = \<sigma> s"
-          unfolding tau1 apply (intro signal_of_inr_post2)
-          using "6.prems"(4) by blast+
-        moreover have "signal_of (\<sigma> s) (inr_post_raw s x (\<sigma> s) \<tau>2 t dly) s k = \<sigma> s"
-          unfolding tau2 using `t \<le> k \<and> k < ?time` `\<sigma> s \<noteq> x` `signal_of (\<sigma> s)
-          \<tau>2 s (t + dly) = x` "6.prems"(5) `t \<le> k \<and> k < ?time` `?time \<le> ?time2`
-          apply (intro signal_of_inr_post2)
-          using "6.prems"(5) by (linarith | blast)+
-        ultimately have ?case
-          unfolding tau1 tau2  by (simp add: \<open>s = sig\<close>) }
-      moreover
-      { assume "?time \<le> k \<and> k < t + dly"
-        have "signal_of (\<sigma> s) \<tau>1 s t \<noteq> x"
-          using `?earlier` by auto
-        moreover have "signal_of (\<sigma> s) \<tau>1 s (t + dly) = x"
-          using `?earlier` by auto
-        moreover have "?time \<le> k"
-          using `?time \<le> k \<and> k < t + dly` by auto
-        moreover have "\<And>n. n \<le> t \<Longrightarrow> \<tau>1 n = 0"
-          by (simp add: "6.prems"(4))
-        ultimately have "signal_of (\<sigma> s) (inr_post_raw sig x (\<sigma> sig) \<tau>1 t dly) s k = x"
-          unfolding `s = sig` by (intro signal_of_inr_post4)
-        have "signal_of (\<sigma> s) \<tau>2 s t \<noteq> x"
-          using earlier' by auto
-        moreover have "signal_of (\<sigma> s) \<tau>2 s (t + dly) = x"
-          using \<open>signal_of (\<sigma> s) \<tau>2 s (t + dly) = x\<close> by linarith
-        moreover have "?time2 \<le> k"
-          using `?time \<le> k \<and> k < t + dly` `?time2 \<le> ?time` by auto
-        moreover have "\<And>n. n \<le> t \<Longrightarrow> \<tau>2 n = 0"
-          by (simp add: "6.prems"(5))
-        ultimately have "signal_of (\<sigma> s) (inr_post_raw sig x (\<sigma> sig) \<tau>2 t dly) s k = x"
-          unfolding `s = sig` by (intro signal_of_inr_post4)
-        hence ?case
-          using \<open>signal_of (\<sigma> s) (inr_post_raw sig x (\<sigma> sig) \<tau>1 t dly) s k = x\<close> tau1 tau2
-          by auto }
-      moreover
-      { assume "t + dly \<le> k"
-        hence ?case
-          by (smt "6.prems"(4-5) Suc_leI \<open>\<exists>n>t. n \<le> t + dly \<and> \<tau>2 n s
-          = Some x\<close> \<open>s = sig\<close> leI le_trans less_add_same_cancel1 less_imp_le_nat not_less_eq_eq
-          signal_of_inr_post tau1 tau2) }
-      ultimately have ?case
-        by auto }
-    moreover
-    { assume "?later"
-      have "k < t \<or> t \<le> k \<and> k < t + dly \<or> t + dly \<le> k"
-        by auto
-      moreover
-      { assume "k < t"
-        hence ?case
-          unfolding tau1 tau2 using signal_of_inr_post_before_now[OF `k < t`]
-          by (metis "6.prems"(4) "6.prems"(5) \<open>s = sig\<close> less_imp_le_nat
-          signal_of_inr_post_before_now) }
-      moreover
-      { assume "t \<le> k \<and> k < t + dly"
-        hence "t \<le> k" and "k < t + dly"
-          by auto
-        have "signal_of (\<sigma> s) \<tau>1' s k = \<sigma> s"
-          unfolding tau1 using signal_of_inr_post3[OF `t \<le> k` `k < t + dly`] `?later` `s = sig`
-          by (metis (mono_tags, lifting) "6.prems"(4))
-        also have "... = signal_of (\<sigma> s) \<tau>2' s k"
-          unfolding tau2 using signal_of_inr_post3[OF `t \<le> k` `k < t + dly`] `?later` `s = sig`
-          by (metis (mono_tags, lifting) "6.prems")
-        finally have ?case
-          by auto }
-      moreover
-      { assume "t + dly \<le> k"
-        have ?case
-          unfolding tau1 tau2 using signal_of_inr_post[OF `t + dly \<le> k`] `s = sig`
-          by (metis "6.prems" less_imp_le_nat nonneg_delay.simps(5)) }
-      ultimately have ?case
-        by auto }
-    ultimately have ?case
-      by auto }
-  ultimately show ?case
+  have "\<tau>1 = \<tau>2"
+    using non_stut_unique' using 6(11-12) 6(4) by blast
+  hence "\<tau>1' = \<tau>2'"
+    unfolding tau1 tau2 by auto
+  thus ?case
     by auto
 next
   case (7 t \<sigma> \<gamma> \<theta> def exp x exp' ss \<tau> \<tau>' choices)
@@ -2095,7 +2528,7 @@ proof -
   obtain x where "beval_raw t \<sigma> \<gamma> \<theta> def exp x"
     by (smt \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)\<close> assms(1) fst_conv seq_cases_inert snd_conv
     world_seq_exec_cases)
-  then obtain \<tau>' where "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and "\<tau>' = inr_post_raw sig x (\<sigma> sig) \<tau> t dly"
+  then obtain \<tau>' where "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and "\<tau>' = inr_post_raw' sig x (\<sigma> sig) \<tau> t dly"
     by (simp add: b_seq_exec.intros(6))
   have "beval_raw t \<sigma> \<gamma> \<theta> def exp = beval_world_raw2 tw exp"
     using `tw = worldline2 t \<sigma> \<theta> def \<tau> ` and `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>`
@@ -2115,9 +2548,9 @@ proof -
     lift_inr_post_worldline_upd[OF _ _ `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'` _
     `non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig`]
     by (metis \<open>beval_raw t \<sigma> \<gamma> \<theta> def exp = beval_world_raw2 tw exp\<close> \<open>destruct_worldline tw = (t, \<sigma>,
-    \<gamma>, \<theta>, def, \<tau>)\<close> \<open>get_time tw = t\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> beval_world_raw2_def
-    destruct_worldline_ensure_non_stuttering_hist_raw snd_conv worldline2_def
-    worldline_inert_upd2_def)
+    \<gamma>, \<theta>, def, \<tau>)\<close> \<open>get_time tw = t\<close> \<open>non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def
+    \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> beval_world_raw2_def destruct_worldline_ensure_non_stuttering_hist_raw
+    lift_inr_post_worldline_upd_comb snd_conv worldline2_def worldline_inert_upd2_def)
   finally show ?thesis
     using `fst tw = t`
     \<open>beval_raw t \<sigma> \<gamma> \<theta> def exp = beval_world_raw2 tw exp\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> by auto
@@ -2562,13 +2995,11 @@ proof -
   qed
   hence "destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)"
     using \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>', \<theta>, def, \<tau>)\<close> by blast
-  obtain \<tau>' where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and "inr_post_raw sig x (\<sigma> sig) \<tau> t dly = \<tau>'"
+  obtain \<tau>' where "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'" and "inr_post_raw' sig x (\<sigma> sig) \<tau> t dly = \<tau>'"
     using b_seq_exec.intros(6) beval by fastforce
   hence "worldline2 t \<sigma> \<theta> def \<tau>' = tw'"
-    by (metis \<open>\<gamma> = \<gamma>'\<close> \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>', \<theta>, def, \<tau>)\<close> assms(1) assms(2) assms(3)
-    beval_world_raw2_def destruct_worldline_ensure_non_stuttering
-    destruct_worldline_ensure_non_stuttering_hist_raw lift_inr_post_worldline_upd snd_conv t_def
-    worldline2_constructible worldline2_def worldline_inert_upd2_def)
+    by (metis \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)\<close> assms(1) assms(2) assms(3)
+    beval_world_raw2_deterministic lift_world_inert_worldline_upd2 world_seq_exec.intros)
   thus ?thesis
     by (meson \<open>destruct_worldline tw = (t, \<sigma>, \<gamma>, \<theta>, def, \<tau>)\<close> \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <Bassign_inert
     sig exp dly , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close> world_seq_exec.intros)
@@ -2905,7 +3336,8 @@ next
   hence "sig2 \<noteq> sig"
     by auto
   then show ?case 
-    unfolding comp_def 6(2) worldline_inert_upd2_def worldline_inert_upd_def by auto
+    unfolding comp_def 6(2) worldline_inert_upd2_def worldline_inert_upd_def 
+    by (smt fun_upd_def sndI val.exhaust worldline_inert_upd2.simps(1) worldline_inert_upd2.simps(2) worldline_inert_upd_def)
 qed auto
 
 lemma world_seq_exec_bcase_empty:
@@ -2935,8 +3367,8 @@ next
 next                        
   case (6 tw exp x tw' sig dly)
   then show ?case 
-    by (auto simp add: snd_worldline_inert_upd2')
-qed auto
+    by (auto simp add: snd_worldline_inert_upd2)
+qed auto                                  
 
 lemma world_seq_exec_bcase_others:
   fixes tw :: "nat \<times> 'a worldline_init"
@@ -4416,6 +4848,18 @@ proof -
     unfolding context_invariant_def by (metis purge_raw_before_now_unchanged)
 qed
 
+lemma context_invariant_purged':
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>"
+  shows "context_invariant t \<sigma> \<gamma> \<theta> def (purge_raw' \<tau> t dly sig (def sig) val)"
+proof -
+  have "\<forall>n\<le>t.  \<tau> n = 0" and "\<gamma> = {s. \<sigma> s \<noteq> signal_of (def s) \<theta> s (t - 1)}" and "\<forall>n\<ge>t.  \<theta> n = 0"
+    using assms unfolding context_invariant_def by auto
+  moreover hence "\<forall>n < t. (purge_raw' \<tau> t dly sig (def sig) val) n = 0"
+    by (simp add: purge_preserve_trans_removal')
+  ultimately show ?thesis
+    unfolding context_invariant_def by (metis purge_raw'_before_now_unchanged)
+qed
+
 lemma b_seq_exec_mono_wrt_rem_curr_trans:
   assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> < ss, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
   assumes "nonneg_delay ss"
@@ -4459,30 +4903,30 @@ next
     by (metis \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b x\<close> b_seq_exec.intros(5))
 next
   case (6 t \<sigma> \<gamma> \<theta> def e x sig \<tau> dly \<tau>')
-  hence \<tau>'_def: "\<tau>' = inr_post_raw sig x (\<sigma> sig) \<tau> t dly" and "0 < dly"
+  hence \<tau>'_def: "\<tau>' = inr_post_raw' sig x (\<sigma> sig) \<tau> t dly" and "0 < dly"
     using "6.prems"(1) by auto
-  have "context_invariant t \<sigma> \<gamma> \<theta> def (purge_raw \<tau> t dly sig (\<sigma> sig) x)"
-    using context_invariant_purged `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>`
-    by (simp add: context_invariant_def purge_preserve_trans_removal_nonstrict)
-  have "\<tau>' = trans_post_raw sig x (\<sigma> sig) (purge_raw \<tau> t dly sig (\<sigma> sig) x) t dly"
-    using \<tau>'_def unfolding inr_post_raw_def by auto
-  hence "\<tau>'(t:=0) = (trans_post_raw sig x (\<sigma> sig) ((purge_raw \<tau> t dly sig (\<sigma> sig) x)) t dly)(t:=0)"
+  have "context_invariant t \<sigma> \<gamma> \<theta> def (purge_raw' \<tau> t dly sig (\<sigma> sig) x)"
+    using context_invariant_purged' `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>`
+    by (simp add: context_invariant_def purge_preserve_trans_removal_nonstrict')
+  have "\<tau>' = trans_post_raw sig x (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) x) t dly"
+    using \<tau>'_def unfolding inr_post_raw'_def by auto
+  hence "\<tau>'(t:=0) = (trans_post_raw sig x (\<sigma> sig) ((purge_raw' \<tau> t dly sig (\<sigma> sig) x)) t dly)(t:=0)"
     by auto
-  also have "... = trans_post_raw sig x (\<sigma> sig) ((purge_raw \<tau> t dly sig (\<sigma> sig) x)(t:=0)) t dly"
-    using `0 < dly` post_necessary_raw_rem_curr_trans[OF `context_invariant t \<sigma> \<gamma> \<theta> def (purge_raw \<tau> t dly sig (\<sigma> sig) x)`]
+  also have "... = trans_post_raw sig x (\<sigma> sig) ((purge_raw' \<tau> t dly sig (\<sigma> sig) x)(t:=0)) t dly"
+    using `0 < dly` post_necessary_raw_rem_curr_trans[OF `context_invariant t \<sigma> \<gamma> \<theta> def (purge_raw' \<tau> t dly sig (\<sigma> sig) x)`]
   proof -
-    have f1: "\<forall>n. purge_raw \<tau> t dly sig (\<sigma> sig) x n = 0 \<or> \<not> n \<le> t"
-      by (meson \<open>context_invariant t \<sigma> \<gamma> \<theta> def (purge_raw \<tau> t dly sig (\<sigma> sig) x)\<close> context_invariant_def)
+    have f1: "\<forall>n. purge_raw' \<tau> t dly sig (\<sigma> sig) x n = 0 \<or> \<not> n \<le> t"
+      by (meson \<open>context_invariant t \<sigma> \<gamma> \<theta> def (purge_raw' \<tau> t dly sig (\<sigma> sig) x)\<close> context_invariant_def)
     have "\<forall>f n a. trans_post_raw a x (\<sigma> a) f t n t = f t \<or> \<not> nonneg_delay (Bassign_trans a e n)"
       by (metis (no_types) "6.hyps"(1) b_seq_exec.intros(5) nonneg_delay_same)
     then show ?thesis
       using f1 by (metis \<open>0 < dly\<close> dual_order.refl fun_upd_triv nonneg_delay.simps(4))
   qed
-  also have "... = trans_post_raw sig x (\<sigma> sig) (purge_raw (\<tau>(t:=0)) t dly sig (\<sigma> sig) x) t dly"
+  also have "... = trans_post_raw sig x (\<sigma> sig) (purge_raw' (\<tau>(t:=0)) t dly sig (\<sigma> sig) x) t dly"
     unfolding push_rem_curr_trans_purge_raw
-    by (metis (no_types, lifting) "6.prems" context_invariant_def push_rem_curr_trans_purge_raw)
-  also have "... = inr_post_raw sig x (\<sigma> sig) (\<tau>(t:=0)) t dly"
-    unfolding inr_post_raw_def by auto
+    by (metis (mono_tags, lifting) "6.prems"(2) \<open>context_invariant t \<sigma> \<gamma> \<theta> def (purge_raw' \<tau> t dly sig (\<sigma> sig) x)\<close> context_invariant_def fun_upd_idem_iff le_refl)
+  also have "... = inr_post_raw' sig x (\<sigma> sig) (\<tau>(t:=0)) t dly"
+    unfolding inr_post_raw'_def by auto
   finally show ?case
     by (metis \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> e \<longrightarrow>\<^sub>b x\<close> b_seq_exec.intros(6))
 next
@@ -8807,6 +9251,21 @@ lemma worldline_inert_upd_preserve_wityping:
   shows   "wityping \<Gamma> (wi[ sig, t, dly := v])"
   using assms unfolding wityping_def worldline_inert_upd_def wtyping_def by simp
 
+lemma worldline_inert_upd_preserve_wityping':
+  assumes "wityping \<Gamma> wi"
+  assumes "type_of v = \<Gamma> sig"
+  shows   "wityping \<Gamma> (VHDL_Hoare.worldline_inert_upd2 wi sig t dly v)"
+  using assms
+proof (induction v)
+  case (Bv x)
+  then show ?case 
+    unfolding wityping_def worldline_inert_upd2.simps worldline_inert_upd_def wtyping_def by auto
+next
+  case (Lv x1a x2)
+  then show ?case 
+    unfolding wityping_def worldline_inert_upd2.simps worldline_inert_upd_def wtyping_def by auto
+qed
+  
 lemma seq_stmt_preserve_wityping_hoare:
   assumes "seq_wt \<Gamma> ss"
   shows " \<turnstile> [\<lambda>tw. wityping \<Gamma> (snd tw) ] ss [\<lambda>tw. wityping \<Gamma> (snd tw)]"
@@ -8836,7 +9295,7 @@ next
     wityping_def wityping_ensure_styping wityping_ensure_ttyping)
   then show ?case
     by (intro AssignI2_altI)
-       (simp add: worldline_inert_upd_preserve_wityping worldline_inert_upd2_def)
+       (simp add: worldline_inert_upd_preserve_wityping' worldline_inert_upd2_def)
 next
   case (6 \<Gamma> exp ty)
   then show ?case by simp

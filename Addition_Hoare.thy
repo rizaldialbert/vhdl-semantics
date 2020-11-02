@@ -26,8 +26,8 @@ proof (rule seq_wt_cases(4)[OF assms])
   obtain len1 len2 where " \<Gamma> A = Lty Uns len1 \<and> \<Gamma> B = Lty Uns len2 \<and> \<Gamma> C = Lty Uns (max len1 len2)
                               \<or> \<Gamma> A = Lty Sig len1 \<and> \<Gamma> B = Lty Sig len2 \<and> \<Gamma> C = Lty Sig (max len1 len2)"
           and "0 < len1" and "0 < len2"
-    by (rule bexp_wt_cases(11)[OF \<open>bexp_wt \<Gamma> (Badd (Bsig A) (Bsig B)) (\<Gamma> C)\<close>])
-       (metis bexp_wt_cases(9))+
+
+    by (rule bexp_wt_cases_slice(4)[OF \<open>bexp_wt \<Gamma> (Badd (Bsig A) (Bsig B)) (\<Gamma> C)\<close>])(metis bexp_wt_cases_slice(2))+
   thus ?thesis
     by auto
 qed

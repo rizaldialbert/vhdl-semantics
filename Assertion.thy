@@ -739,7 +739,6 @@ proposition
                    else wline_of tw s (fst tw) = wline_of tw s (fst tw - 1)
               else wline_of tw s (fst tw) = wline_of tw s (fst tw - 1))\<close>
   apply (reify eval_simps Irwline.simps Irnat_simps Irsig_simps Irval_simps Irset.simps)
-  (* seems like hitting some walls for reification here *)
   oops
 
 proposition 
@@ -1033,7 +1032,8 @@ next
       moreover
       { assume "Irsig x2a ss \<noteq> sig"
         hence ?case
-          by (auto simp add: Irnat_worldline_inert_upd2 ) (simp add: worldline_inert_upd2_def worldline_inert_upd_def) }
+          apply (auto simp add: Irnat_worldline_inert_upd2 )   
+          by (induction v)(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def) }
       moreover
       { assume "Irsig x2a ss = sig"
         then obtain n where "x2a = Svar n \<and> ss ! n = sig"
@@ -1130,7 +1130,7 @@ lemma event_of_worldline_inert_upd2:
 proof (induction n)
   case 0
   have " event_of (0, snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) = {s. snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 \<noteq> fst (snd tw) s}" (is "_ = ?rhs")
-    unfolding event_of_alt_def by (auto simp add: worldline_inert_upd2_def worldline_inert_upd_def)
+    unfolding event_of_alt_def by (induction v)(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def)
   have "fst (snd tw) sig = snd (snd tw \<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>) sig 0 \<or> fst (snd tw) sig \<noteq> snd (snd tw \<lbrakk>sig, dly :=\<^sub>2 v\<rbrakk>) sig 0"
     by auto
   moreover
@@ -1138,7 +1138,7 @@ proof (induction n)
     hence *: "sig \<notin> {s. snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 \<noteq> fst (snd tw) s}"
       by auto
     have **: "\<And>s. s \<noteq> sig \<Longrightarrow> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 = snd (snd tw) s 0"
-      unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding worldline_inert_upd2_def by (induction v)(auto simp add: worldline_inert_upd_def)
     have "{s. snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 \<noteq> fst (snd tw) s} = 
           {s. s = sig \<and> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 \<noteq> fst (snd tw) s} \<union> {s. s \<noteq> sig \<and> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 \<noteq> fst (snd tw) s}"
       using Collect_disj_eq by blast
@@ -1157,7 +1157,7 @@ proof (induction n)
     hence *: "sig \<in> {s. snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 \<noteq> fst (snd tw) s}"
       by auto
     have **: "\<And>s. s \<noteq> sig \<Longrightarrow> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 = snd (snd tw) s 0"
-      unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding worldline_inert_upd2_def by (induction v)(auto simp add: worldline_inert_upd_def)
     have "{s. snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 \<noteq> fst (snd tw) s} = 
           {s. s = sig \<and> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 \<noteq> fst (snd tw) s} \<union> {s. s \<noteq> sig \<and> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s 0 \<noteq> fst (snd tw) s}"
       using Collect_disj_eq by blast
@@ -1185,7 +1185,7 @@ next
     hence *: "sig \<notin> {s. snd ( snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s (Suc n) \<noteq> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s n}"
       by auto
     have **: "\<And>s k. s \<noteq> sig \<Longrightarrow> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s k = snd (snd tw) s k"
-      unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding worldline_inert_upd2_def by (induction v)(auto simp add: worldline_inert_upd_def)
     have "{s. snd ( snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s (Suc n) \<noteq> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s n} = 
           {s. s = sig \<and> snd ( snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s (Suc n) \<noteq> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s n} \<union> {s. s \<noteq> sig \<and> snd ( snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s (Suc n) \<noteq> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s n}"  
       by auto
@@ -1204,7 +1204,7 @@ next
     hence *: "sig \<in> {s. snd ( snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s (Suc n) \<noteq> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s n}"
       by auto    
     have **: "\<And>s k. s \<noteq> sig \<Longrightarrow> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s k = snd (snd tw) s k"
-      unfolding worldline_inert_upd2_def worldline_inert_upd_def by auto    
+      unfolding worldline_inert_upd2_def by (induction v)(auto simp add: worldline_inert_upd_def)
     have "{s. snd ( snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s (Suc n) \<noteq> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s n} = 
           {s. s = sig \<and> snd ( snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s (Suc n) \<noteq> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s n} \<union> {s. s \<noteq> sig \<and> snd ( snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s (Suc n) \<noteq> snd (snd tw\<lbrakk> sig, dly :=\<^sub>2 v\<rbrakk>) s n}"  
       by auto
@@ -2387,7 +2387,7 @@ next
   case (5 \<Gamma> exp sig dly)
   hence "\<And>tw. wityping \<Gamma> (snd tw) \<Longrightarrow> wityping \<Gamma> (snd tw\<lbrakk> sig, dly :=\<^sub>2 eval_world_raw2 tw exp\<rbrakk>)"
     unfolding worldline_upd2_def snd_conv type_of_eval_world_raw2
-    by (metis sndI type_of_eval_world_raw2 worldline_inert_upd2_def worldline_inert_upd_preserve_wityping)
+    by (metis sndI type_of_eval_world_raw2 worldline_inert_upd2_def worldline_inert_upd_preserve_wityping')
   then show ?case 
     by auto
 qed auto

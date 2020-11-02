@@ -23,12 +23,12 @@ lemma potential_tyenv:
 proof (rule seq_wt_cases(4)[OF assms])
   assume "bexp_wt \<Gamma> (Bslice IN 3 2) (\<Gamma> OUT)"
   then obtain ki len where "bexp_wt \<Gamma> (Bsig IN) (Lty ki len) \<and> 3 < len \<and> \<Gamma> OUT = Lty ki 2"
-    by (metis add_2_eq_Suc add_Suc add_Suc_right add_diff_cancel_right' bexp_wt_cases(8)
+    by (metis add_2_eq_Suc add_Suc add_Suc_right add_diff_cancel_right' bexp_wt_cases_slice(1)
     numeral_2_eq_2 numeral_3_eq_3)
   hence "bexp_wt \<Gamma> (Bsig IN) (Lty ki len)" and "3 < len" and "\<Gamma> OUT = Lty ki 2"
     by auto
   hence "\<Gamma> IN = Lty ki len"
-    using bexp_wt_cases(9)[OF \<open>bexp_wt \<Gamma> (Bsig IN) (Lty ki len)\<close>] by metis
+    using bexp_wt_cases_slice(2)[OF \<open>bexp_wt \<Gamma> (Bsig IN) (Lty ki len)\<close>] by metis
   thus ?thesis
     using \<open>3 < len\<close> \<open>\<Gamma> OUT = Lty ki 2\<close> by blast
 qed

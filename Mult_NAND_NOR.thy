@@ -39,7 +39,7 @@ proof  (erule seq_wt_cases)+
   assume "bexp_wt \<Gamma> (Bsig SEL) Bty"
   assume "bexp_wt \<Gamma> (Bnand (Bsig IN0) (Bsig IN1)) (\<Gamma> TEMP0)"
   hence "\<Gamma> IN0 = \<Gamma> TEMP0 \<and> \<Gamma> IN1 = \<Gamma> TEMP0"
-    by (metis bexp_wt_cases(4) bexp_wt_cases(9))    
+    by (metis bexp_wt_cases(4) bexp_wt_cases_slice(2))
   assume "bexp_wt \<Gamma> (Bsig TEMP0) (\<Gamma> OUT) "
   hence "\<Gamma> TEMP0 = \<Gamma> OUT"
     by (rule bexp_wt_cases_all) auto

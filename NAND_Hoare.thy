@@ -12,7 +12,7 @@ theory NAND_Hoare
   imports VHDL_Hoare_Complete NAND_Femto
 begin
 
-subsection \<open>Proving @{term "nand3"}: NAND with transport delay \<close>
+subsection \<open>Proving @{term "nand3"}: NAND with transport delay \<close>                                                                  
 
 lemma beval_world_raw2_type:
   assumes "wityping \<Gamma>' (snd tw)"
@@ -518,12 +518,12 @@ proof -
         case True
         hence "bval_of_wline tw' C (i + 1) \<longleftrightarrow> bval_of_wline tw C (i + 1)"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-          by auto
+          by (induction v)(auto simp add: worldline_inert_upd_def)
         also have "... \<longleftrightarrow> \<not> (bval_of_wline tw A i \<and> bval_of_wline tw B i)"
           using `bval_of_wline tw C (i + 1) \<longleftrightarrow> \<not> (bval_of_wline tw A i \<and> bval_of_wline tw B i)` by auto
         also have "... \<longleftrightarrow> \<not> (bval_of_wline tw' A i \<and> bval_of_wline tw' B i)"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-          by auto
+          by (induction v)(auto simp add: worldline_inert_upd_def)
         finally show ?thesis
           by auto
       next
@@ -535,12 +535,15 @@ proof -
           case True
           hence "bval_of_wline tw' C (i + 1) \<longleftrightarrow> bval_of_wline tw C (fst tw)"
             using `i + 1 = fst tw`
-            unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+            unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+            apply (induction v)
+            by (simp add: worldline_inert_upd_def)
+               (metis comp_eq_dest_lhs order_refl snd_worldline_inert_upd2 worldline_inert_upd2_def zero_less_one)
           also have "... \<longleftrightarrow> \<not> (bval_of_wline tw A i \<and> bval_of_wline tw B i)"
             using `bval_of_wline tw C (i + 1) \<longleftrightarrow> \<not> (bval_of_wline tw A i \<and> bval_of_wline tw B i)` `i + 1 = fst tw` by auto
           also have "... \<longleftrightarrow> \<not> (bval_of_wline tw' A i \<and> bval_of_wline tw' B i)"
             unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-            using `i + 1 = fst tw` by auto
+            using `i + 1 = fst tw`  by (induction v)(auto simp add: worldline_inert_upd_def)
           finally show ?thesis
             by auto
         next
@@ -554,13 +557,16 @@ proof -
             using False by (intro Greatest_equality) auto
           hence "wline_of tw' C (i + 1) = wline_of tw C (fst tw)"
             using False \<open>i + 1 = get_time tw\<close> unfolding tw'_def worldline_inert_upd2_def
-            worldline_inert_upd_def comp_def by auto
+            worldline_inert_upd_def comp_def 
+            apply (induction v)
+            by (simp add: worldline_inert_upd_def)
+               (metis (no_types, lifting) One_nat_def \<open>i + 1 = get_time tw\<close> less_Suc_eq_le pl_pl_rels snd_worldline_inert_upd2 worldline_inert_upd2_def)
           have "bval_of_wline tw C (fst tw)  \<longleftrightarrow> \<not> (bval_of_wline tw A i \<and> bval_of_wline tw B i)"
             using `bval_of_wline tw C (i + 1) \<longleftrightarrow> \<not> (bval_of_wline tw A i \<and> bval_of_wline tw B i)` `i
             + 1 = fst tw` by auto
           also have "... \<longleftrightarrow> \<not> (bval_of_wline tw' A i \<and> bval_of_wline tw' B i)"
             unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-            using `i + 1 = fst tw` by auto
+            using `i + 1 = fst tw`  by (induction v)(auto simp add: worldline_inert_upd_def)
           finally show ?thesis
             using \<open>wline_of tw' C (i + 1) = wline_of tw C (get_time tw)\<close> by auto
         qed
@@ -578,7 +584,8 @@ proof -
       proof (cases " wline_of tw C (get_time tw) = v \<or>  wline_of tw C (get_time tw + 1) \<noteq> v")
         case True
         hence "wline_of tw' C (fst tw + 1) = v"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def using assms(3)
+          by (induction v)(auto simp add: worldline_inert_upd_def) 
         have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
           using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
           by auto
@@ -587,7 +594,8 @@ proof -
           apply (smt beval_cases(1) comp_apply state_of_world_def val.sel(1))
           using assms(3) by auto
         also have "... \<longleftrightarrow> \<not> (bval_of_wline tw' A (fst tw) \<and> bval_of_wline tw' B (fst tw))"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def 
+          by (induction v)(auto simp add: worldline_inert_upd_def)
         finally show ?thesis
           using \<open>wline_of tw' C (get_time tw + 1) = v\<close> by blast
       next
@@ -600,8 +608,9 @@ proof -
           using False
           by (intro Greatest_equality) auto
         hence "wline_of tw' C (fst tw + 1) =  v"
-          using False unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-          comp_def by auto
+          using False assms(3) unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
+          comp_def 
+          by (induction v)(auto simp add: worldline_inert_upd_def)
         have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
           using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
           by auto
@@ -611,7 +620,8 @@ proof -
           apply (smt beval_cases(1) comp_apply state_of_world_def val.sel(1))
           using assms(3) by auto
         also have "... \<longleftrightarrow> \<not> (bval_of_wline tw' A (fst tw) \<and> bval_of_wline tw' B (fst tw))"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def 
+          by (induction v)(auto simp add: worldline_inert_upd_def)
         finally show ?thesis
           using \<open>wline_of tw' C (get_time tw + 1) = v\<close> by auto
       qed
@@ -626,12 +636,14 @@ proof -
         case True
         hence "wline_of tw' C (next_time_world tw') = v"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def comp_def
-          using `fst tw < next_time_world tw'`
-          by (smt add.commute fst_conv less_SucE next_time_world_at_least order.asym plus_1_eq_Suc
-          snd_conv)
+          using `fst tw < next_time_world tw'` assms(3)
+          apply (induction v)
+          by (smt add.commute fst_conv less_SucE next_time_world_at_least order.asym plus_1_eq_Suc snd_conv worldline_inert_upd2.simps(1) worldline_inert_upd_def)auto
         also have "... = wline_of tw' C (fst tw + 1)"
-          by (smt True dual_order.strict_iff_order not_add_less1 o_apply snd_conv tw'_def
-          worldline_inert_upd2_def worldline_inert_upd_def)
+          unfolding tw'_def using assms(3) True
+          apply (induction v)
+          unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps 
+            worldline_inert_upd_def comp_def snd_conv by auto
         finally show ?thesis
           by auto
       next
@@ -641,11 +653,14 @@ proof -
           using False by (intro Greatest_equality) auto
         hence "wline_of tw' C (next_time_world tw') = v"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def comp_def
-          by (smt add.commute fst_conv less_SucE next_time_world_at_least order.asym plus_1_eq_Suc
-          snd_conv)
+          using assms(3) False
+          apply (induction v)
+          unfolding snd_conv VHDL_Hoare.worldline_inert_upd2.simps worldline_inert_upd_def comp_def
+          by (smt add.commute fst_conv le_eq_less_or_eq less_Suc_eq_le next_time_world_at_least not_less_iff_gr_or_eq plus_1_eq_Suc) auto
         also have "... = wline_of tw' C (fst tw + 1)"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def comp_def
-          using `fst tw < next_time_world tw'` `?time = fst tw + 1` by auto
+          using `fst tw < next_time_world tw'` `?time = fst tw + 1` assms(3)
+          by (induction v)(auto simp add: worldline_inert_upd_def)
         finally show ?thesis
           by auto
       qed
@@ -655,8 +670,9 @@ proof -
       proof (cases "wline_of tw C (get_time tw) = v \<or> wline_of tw C (get_time tw + 1) \<noteq> v")
         case True
         hence "wline_of tw' C (fst tw + 1) = v"
+          using assms(3)
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def comp_def
-          by auto
+          by (induction v)(auto simp add: worldline_inert_upd_def)
         have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
           using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
           by auto
@@ -665,7 +681,8 @@ proof -
           apply (smt beval_cases(1) comp_apply state_of_world_def val.sel(1))
           using assms(3) by auto
         also have "... \<longleftrightarrow> \<not> (bval_of_wline tw' A (fst tw) \<and> bval_of_wline tw' B (fst tw))"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def 
+          apply (induction v) by (auto simp add: worldline_inert_upd_def)
         finally show ?thesis
           using \<open>wline_of tw' C (get_time tw + 1) = v\<close> by auto
       next
@@ -674,7 +691,9 @@ proof -
         have "?time = fst tw + 1"
           using False by (intro Greatest_equality) auto
         hence "wline_of tw' C (fst tw + 1) =  v"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def comp_def by auto
+          using assms(3)
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def comp_def 
+          by (induction v) (auto simp add: worldline_inert_upd_def)
         have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
           using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
           by auto
@@ -683,7 +702,8 @@ proof -
           apply (smt beval_cases(1) comp_apply state_of_world_def val.sel(1))
           using assms(3) by auto
         also have "... \<longleftrightarrow> \<not> (bval_of_wline tw' A (fst tw) \<and> bval_of_wline tw' B (fst tw))"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
+          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def 
+          apply (induction v) by (auto simp add: worldline_inert_upd_def)
         finally show ?thesis
           using \<open>wline_of tw' C (get_time tw + 1) = v\<close> by blast
       qed
@@ -767,11 +787,12 @@ proof (rule, rule impI)
     using \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> greaterThanAtMost_iff
     by (simp add: tw'_def worldline_inert_upd2_def)
   have "wline_of tw' A j = wline_of tw A j"
-    unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+    unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+    by (induction v)(auto simp add: worldline_inert_upd_def)
   also have "... = wline_of tw A (j - 1)"
-    using \<open>disjnt {A, B} (event_of (j, snd tw'))\<close> \<open>fst tw < j\<close>
-    unfolding event_of_alt_def
-    by (simp add: tw'_def worldline_inert_upd2_def worldline_inert_upd_def)
+    using \<open>disjnt {A, B} (event_of (j, snd tw'))\<close> \<open>fst tw < j\<close> assms(2)
+    unfolding event_of_alt_def fst_conv tw'_def
+    by (induction v)(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def)
   also have "... = wline_of tw A (fst tw)"
   proof -
     have "fst tw' \<le> j - 1" and "j - 1 < j"
@@ -783,20 +804,23 @@ proof (rule, rule impI)
       greaterThanAtMost_iff o_apply prod.sel(1) prod.sel(2) sig.simps(4) tw'_def
       unchanged_until_next_time_world worldline_inert_upd2_def worldline_inert_upd_def)
     moreover have "wline_of tw' A (j - 1) = wline_of tw A (j - 1)"
-      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+      by (induction v)(auto simp add: worldline_inert_upd_def)
     moreover have "wline_of tw' A (fst tw') = wline_of tw A (fst tw')"
-      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+      by (induction v)(auto simp add: worldline_inert_upd_def)
     ultimately show ?thesis
       by (simp add: tw'_def worldline_inert_upd2_def)
   qed
   finally have 0: "wline_of tw' A j = wline_of tw A (fst tw)"
     by auto
   have "wline_of tw' B j = wline_of tw B j"
-    unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+    unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+    by (induction v)(auto simp add: worldline_inert_upd_def)
   also have "... = wline_of tw B (j - 1)"
-    using \<open>disjnt {A, B} (event_of (j, snd tw'))\<close> \<open>fst tw < j\<close>
-    unfolding event_of_alt_def
-    by (simp add: tw'_def worldline_inert_upd2_def worldline_inert_upd_def)
+    using \<open>disjnt {A, B} (event_of (j, snd tw'))\<close> \<open>fst tw < j\<close> assms(2)
+    unfolding event_of_alt_def tw'_def
+    by (induction v)(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def)
   also have "... = wline_of tw B (fst tw)"
   proof -
     have "fst tw' \<le> j - 1" and "j - 1 < j"
@@ -808,9 +832,11 @@ proof (rule, rule impI)
       greaterThanAtMost_iff o_apply prod.sel(1) prod.sel(2) sig.simps(6) tw'_def
       unchanged_until_next_time_world worldline_inert_upd2_def worldline_inert_upd_def)
     moreover have "wline_of tw' B (j - 1) = wline_of tw B (j - 1)"
-      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+      by (induction v)(auto simp add: worldline_inert_upd_def)
     moreover have "wline_of tw' B (fst tw') = wline_of tw B (fst tw')"
-      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+      by (induction v)(auto simp add: worldline_inert_upd_def)
     ultimately show ?thesis
       by (simp add: tw'_def worldline_inert_upd2_def)
   qed
@@ -823,7 +849,8 @@ proof (rule, rule impI)
       case True
       thus "wline_of tw' C (i + 1) = v"
         unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def
-        using `fst tw < j` \<open>j \<le> i\<close> by auto
+        using `fst tw < j` \<open>j \<le> i\<close>  assms(2)
+        by (induction v)(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def)
     next
       case False
       let ?time = "GREATEST n. n \<le> get_time tw + 1  \<and> wline_of tw C (n - 1) \<noteq> v  \<and> wline_of tw C n = v"
@@ -831,7 +858,8 @@ proof (rule, rule impI)
         using False by (auto intro!:Greatest_equality)
       thus ?thesis
         unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def
-        using `fst tw < j` \<open>j \<le> i\<close> by auto
+        using `fst tw < j` \<open>j \<le> i\<close> assms(2)
+        by (induction v)(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def)
     qed
     have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
       using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
@@ -1422,13 +1450,13 @@ proof (rule)
         case True
         hence "lof_wline tw' C (i + 1) = lof_wline tw C (i + 1)"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-          by auto
+          by (induction v)(auto simp add: worldline_inert_upd_def)
         also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A i) (lof_wline tw B i)"
           using `lof_wline tw C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A i) (lof_wline tw B i)`
           by auto
         also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i) (lof_wline tw' B i)"
           unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-          by auto
+          by (induction v)(auto simp add: worldline_inert_upd_def)
         finally show ?thesis
           by auto
       next
@@ -1440,13 +1468,16 @@ proof (rule)
           case True
           hence "lof_wline tw' C (i + 1) = lof_wline tw C (fst tw)"
             using `i + 1 = fst tw`
-            unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+            unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def using assms(3)
+            apply (induction v)
+            by simp (metis comp_apply order_refl snd_worldline_inert_upd2 worldline_inert_upd2_def zero_less_one)
           also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A i) (lof_wline tw B i)"
             using `lof_wline tw C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A i) (lof_wline tw B i)`
             `i + 1 = fst tw` by auto
           also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i) (lof_wline tw' B i)"
             unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-            using `i + 1 = fst tw` by auto
+            using `i + 1 = fst tw` 
+            by (induction v)(auto simp add: worldline_inert_upd_def)
           finally show ?thesis
             by auto
         next
@@ -1460,13 +1491,15 @@ proof (rule)
             using False by (intro Greatest_equality) auto
           hence "wline_of tw' C (i + 1) = wline_of tw C (fst tw)"
             using False \<open>i + 1 = get_time tw\<close> unfolding tw'_def worldline_inert_upd2_def
-            worldline_inert_upd_def comp_def by auto
+            worldline_inert_upd_def comp_def using assms(3)
+            apply (induction v)
+            by simp (metis (no_types, lifting) \<open>i < get_time tw\<close> discrete snd_worldline_inert_upd2 worldline_inert_upd2_def zero_less_one)
           have "lof_wline tw C (fst tw) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A i) (lof_wline tw B i)"
             using `lof_wline tw C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A i) (lof_wline tw B i)` `i
             + 1 = fst tw` by auto
           also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i) (lof_wline tw' B i)"
             unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-            using `i + 1 = fst tw` by auto
+            using `i + 1 = fst tw`  by (induction v)(auto simp add: worldline_inert_upd_def)
           finally show ?thesis
             using \<open>wline_of tw' C (i + 1) = wline_of tw C (get_time tw)\<close> by auto
         qed
@@ -1477,133 +1510,244 @@ proof (rule)
         using unchanged_until_next_time_world 
         by (smt \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> dual_order.strict_trans1 fst_conv
         greaterThanAtMost_iff le_add1 less_diff_conv not_le tw'_def worldline_inert_upd2_def)
-      moreover have "lof_wline tw' A i = lof_wline tw' A (fst tw)" and "lof_wline tw' B i = lof_wline tw' B (fst tw)"
+      have "lof_wline tw' A i = lof_wline tw' A (fst tw)" and "lof_wline tw' B i = lof_wline tw' B (fst tw)"
         by (metis (no_types, lifting) \<open>get_time tw \<le> i \<and> i < j - 1\<close> \<open>i < j\<close> \<open>j \<in> {get_time
         tw'<..next_time_world tw'}\<close> dual_order.strict_trans1 fst_conv greaterThanAtMost_iff tw'_def
         unchanged_until_next_time_world worldline_inert_upd2_def)+
-      moreover have "lof_wline tw' C (fst tw + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
-      proof (cases " wline_of tw C (get_time tw) = v \<or>  wline_of tw C (get_time tw + 1) \<noteq> v")
-        case True
-        hence "wline_of tw' C (fst tw + 1) = v"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
-        have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
-          using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
-          by auto
-        have "lval_of v = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
-          apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-          prefer 2
-          apply (metis beval_cases(1) comp_apply state_of_world_def val.sel(3))
-          using assms(3) by auto
-        also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
-        finally show ?thesis
-          using \<open>wline_of tw' C (get_time tw + 1) = v\<close> by blast
+      have simp0: "lof_wline tw\<lbrakk> C, 1 :=\<^sub>2 v\<rbrakk> A (get_time tw) = lof_wline tw A (get_time tw)"
+        using assms(3) apply (induction v)
+        unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps snd_conv fun_upd_def
+        by auto
+      have simp1: "lof_wline tw\<lbrakk> C, 1 :=\<^sub>2 v\<rbrakk> B (get_time tw) = lof_wline tw B (get_time tw)"
+        using assms(3)
+        apply (induction v) unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps snd_conv fun_upd_def
+        by auto
+      have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
+        using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
+        by auto
+      have "lval_of v = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
+        apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
+        prefer 2
+        apply (metis beval_cases(1) comp_apply state_of_world_def val.sel(3))
+        using assms(3) by auto
+      hence "lof_wline tw' C (fst tw + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
+        unfolding tw'_def simp0 simp1 using assms(3)
+      proof (induction v)
+        case (Bv x)
+        then show ?case by auto
       next
-        case False
-        hence "wline_of tw C (get_time tw) \<noteq> v" and
-              "wline_of tw C (get_time tw + 1) = v"
-          by blast+
-        let ?time = "GREATEST n. n \<le> get_time tw + 1  \<and> wline_of tw C (n - 1) \<noteq> v  \<and> wline_of tw C n = v"
-        have "?time = fst tw + 1"
-          using False
-          by (intro Greatest_equality) auto
-        hence "wline_of tw' C (fst tw + 1) =  v"
-          using False unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def
-          comp_def by auto
-        have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
-          using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
-          by auto
-        have "lval_of v = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
-          unfolding beval_world_raw2_def
-          apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-          prefer 2
-          apply (metis beval_cases(1) comp_def state_of_world_def val.sel(3))
-          using assms(3) by auto
-        also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
-        finally show ?thesis
-          using \<open>wline_of tw' C (get_time tw + 1) = v\<close> by auto
+        case (Lv sign bs)
+        let ?w' = "\<lambda>b. snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)]"
+        let ?time = "LEAST n. get_time tw < n \<and> n \<le> get_time tw + 1 \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b C (n - 1) \<noteq> ?w' b C n)"
+        have *: " bs = (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs])"
+        proof (rule nth_equalityI)
+          show "length bs = length (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs])"
+            by auto
+        next
+          fix b
+          assume "b < length bs"
+          hence "map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs] ! b = 
+                bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))"
+            by auto
+          have "((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw)  \<noteq> Bv (bs ! b) \<and>
+               ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw + 1) = Bv (bs ! b) \<Longrightarrow> 
+              ( GREATEST n.
+                    n \<le> get_time tw + 1 \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (n - 1) \<noteq> Bv (bs ! b) \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C n = Bv (bs ! b)) = fst tw + 1"
+            by (metis (mono_tags, lifting) Greatest_equality add_diff_cancel_right' le_eq_less_or_eq)
+          hence "bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1)) = (bs ! b)"
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          thus " bs ! b =
+          map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs] !
+          b "
+            using \<open>map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs] ! b = bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))\<close> 
+            by blast
+        qed
+        show ?case 
+        proof (cases "\<exists>n>get_time tw. n \<le> get_time tw + 1 \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b C (n - 1) \<noteq> ?w' b C n)")
+          case True
+          hence "?time = fst tw + 1"
+            by (metis (mono_tags, lifting) LeastI_ex antisym_conv1 discrete leD)
+          hence "lof_wline tw\<lbrakk> C, 1 :=\<^sub>2 Lv sign bs\<rbrakk> C (get_time tw + 1) = bs"
+            using *[THEN sym] True unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps comp_def snd_conv fun_upd_def
+            by auto
+          thus ?thesis
+            using Lv(1) by auto
+        next
+          case False
+          hence "lof_wline tw\<lbrakk> C, 1 :=\<^sub>2 Lv sign bs\<rbrakk> C (get_time tw + 1) = bs"
+            using *[THEN sym]  unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps comp_def snd_conv fun_upd_def
+            by auto
+          then show ?thesis 
+            using Lv(1) by auto
+        qed
       qed
-      ultimately have "lof_wline tw' C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i) (lof_wline tw' B i)"
-        by auto }
+      hence "lof_wline tw' C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i) (lof_wline tw' B i)"
+        using \<open>lof_wline tw' A i = lof_wline tw' A (get_time tw)\<close> \<open>lof_wline tw' B i = lof_wline tw'
+        B (get_time tw)\<close> \<open>lof_wline tw' C (i + 1) = lof_wline tw' C (get_time tw + 1)\<close> by auto }
     moreover
     { assume "i = j - 1"
       hence "lof_wline tw' C (i + 1) = lof_wline tw' C j"
         using \<open>i < j\<close>  by simp
       also have "... = lof_wline tw' C (fst tw + 1)"
-      proof (cases "wline_of tw C (get_time tw) =  v \<or> wline_of tw C (get_time tw + 1) \<noteq>  v")
-        case True
-        hence "wline_of tw' C j = v"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def comp_def
-          using `fst tw < j`
-          by (smt add.commute fst_conv less_SucE next_time_world_at_least order.asym plus_1_eq_Suc
-          snd_conv)
-        also have "... = wline_of tw' C (fst tw + 1)"
-          by (smt True dual_order.strict_iff_order not_add_less1 o_apply snd_conv tw'_def
-          worldline_inert_upd2_def worldline_inert_upd_def)
-        finally show ?thesis
-          by auto
+        unfolding tw'_def using assms(3)
+      proof (induction v)
+        case (Bv x)
+        then show ?case by auto
       next
-        case False
-        let ?time = "GREATEST n. n \<le> get_time tw + 1  \<and> wline_of tw C (n - 1) \<noteq> v  \<and> wline_of tw C n = v"
-        have "?time = fst tw + 1"
-          using False by (intro Greatest_equality) auto
-        hence "wline_of tw' C j = v"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def comp_def
-          using \<open>get_time tw < j\<close> by auto
-        also have "... = wline_of tw' C (fst tw + 1)"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def comp_def
-          using `fst tw < j` `?time = fst tw + 1` by auto
-        finally show ?thesis
-          by auto          
+        case (Lv sign bs)
+        let ?w' = "\<lambda>b. snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)]"
+        let ?time = "LEAST n. get_time tw < n \<and> n \<le> get_time tw + 1 \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b C (n - 1) \<noteq> ?w' b C n)"
+        have *: " bs = (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs])"
+        proof (rule nth_equalityI)
+          show "length bs = length (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs])"
+            by auto
+        next
+          fix b
+          assume "b < length bs"
+          hence "map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs] ! b = 
+                bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))"
+            by auto
+          have "((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw)  \<noteq> Bv (bs ! b) \<and>
+               ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw + 1) = Bv (bs ! b) \<Longrightarrow> 
+              ( GREATEST n.
+                    n \<le> get_time tw + 1 \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (n - 1) \<noteq> Bv (bs ! b) \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C n = Bv (bs ! b)) = fst tw + 1"
+            by (metis (mono_tags, lifting) Greatest_equality add_diff_cancel_right' le_eq_less_or_eq)
+          hence "bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1)) = (bs ! b)"
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          thus " bs ! b =
+          map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs] !
+          b "
+            using \<open>map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs] ! b = bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))\<close> 
+            by blast
+        qed
+        have **: " bs = (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (j))) [0..<length bs])"
+        proof (rule nth_equalityI)
+          show "length bs = length (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (j))) [0..<length bs])"
+            by auto
+        next
+          fix b
+          assume "b < length bs"
+          hence "map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (j))) [0..<length bs] ! b = 
+                bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (j))"
+            by auto
+          have "((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw)  \<noteq> Bv (bs ! b) \<and>
+               ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw + 1) = Bv (bs ! b) \<Longrightarrow> 
+              ( GREATEST n.
+                    n \<le> get_time tw + 1 \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (n - 1) \<noteq> Bv (bs ! b) \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C n = Bv (bs ! b)) = fst tw + 1"
+            by (metis (mono_tags, lifting) Greatest_equality add_diff_cancel_right' le_eq_less_or_eq)
+          hence "bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (j)) = (bs ! b)"
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+            using \<open>get_time tw < j\<close> by auto
+          thus " bs ! b =
+          map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (j))) [0..<length bs] !
+          b "
+            using \<open>map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (j))) [0..<length bs] ! b = bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (j))\<close> 
+            by blast
+        qed
+        show ?case 
+        proof (cases "\<exists>n>get_time tw. n \<le> get_time tw + 1 \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b C (n - 1) \<noteq> ?w' b C n)")
+          case True
+          hence "?time = fst tw + 1"
+            by (metis (mono_tags, lifting) LeastI_ex antisym_conv1 discrete leD)
+          have "fst tw + 1 \<le> j"
+            using \<open>get_time tw < j\<close> by linarith
+          thus ?thesis 
+            using True \<open>?time = fst tw + 1\<close> * **
+            unfolding worldline_inert_upd2_def comp_def snd_conv VHDL_Hoare.worldline_inert_upd2.simps fun_upd_def
+            by auto
+        next
+          case False
+          show ?thesis 
+            using False \<open>get_time tw < j\<close> * **
+            unfolding worldline_inert_upd2_def comp_def snd_conv VHDL_Hoare.worldline_inert_upd2.simps fun_upd_def
+            by auto
+        qed
       qed
       finally have "lof_wline tw' C (i + 1) = lof_wline tw' C (fst tw + 1)"
         by auto
-      also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
-      proof (cases "wline_of tw C (get_time tw) = v \<or> wline_of tw C (get_time tw + 1) \<noteq> v")
-        case True
-        hence "wline_of tw' C (fst tw + 1) = v"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def comp_def
-          by auto
-        have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
-          using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
-          by auto
-        have "lval_of ... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
-          apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-           prefer 2
-          apply (metis beval_cases(1) comp_def state_of_world_def val.sel(3))
-          using assms(3) by auto
-        also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
-        finally show ?thesis
-          using \<open>wline_of tw' C (get_time tw + 1) = v\<close> by auto
+      have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
+        using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
+        by auto
+      have simp0: "lof_wline tw\<lbrakk> C, 1 :=\<^sub>2 v\<rbrakk> A (get_time tw) = lof_wline tw A (get_time tw)"
+        using assms(3) apply (induction v)
+        unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps snd_conv fun_upd_def
+        by auto
+      have simp1: "lof_wline tw\<lbrakk> C, 1 :=\<^sub>2 v\<rbrakk> B (get_time tw) = lof_wline tw B (get_time tw)"
+        using assms(3)
+        apply (induction v) unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps snd_conv fun_upd_def
+        by auto
+      have "lval_of v = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
+        apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
+        prefer 2
+        apply (metis beval_cases(1) comp_apply state_of_world_def val.sel(3))
+        using assms(3) by auto
+      hence "lof_wline tw' C (fst tw + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
+        unfolding tw'_def simp0 simp1 using assms(3)
+      proof (induction v)
+        case (Bv x)
+        then show ?case by auto
       next
-        case False
-        let ?time = "GREATEST n. n \<le> get_time tw + 1  \<and> wline_of tw C (n - 1) \<noteq> v  \<and> wline_of tw C n = v"
-        have "?time = fst tw + 1"
-          using False by (intro Greatest_equality) auto
-        hence "wline_of tw' C (fst tw + 1) =  v"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def comp_def by auto
-        have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
-          using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
-          by auto
-        have "lval_of ... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw A (fst tw)) (lof_wline tw B (fst tw))"
-          apply (rule beval_world_raw_cases[OF assms2], erule beval_cases)
-          prefer 2
-          apply (metis beval_cases(1) comp_def state_of_world_def val.sel(3))
-          using assms(3) by auto
-        also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A (fst tw)) (lof_wline tw' B (fst tw))"
-          unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def Let_def by auto
-        finally show ?thesis
-          using \<open>wline_of tw' C (get_time tw + 1) = v\<close> by blast
+        case (Lv sign bs)
+        let ?w' = "\<lambda>b. snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)]"
+        let ?time = "LEAST n. get_time tw < n \<and> n \<le> get_time tw + 1 \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b C (n - 1) \<noteq> ?w' b C n)"
+        have *: " bs = (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs])"
+        proof (rule nth_equalityI)
+          show "length bs = length (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs])"
+            by auto
+        next
+          fix b
+          assume "b < length bs"
+          hence "map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs] ! b = 
+                bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))"
+            by auto
+          have "((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw)  \<noteq> Bv (bs ! b) \<and>
+               ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw + 1) = Bv (bs ! b) \<Longrightarrow> 
+              ( GREATEST n.
+                    n \<le> get_time tw + 1 \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (n - 1) \<noteq> Bv (bs ! b) \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C n = Bv (bs ! b)) = fst tw + 1"
+            by (metis (mono_tags, lifting) Greatest_equality add_diff_cancel_right' le_eq_less_or_eq)
+          hence "bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1)) = (bs ! b)"
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          thus " bs ! b =
+          map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs] !
+          b "
+            using \<open>map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))) [0..<length bs] ! b = bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (fst tw + 1))\<close> 
+            by blast
+        qed
+        show ?case 
+        proof (cases "\<exists>n>get_time tw. n \<le> get_time tw + 1 \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b C (n - 1) \<noteq> ?w' b C n)")
+          case True
+          hence "?time = fst tw + 1"
+            by (metis (mono_tags, lifting) LeastI_ex antisym_conv1 discrete leD)
+          hence "lof_wline tw\<lbrakk> C, 1 :=\<^sub>2 Lv sign bs\<rbrakk> C (get_time tw + 1) = bs"
+            using *[THEN sym] True unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps comp_def snd_conv fun_upd_def
+            by auto
+          thus ?thesis
+            using Lv(1) by auto
+        next
+          case False
+          hence "lof_wline tw\<lbrakk> C, 1 :=\<^sub>2 Lv sign bs\<rbrakk> C (get_time tw + 1) = bs"
+            using *[THEN sym]  unfolding worldline_inert_upd2_def VHDL_Hoare.worldline_inert_upd2.simps comp_def snd_conv fun_upd_def
+            by auto
+          then show ?thesis 
+            using Lv(1) by auto
+        qed
       qed
       also have "... = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i) (lof_wline tw' B i)"
         by (smt \<open>i < get_time tw \<Longrightarrow> lof_wline tw' C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A
-        i) (lof_wline tw' B i)\<close> \<open>i < j\<close> \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> calculation
-        fst_conv greaterThanAtMost_iff linordered_semidom_class.add_diff_inverse not_le
-        trans_less_add1 tw'_def unchanged_until_next_time_world worldline_inert_upd2_def)
+        i) (lof_wline tw' B i)\<close> \<open>i < j\<close> \<open>j \<in> {get_time tw'<..next_time_world tw'}\<close> \<open>lof_wline tw' C
+        (i + 1) = lof_wline tw' C (get_time tw + 1)\<close> calculation dual_order.strict_trans1
+        fst_worldline_inert_upd2 greaterThanAtMost_iff not_le tw'_def
+        unchanged_until_next_time_world)
       finally have "lof_wline tw' C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i) (lof_wline tw' B i)"
-        by auto }
+        using \<open>lof_wline tw' C (i + 1) = lof_wline tw' C (get_time tw + 1)\<close> by auto }
     ultimately show "lof_wline tw' C (i + 1) = map2 (\<lambda>x y. x \<longrightarrow> \<not> y) (lof_wline tw' A i) (lof_wline tw' B i)"
       by auto
   qed
@@ -1630,8 +1774,7 @@ lemma pre_nand_seq_hoare_next_time_inert:
      [\<lambda>tw. nand_inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)]"
   apply (rule Conseq2[where Q="\<lambda>tw. nand_inv (next_time_world tw, snd tw) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule AssignI2, blast)
   using nand_inv_next_time_inert beval_world_raw2_type vector_type_nand3_axioms vector_type_nand3_def
-  by (metis greaterThanAtMost_iff next_time_world_at_least order_refl snd_conv
-  worldline_inert_upd2_def worldline_inert_upd_preserve_wityping)
+  by (metis greaterThanAtMost_iff next_time_world_at_least order_refl sndI worldline_inert_upd2_def worldline_inert_upd_preserve_wityping')
 
 lemma nand_seq_hoare_next_time_inert:
   "\<turnstile> [\<lambda>tw. nand_inv tw \<and> wityping \<Gamma> (snd tw)] 
@@ -1649,7 +1792,8 @@ lemma seq_wt_nand3:
 lemma nand_seq_hoare_wityping:
   "\<turnstile> [\<lambda>tw. nand_inv tw \<and> wityping \<Gamma> (snd tw)] 
         (Bassign_inert C (Bnand (Bsig A) (Bsig B)) 1) 
-     [\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. nand_inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)]"
+     [\<lambda>tw. \<forall>i \<in>
+ {fst tw <.. next_time_world tw}. nand_inv (i, snd tw) \<and> wityping \<Gamma> (snd tw)]"
   apply (rule Conseq2[rotated])
     apply (rule pre_nand_seq_hoare_next_time_inert)
    apply (simp add: nand_seq_hoare_next_time_aux)
@@ -1684,11 +1828,12 @@ proof (rule, rule)
     using \<open>j \<in> {get_time tw' <..next_time_world tw'}\<close> greaterThanAtMost_iff 
     by (simp add: tw'_def worldline_inert_upd2_def)
   have "wline_of tw' A j = wline_of tw A j"
-    unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+    unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+    by (induction v)(auto simp add: worldline_inert_upd_def)
   also have "... = wline_of tw A (j - 1)"
     using \<open>disjnt {A, B} (event_of (j, snd tw'))\<close> \<open>fst tw < j\<close>
-    unfolding event_of_alt_def
-    by (auto simp add: tw'_def worldline_inert_upd2_def worldline_inert_upd_def)
+    unfolding event_of_alt_def tw'_def using assms(3)
+    by (induction v)(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def)
   also have "... = wline_of tw A (fst tw)"
   proof -
     have "fst tw' \<le> j - 1" and "j - 1 < j"
@@ -1701,20 +1846,24 @@ proof (rule, rule)
           greaterThanAtMost_iff sig.simps(4) snd_conv tw'_def unchanged_until_next_time_world
           worldline_inert_upd2_def worldline_inert_upd_def)
     moreover have "wline_of tw' A (j - 1) = wline_of tw A (j - 1)"
-      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+      by (induction v)(auto simp add: worldline_inert_upd_def)
     moreover have "wline_of tw' A (fst tw') = wline_of tw A (fst tw')"
-      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+      by (induction v)(auto simp add: worldline_inert_upd_def)
     ultimately show ?thesis
       by (simp add: tw'_def worldline_inert_upd2_def)
   qed
   finally have 0: "wline_of tw' A j = wline_of tw A (fst tw)"
     by auto
   have "wline_of tw' B j = wline_of tw B j"
-    unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+    unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+    by (induction v)(auto simp add: worldline_inert_upd_def)
   also have "... = wline_of tw B (j - 1)"
     using \<open>disjnt {A, B} (event_of (j, snd tw'))\<close> \<open>fst tw < j\<close>
-    unfolding event_of_alt_def
-    by (simp add: tw'_def worldline_inert_upd2_def worldline_inert_upd_def)
+    unfolding event_of_alt_def tw'_def
+    using assms(3)
+    by (induction v)(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def)
   also have "... = wline_of tw B (fst tw)"
   proof -
     have "fst tw' \<le> j - 1" and "j - 1 < j"
@@ -1727,9 +1876,11 @@ proof (rule, rule)
       dual_order.strict_trans1 fst_conv greaterThanAtMost_iff less_imp_le_nat snd_conv tw'_def
       unchanged_until_next_time_world worldline_inert_upd2_def worldline_inert_upd_def)
     moreover have "wline_of tw' B (j - 1) = wline_of tw B (j - 1)"
-      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+      by (induction v)(auto simp add: worldline_inert_upd_def)
     moreover have "wline_of tw' B (fst tw') = wline_of tw B (fst tw')"
-      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def by auto
+      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def 
+      by (induction v)(auto simp add: worldline_inert_upd_def)
     ultimately show ?thesis
       by (simp add: tw'_def worldline_inert_upd2_def)
   qed
@@ -1738,19 +1889,97 @@ proof (rule, rule)
   { fix i
     assume "j \<le> i"
     hence "wline_of tw' C (i + 1) = v"
-    proof (cases "wline_of tw C (get_time tw) = v \<or> wline_of tw C (get_time tw + 1) \<noteq> v")
-      case True
-      thus "wline_of tw' C (i + 1) = v"
-        unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def
-        using `fst tw < j`  using \<open>j \<le> i\<close> by auto
+      unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def
+      using assms(2)
+    proof (induction v)
+      case (Bv x)
+      then show ?case by auto
     next
-      case False
-      let ?time = "GREATEST n. n \<le> get_time tw + 1  \<and> wline_of tw C (n - 1) \<noteq> v  \<and> wline_of tw C n = v"
-      have "?time = fst tw + 1"
-        using False by (auto intro!:Greatest_equality)
-      thus ?thesis
-        unfolding tw'_def worldline_inert_upd2_def worldline_inert_upd_def
-        using `fst tw < j`  using \<open>j \<le> i\<close> by auto
+      case (Lv sign bs)
+      let ?w' = "\<lambda>b. snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)]"
+      let ?time = "LEAST n. get_time tw < n \<and> n \<le> get_time tw + 1 \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b C (n - 1) \<noteq> ?w' b C n)"
+      show ?case 
+      proof (cases "\<exists>n>get_time tw. n \<le> get_time tw + 1 \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b C (n - 1) \<noteq> ?w' b C n)")
+        case True
+        have "fst tw < i + 1"
+          using Lv.prems(1) \<open>get_time tw < j\<close> by linarith
+        have "?time = fst tw + 1"
+          using True 
+        proof -
+          obtain nn :: nat and nna :: nat where
+            "(snd to_worldline_init_bit (snd tw) C nn[C, get_time tw, 1 := Bv (bs ! nn)] C nna \<noteq> snd to_worldline_init_bit (snd tw) C nn[C, get_time tw, 1 := Bv (bs ! nn)] C (nna - 1) \<and> nn \<in> set [0..<length bs]) \<and> nna \<le> get_time tw + 1 \<and> get_time tw < nna"
+            using True by fastforce
+          then have "get_time tw < nna \<and> nna \<le> get_time tw + 1 \<and> (\<exists>n. n \<in> set [0..<length bs] \<and> snd to_worldline_init_bit (snd tw) C n[C, get_time tw, 1 := Bv (bs ! n)] C (nna - 1) \<noteq> snd to_worldline_init_bit (snd tw) C n[C, get_time tw, 1 := Bv (bs ! n)] C nna)"
+            by (metis (no_types))
+          then have "get_time tw < ?time"
+            by (metis (mono_tags, lifting) LeastI_ex) (* > 1.0 s, timed out *)
+          then show ?thesis
+            by (metis (mono_tags, lifting) LeastI_ex True antisym_conv1 discrete leD)
+        qed
+        hence "\<not> i + 1 < ?time"
+          using \<open>get_time tw < i + 1\<close> by linarith
+        moreover have " bs = (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs])"
+        proof (rule nth_equalityI)
+          show "length bs = length (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs])"
+            by auto
+        next
+          fix b
+          assume "b < length bs"
+          hence "map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs] ! b = 
+                bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))"
+            by auto
+          have "((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw)  \<noteq> Bv (bs ! b) \<and>
+               ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw + 1) = Bv (bs ! b) \<Longrightarrow> 
+              ( GREATEST n.
+                    n \<le> get_time tw + 1 \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (n - 1) \<noteq> Bv (bs ! b) \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C n = Bv (bs ! b)) = fst tw + 1"
+            by (metis (mono_tags, lifting) Greatest_equality add_diff_cancel_right' le_eq_less_or_eq)
+          hence "bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1)) = (bs ! b)"
+            using `fst tw < i + 1`
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          thus " bs ! b =
+          map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs] !
+          b "
+            using \<open>map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs] ! b = bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))\<close> 
+            by blast
+        qed
+        ultimately show ?thesis 
+          using \<open>fst tw < i + 1\<close>
+          unfolding comp_def VHDL_Hoare.worldline_inert_upd2.simps snd_conv by auto
+      next
+        case False
+        moreover have "fst tw < i + 1"
+          using Lv.prems(1) \<open>get_time tw < j\<close> by linarith
+        moreover have " bs = (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs])"
+        proof (rule nth_equalityI)
+          show "length bs = length (map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs])"
+            by auto
+        next
+          fix b
+          assume "b < length bs"
+          hence "map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs] ! b = 
+                bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))"
+            by auto
+          have "((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw)  \<noteq> Bv (bs ! b) \<and>
+               ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (get_time tw + 1) = Bv (bs ! b) \<Longrightarrow> 
+              ( GREATEST n.
+                    n \<le> get_time tw + 1 \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C (n - 1) \<noteq> Bv (bs ! b) \<and>
+                    ((snd (snd tw))(C := to_bit b \<circ> snd (snd tw) C)) C n = Bv (bs ! b)) = fst tw + 1"
+            by (metis (mono_tags, lifting) Greatest_equality add_diff_cancel_right' le_eq_less_or_eq)
+          hence "bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1)) = (bs ! b)"
+            using `fst tw < i + 1`
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          thus " bs ! b =
+          map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs] !
+          b "
+            using \<open>map (\<lambda>b. bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))) [0..<length bs] ! b = bval_of (snd to_worldline_init_bit (snd tw) C b[C, get_time tw, 1 := Bv (bs ! b)] C (i + 1))\<close> 
+            by blast
+        qed
+        ultimately show ?thesis 
+          unfolding comp_def VHDL_Hoare.worldline_inert_upd2.simps snd_conv by auto
+      qed
     qed
     have assms2: "beval_world_raw (snd tw) (fst tw) (Bnand (Bsig A) (Bsig B)) v"
       using \<open>beval_world_raw2 tw (Bnand (Bsig A) (Bsig B)) v\<close> unfolding beval_world_raw2_def
@@ -1781,7 +2010,7 @@ lemma nand_seq_hoare2_wityping:
           Bassign_inert C (Bnand (Bsig A) (Bsig B)) 1 
       [\<lambda>tw. \<forall>i \<in> {fst tw <.. next_time_world tw}. nand_inv2 (i, snd tw) \<and> wityping \<Gamma> (snd tw)]"
   apply (rule Conseq2[where Q="\<lambda>tw. (\<forall>i \<in> {fst tw <.. next_time_world tw}. nand_inv2 (i, snd tw)) \<and> wityping \<Gamma> (snd tw)", rotated 1], rule AssignI2, blast)
-  by (metis beval_world_raw2_type nand_inv2_next_time_inert snd_conv vector_type_nand3_axioms vector_type_nand3_def worldline_inert_upd2_def worldline_inert_upd_preserve_wityping)
+  by (metis beval_world_raw2_typeB nand_inv2_next_time_inert snd_conv vector_type_nand3_axioms vector_type_nand3_def worldline_inert_upd2_def worldline_inert_upd_preserve_wityping')
 
 lemma nand_conc_hoare3_inert_without:
   "\<turnstile> \<lbrace>\<lambda>tw. (nand_inv tw \<and> wityping \<Gamma> (snd tw)) \<and> nand_inv2 tw\<rbrace> 

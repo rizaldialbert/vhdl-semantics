@@ -26,9 +26,9 @@ proof (rule seq_wt_cases(4)[OF assms])
   obtain len1 len2 where " \<Gamma> A = Lty Uns len1 \<and> \<Gamma> B = Lty Uns len2 \<and> \<Gamma> C = Lty Uns (max len1 len2)
                               \<or> \<Gamma> A = Lty Sig len1 \<and> \<Gamma> B = Lty Sig len2 \<and> \<Gamma> C = Lty Sig (max len1 len2)"
       and "0 < len1" and "0 < len2"
-    by (rule bexp_wt_cases(13)[OF \<open>bexp_wt \<Gamma> (Bsub (Bsig A) (Bsig B)) (\<Gamma> C)\<close>])
-       (metis bexp_wt_cases(9))+
-  thus ?thesis
+    apply (rule bexp_wt_cases_slice(6)[OF \<open>bexp_wt \<Gamma> (Bsub (Bsig A) (Bsig B)) (\<Gamma> C)\<close>])
+    by (metis bexp_wt_cases_slice(2))+
+ thus ?thesis
     by auto
 qed
 
@@ -44,7 +44,10 @@ lemma well_typed:
   "seq_wt \<Gamma> (Bassign_trans C (Bsub (Bsig A) (Bsig B)) 1)"
   apply (rule seq_wt.intros(4))
   unfolding ctype len_def apply (rule bexp_wt.intros(19))
-  unfolding atype[THEN sym] btype[THEN sym]  apply (rule bexp_wt.intros(3))+
+      apply (rule bexp_wt.intros(3))
+      apply (rule atype[THEN sym] )
+      apply (rule bexp_wt.intros(3))
+      apply (rule btype[THEN sym] )
   using len1 len2 by auto
 
 abbreviation "lof_wline tw sig n \<equiv> lval_of (wline_of tw sig n)"

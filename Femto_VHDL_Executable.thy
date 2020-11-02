@@ -51,6 +51,18 @@ lemma [code]:
   by (transfer', unfold to_trans_raw_sig_def)
      (metis (mono_tags, hide_lams) "when"(1) when_def zero_fun_def)
 
+
+lemma [code]:
+  "to_transaction_sig_bit def \<tau> idx sig' = Poly_Mapping.mapp (\<lambda>n m s. if s \<noteq> sig' then m s else case m s of None \<Rightarrow> None 
+                                                                                                       | Some v \<Rightarrow> if 0 < n \<and> to_bit idx (signal_of2 def \<tau> sig' (n - 1)) = to_bit idx v then None 
+                                                                                                                   else if n = 0 \<and> to_bit idx def = to_bit idx v then None 
+                                                                                                                   else Some (to_bit idx v)) \<tau>"
+  unfolding poly_mapping_eq_iff lookup_mapp
+  apply transfer'
+  unfolding to_trans_raw_bit_def when_def zero_fun_def zero_option_def
+  apply (rule ext)+
+  by (auto split: val.splits)
+
 code_pred (modes : i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> i \<Rightarrow> o \<Rightarrow> bool) beval_ind .
 
 definition "functional_beval_ind t \<sigma> \<gamma> \<theta> def exp =
@@ -66,6 +78,16 @@ value [code] "functional_beval_ind 0 (\<lambda>x. Bv False) {} 0 (\<lambda>x. Bv
 
 values "{x. beval_ind 0 (\<lambda>x. Lv Neu (replicate 4 False)) {} 0 (\<lambda>x. Lv Neu (replicate 4 False)) (Bslice C 3 2) x}"
 value [code] "functional_beval_ind 0 (\<lambda>x. Lv Neu (replicate 4 False)) {} 0 (\<lambda>x. Lv Neu (replicate 4 False)) (Bslice C 3 2)"
+
+lemma [code]:
+  "Poly_Mapping.mapp f (Pm_fmap xs) = Pm_fmap (fmmap_keys f (clearjunk0 xs))"
+  apply (intro poly_mapping_eqI)
+  apply transfer'
+  unfolding fmlookup_default_def Pm_fmap.rep_eq fmmap_keys.rep_eq
+  apply (auto split:option.splits)
+  unfolding compute_keys_pp
+   apply (simp add: clearjunk0_def fmdom'_notI)+
+  by auto
 
 theorem functional_beval_ind_completeness:
   assumes "beval_ind t \<sigma> \<gamma> \<theta> def exp v"
@@ -141,8 +163,691 @@ lemma[code]:
                                          map_drop_def map_filter_def
                                         split:option.splits)
 
+(*TODO : factoring this proof *)
+lemma [code]:
+  "combine_trans_bit_lifted (Pm_fmap xs) ps sign sig' now dly = (
+      let                                           
+        kset = fold (\<union>) (map (Poly_Mapping.keys o (\<lambda>\<tau>. to_transaction_sig \<tau> sig') o snd) ps) {}
+      in 
+        Pm_fmap (
+                     fmmap_keys (\<lambda>t'. if t' \<le> now \<or> now + dly < t' then id else map_drop sig') xs
+                        ++\<^sub>f
+                    (fmap_of_list (map (\<lambda>t. (t, 
+                      \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then (case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s) 
+                          else  Some (Lv sign (map (\<lambda>p. bval_of (signal_of2 (fst p) (snd p) sig' t)) ps)))) (sorted_list_of_set kset)))
+                )
+  )"
+  apply transfer
+  unfolding combine_trans_bit_def Let_def comp_def  fmlookup_default_add
+  apply (rule ext)+
+  apply ( auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def 
+                        split: option.splits)
+proof -
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x now dly
+  assume "sig \<noteq> sig'"
+  assume "fmlookup xs x = None"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume " x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  hence "(fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x) = Some (\<lambda>s. if x \<le> now \<or> now + dly < x \<or> s \<noteq> sig' then case fmlookup xs x of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' x)) ps)))"
+    unfolding fmlookup_of_list map_of_map_restrict restrict_in[OF **]
+    by (auto)
+  thus "None =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `sig \<noteq> sig'` `fmlookup xs x = None`
+    by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig' :: "'a"
+  fix sign x now dly
+  assume "fmlookup xs x = None"
+  assume "\<not> x \<le> now" and "\<not> now + dly < x"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume " x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"  
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  hence "(fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x) = Some (\<lambda>s. if x \<le> now \<or> now + dly < x \<or> s \<noteq> sig' then case fmlookup xs x of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' x)) ps)))"
+    unfolding fmlookup_of_list map_of_map_restrict restrict_in[OF **]
+    by (auto)
+  thus "Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' x)) ps)) =       
+        the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig'"
+    using `\<not> x \<le> now` `\<not> now + dly < x` by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig' :: "'a"
+  fix sign n  now dly
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "n \<in> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}"
+  have "\<And>init. finite init \<Longrightarrow> finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) init)"
+    using *
+  proof (induction ps)
+    case Nil
+    then show ?case by auto
+  next
+    case (Cons a ps)
+    have "pred_prod (\<lambda>a. True) (\<lambda>f. finite {x. f x \<noteq> 0}) a"
+      using Cons(3) by auto
+    hence "finite {x. snd a x \<noteq> 0}"
+      using pred_prod_inject surjective_pairing[of "a"] by metis
+    have **: " (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) (a # ps)) init) = 
+           fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      unfolding list.map(2) fold_Cons comp_def Un_empty_right by auto
+    have "finite  ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      using `finite init` `finite {x. snd a x \<noteq> 0}` unfolding finite_Un 
+      to_trans_raw_sig_def
+      by (metis (mono_tags, lifting) finite_nat_iff_bounded mem_Collect_eq subset_eq zero_map zero_option_def)
+    thus ?case
+      using Cons by auto
+  qed
+  hence fin: "finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {})"
+    by auto
+  show " n |\<in>|
+       (get_time \<circ>
+        (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                     else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))) |`|
+       fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    unfolding comp_def
+    apply (intro fimage_eqI)
+    using `n \<in> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}`
+    unfolding keys_def fset_of_list_elem set_sorted_list_of_set[OF fin]
+    by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x now dly
+  assume "sig \<noteq> sig'"
+  assume "fmlookup xs x = None"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "x \<notin> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}"
+  assume "sig \<noteq> sig'"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  have "\<And>init. finite init \<Longrightarrow> finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) init)"
+    using *
+  proof (induction ps)
+    case Nil
+    then show ?case by auto
+  next
+    case (Cons a ps)
+    have "pred_prod (\<lambda>a. True) (\<lambda>f. finite {x. f x \<noteq> 0}) a"
+      using Cons(3) by auto
+    hence "finite {x. snd a x \<noteq> 0}"
+      using pred_prod_inject surjective_pairing[of "a"] by metis
+    have **: " (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) (a # ps)) init) = 
+           fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      unfolding list.map(2) fold_Cons comp_def Un_empty_right by auto
+    have "finite  ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      using `finite init` `finite {x. snd a x \<noteq> 0}` unfolding finite_Un 
+      to_trans_raw_sig_def
+      by (metis (mono_tags, lifting) finite_nat_iff_bounded mem_Collect_eq subset_eq zero_map zero_option_def)
+    thus ?case
+      using Cons by auto
+  qed
+  hence fin: "finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {})"
+    by auto
+  have "False"
+    using ** `x \<notin> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}` 
+    unfolding set_sorted_list_of_set[OF fin] keys_def by auto
+  thus "None =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig' :: "'a"
+  fix sign x now dly
+  assume "fmlookup xs x = None"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "x \<notin> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  have "\<And>init. finite init \<Longrightarrow> finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) init)"
+    using *
+  proof (induction ps)
+    case Nil
+    then show ?case by auto
+  next
+    case (Cons a ps)
+    have "pred_prod (\<lambda>a. True) (\<lambda>f. finite {x. f x \<noteq> 0}) a"
+      using Cons(3) by auto
+    hence "finite {x. snd a x \<noteq> 0}"
+      using pred_prod_inject surjective_pairing[of "a"] by metis
+    have **: " (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) (a # ps)) init) = 
+           fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      unfolding list.map(2) fold_Cons comp_def Un_empty_right by auto
+    have "finite  ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      using `finite init` `finite {x. snd a x \<noteq> 0}` unfolding finite_Un 
+      to_trans_raw_sig_def
+      by (metis (mono_tags, lifting) finite_nat_iff_bounded mem_Collect_eq subset_eq zero_map zero_option_def)
+    thus ?case
+      using Cons by auto
+  qed
+  hence fin: "finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {})"
+    by auto
+  have "False"
+    using ** `x \<notin> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}` 
+    unfolding set_sorted_list_of_set[OF fin] keys_def by auto
+  thus "None =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig'"
+    by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x2 x now dly
+  assume "fmlookup xs x = Some x2"
+  assume "sig \<noteq> sig'"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "x \<in> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  hence "(fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x) = Some (\<lambda>s. if x \<le> now \<or> now + dly < x \<or> s \<noteq> sig' then case fmlookup xs x of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' x)) ps)))"
+    unfolding fmlookup_of_list map_of_map_restrict restrict_in[OF **]
+    by (auto)
+  thus "x2 sig =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `sig \<noteq> sig'` `fmlookup xs x = Some x2` by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig' :: "'a"
+  fix sign x2 x now dly
+  assume "fmlookup xs x = Some x2"
+  assume "\<not> x \<le> now " and " \<not> now + dly < x "
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "x \<in> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"  
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  hence "(fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x) = Some (\<lambda>s. if x \<le> now \<or> now + dly < x \<or> s \<noteq> sig' then case fmlookup xs x of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' x)) ps)))"
+    unfolding fmlookup_of_list map_of_map_restrict restrict_in[OF **]
+    by (auto)
+  thus " Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' x)) ps)) =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig'"
+    using `\<not> x \<le> now` `\<not> now + dly < x` by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig' :: "'a"
+  fix sign x2 n now dly
+  assume "fmlookup xs n = Some x2"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "n \<in> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}"
+  have "\<And>init. finite init \<Longrightarrow> finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) init)"
+    using *
+  proof (induction ps)
+    case Nil
+    then show ?case by auto
+  next
+    case (Cons a ps)
+    have "pred_prod (\<lambda>a. True) (\<lambda>f. finite {x. f x \<noteq> 0}) a"
+      using Cons(3) by auto
+    hence "finite {x. snd a x \<noteq> 0}"
+      using pred_prod_inject surjective_pairing[of "a"] by metis
+    have **: " (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) (a # ps)) init) = 
+           fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      unfolding list.map(2) fold_Cons comp_def Un_empty_right by auto
+    have "finite  ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      using `finite init` `finite {x. snd a x \<noteq> 0}` unfolding finite_Un 
+      to_trans_raw_sig_def
+      by (metis (mono_tags, lifting) finite_nat_iff_bounded mem_Collect_eq subset_eq zero_map zero_option_def)
+    thus ?case
+      using Cons by auto
+  qed
+  hence fin: "finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {})"
+    by auto
+  show " n |\<in>|
+       (get_time \<circ>
+        (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                     else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))) |`|
+       fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    unfolding comp_def
+    apply (intro fimage_eqI)
+    using `n \<in> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}`
+    unfolding keys_def fset_of_list_elem set_sorted_list_of_set[OF fin]
+    by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x2 x now dly
+  assume "fmlookup xs x = Some x2"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"  
+  assume "x \<notin> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)  
+  have "\<And>init. finite init \<Longrightarrow> finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) init)"
+    using *
+  proof (induction ps)
+    case Nil
+    then show ?case by auto
+  next
+    case (Cons a ps)
+    have "pred_prod (\<lambda>a. True) (\<lambda>f. finite {x. f x \<noteq> 0}) a"
+      using Cons(3) by auto
+    hence "finite {x. snd a x \<noteq> 0}"
+      using pred_prod_inject surjective_pairing[of "a"] by metis
+    have **: " (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) (a # ps)) init) = 
+           fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      unfolding list.map(2) fold_Cons comp_def Un_empty_right by auto
+    have "finite  ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      using `finite init` `finite {x. snd a x \<noteq> 0}` unfolding finite_Un 
+      to_trans_raw_sig_def
+      by (metis (mono_tags, lifting) finite_nat_iff_bounded mem_Collect_eq subset_eq zero_map zero_option_def)
+    thus ?case
+      using Cons by auto
+  qed
+  hence fin: "finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {})"
+    by auto
+  hence False
+    using ** `x \<notin> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}`
+    unfolding set_sorted_list_of_set[OF fin] keys_def by auto
+  thus " x2 sig =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig' :: "'a"
+  fix sign x2 x now dly
+  assume "fmlookup xs x = Some x2"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"  
+  assume "x \<notin> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)  
+  have "\<And>init. finite init \<Longrightarrow> finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) init)"
+    using *
+  proof (induction ps)
+    case Nil
+    then show ?case by auto
+  next
+    case (Cons a ps)
+    have "pred_prod (\<lambda>a. True) (\<lambda>f. finite {x. f x \<noteq> 0}) a"
+      using Cons(3) by auto
+    hence "finite {x. snd a x \<noteq> 0}"
+      using pred_prod_inject surjective_pairing[of "a"] by metis
+    have **: " (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) (a # ps)) init) = 
+           fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      unfolding list.map(2) fold_Cons comp_def Un_empty_right by auto
+    have "finite  ({k. to_trans_raw_sig (snd a) sig' k \<noteq> 0} \<union> init)"
+      using `finite init` `finite {x. snd a x \<noteq> 0}` unfolding finite_Un 
+      to_trans_raw_sig_def
+      by (metis (mono_tags, lifting) finite_nat_iff_bounded mem_Collect_eq subset_eq zero_map zero_option_def)
+    thus ?case
+      using Cons by auto
+  qed
+  hence fin: "finite (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {})"
+    by auto
+  hence False
+    using ** `x \<notin> fold (\<union>) (map (\<lambda>x. Femto_VHDL_raw.keys (to_trans_raw_sig (snd x) sig')) ps) {}`
+    unfolding set_sorted_list_of_set[OF fin] keys_def by auto
+  thus "  None =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig'"
+    by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x now dly
+  assume "fmlookup xs x = None"
+  assume "x \<le> now"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  thus "None =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `x \<le> now` `fmlookup xs x = None` unfolding fmlookup_of_list map_of_map_restrict 
+    restrict_map_def by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x now dly
+  assume "fmlookup xs x = None"
+  assume "now + dly < x"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  thus "None =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `now + dly < x` `fmlookup xs x = None` unfolding fmlookup_of_list map_of_map_restrict 
+    restrict_map_def by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x now dly
+  assume "fmlookup xs x = None"
+  assume "now + dly < x"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  thus "None =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `now + dly < x` `fmlookup xs x = None` unfolding fmlookup_of_list map_of_map_restrict 
+    restrict_map_def by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x now dly
+  assume "fmlookup xs x = None"
+  assume "\<not> now + dly < x"
+  assume "sig \<noteq> sig'"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)
+  thus "None =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `sig \<noteq> sig'` `fmlookup xs x = None` unfolding fmlookup_of_list map_of_map_restrict 
+    restrict_map_def by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x2 x now dly
+  assume "fmlookup xs x = Some x2"
+  assume "x \<le> now"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"  
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)  
+  thus " x2 sig =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `x \<le> now` `fmlookup xs x = Some x2`
+    unfolding fmlookup_of_list map_of_map_restrict restrict_map_def by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x2 x now dly
+  assume "fmlookup xs x = Some x2"
+  assume "x \<le> now"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"  
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)  
+  thus " x2 sig =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `x \<le> now` `fmlookup xs x = Some x2`
+    unfolding fmlookup_of_list map_of_map_restrict restrict_map_def by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x2 x now dly
+  assume "fmlookup xs x = Some x2"
+  assume "now + dly < x"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"  
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)  
+  thus " x2 sig =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `now + dly < x` `fmlookup xs x = Some x2`
+    unfolding fmlookup_of_list map_of_map_restrict restrict_map_def by auto
+next
+  fix xs :: "(nat, 'a \<Rightarrow> val option) fmap"
+  fix ps :: "(val \<times> (nat \<Rightarrow> 'a \<Rightarrow> val option)) list"
+  fix sig sig' :: "'a"
+  fix sign x2 x now dly
+  assume "fmlookup xs x = Some x2"
+  assume "now + dly < x"
+  assume *: "list_all (pred_prod top (\<lambda>f. finite {x. f x \<noteq> 0})) ps"  
+  assume "x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+  hence "x |\<in>| fmdom (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))"
+    by auto
+  have **: "x \<in> set (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))"
+    using `x |\<in>| fset_of_list (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))`
+    by (simp add: fset_of_list_elem)  
+  thus " x2 sig =
+       the (fmlookup
+             (fmap_of_list
+               (map (\<lambda>t. (t, \<lambda>s. if t \<le> now \<or> now + dly < t \<or> s \<noteq> sig' then case fmlookup xs t of None \<Rightarrow> None | Some m \<Rightarrow> m s
+                                 else Some (Lv sign (map (\<lambda>p. bval_of (Femto_VHDL_raw.to_signal (get_time p) (to_trans_raw_sig (snd p)) sig' t)) ps))))
+                 (sorted_list_of_set (fold (\<union>) (map (\<lambda>x. {k. to_trans_raw_sig (snd x) sig' k \<noteq> 0}) ps) {}))))
+             x)
+        sig"
+    using `now + dly < x` `fmlookup xs x = Some x2`
+    unfolding fmlookup_of_list map_of_map_restrict restrict_map_def by auto  
+qed
 
-value "lookup (purge (0 :: sig transaction) 1 1 C (Bv False) (Bv True)) 1 C"
+lemma [code]: 
+  "purge' \<tau> t dly sig def (Bv b) = purge \<tau> t dly sig def (Bv b)"
+  apply transfer'
+  unfolding purge_raw'_def by auto
+
+lemma purge'_code[code]: 
+  "purge' \<tau> t dly sig def (Lv sign bs) = combine_trans_bit_lifted \<tau> (zip (map (\<lambda>n. Bv (case def of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..< length bs]) 
+                                                                                   (map (\<lambda>n. purge (to_transaction_sig_bit def \<tau> n sig) t dly sig (Bv (case def of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..< length bs])) sign sig t dly"
+  apply transfer'
+  unfolding purge_raw'_def by auto
+
+
+value [code] "lookup (purge' (0 :: sig transaction) 1 1 C (Bv False) (Bv True)) 1 C"
 
 lemma [code]:
   "post_necessary dly (Pm_fmap xs) t sig v def = (signal_of2 def (Pm_fmap xs) sig (t + dly) \<noteq> v)"
@@ -950,6 +1655,7 @@ lemma evaluate_b_conc_exec:
   "b_conc_exec 1 def_state {A, B} (lookup test_beh) (process {A} : seq1) (lookup (Pm_fmap (fmap_of_list []))) 2 C = Some True"
   by eval
  *)
+
 lemma evaluate_quiet_raw:
   "Femto_VHDL_raw.quiet ((lookup (Pm_fmap (fmap_of_list []))) :: sig trans_raw) {}"
   by eval

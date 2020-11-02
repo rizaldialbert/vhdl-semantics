@@ -104,10 +104,10 @@ proof (cases)
   next
     have "signal_of (Bv False) 0 C 1 \<noteq> Bv True"
       by (metis signal_of_empty val.inject(1))
-    hence "purge_raw 0 0 1 C (Bv False) (Bv True) = override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}"
-      unfolding purge_raw_def Let_def by auto
-    thus "inr_post_raw C (Bv True) (Bv False) 0 0 1 = 0(1 := [C \<mapsto> Bv True])"
-      using temp0 unfolding inr_post_raw_def by auto
+    hence "purge_raw' 0 0 1 C (Bv False) (Bv True) = override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}"
+      unfolding purge_raw'_def Let_def purge_raw_def by auto
+    thus "inr_post_raw' C (Bv True) (Bv False) 0 0 1 = 0(1 := [C \<mapsto> Bv True])"
+      using temp0 unfolding inr_post_raw'_def by auto
   qed
   hence "0 , (\<lambda>x. Bv False) , {A} , 0, (\<lambda>x. Bv False) \<turnstile> <get_seq nand , 0> \<longrightarrow>\<^sub>s (0(1 := [C \<mapsto> Bv True]))"
     unfolding nand_def by auto
@@ -238,10 +238,10 @@ next
   next
     have "signal_of (Bv False) 0 C 1 \<noteq> Bv True"
       by (metis signal_of_empty val.inject(1))
-    hence "purge_raw 0 0 1 C (Bv False) (Bv True) = override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}"
-      unfolding purge_raw_def Let_def by auto
-    thus "inr_post_raw C (Bv True) (Bv False) 0 0 1 = 0(1 := [C \<mapsto> Bv True])"
-      using temp0 unfolding inr_post_raw_def by auto
+    hence "purge_raw' 0 0 1 C (Bv False) (Bv True) = override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}"
+      unfolding purge_raw'_def purge_raw_def Let_def by auto
+    thus "inr_post_raw' C (Bv True) (Bv False) 0 0 1 = 0(1 := [C \<mapsto> Bv True])"
+      using temp0 unfolding inr_post_raw'_def by auto
   qed
   hence "0 , (\<lambda>x. Bv False) , {A} , 0, (\<lambda>x. Bv False) \<turnstile> <get_seq nand , 0> \<longrightarrow>\<^sub>s (0(1 := [C \<mapsto> Bv True]))"
     unfolding nand_def by auto
@@ -1570,7 +1570,9 @@ proof (cases " \<tau> 0 = 0")
   hence "bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)"
     using seq_wt_cases(4)  by (metis conc_stmt.sel(4) nand3_def)
   hence "\<Gamma> A = Bty" and "\<Gamma> B = Bty"
-    using bexp_wt_cases  by (smt assms(5) bexp.distinct bexp.inject(1) bexp_wt.cases)+
+    using bexp_wt_cases  
+    by (metis assms(5) bexp_wt_cases_slice(2))
+       (metis \<open>bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)\<close> assms(5) bexp_wt_cases(4) bexp_wt_cases_slice(2))
   hence "is_Bv (def A)" and "is_Bv (def B)"
     by (metis assms(4) styping_def ty.simps(3) type_of.simps(2) val.collapse(2))+
   hence "0 , def , {} , 0, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (def A))" and
@@ -2066,7 +2068,9 @@ next
   hence "bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)"
     using seq_wt_cases(4)  by (metis conc_stmt.sel(4) nand3_def)
   hence "\<Gamma> A = Bty" and "\<Gamma> B = Bty"
-    using bexp_wt_cases  by (smt assms(5) bexp.distinct bexp.inject(1) bexp_wt.cases)+
+    using bexp_wt_cases  
+    by (metis assms(5) bexp_wt_cases_slice(2))
+       (metis \<open>bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)\<close> assms(5) bexp_wt_cases(4) bexp_wt_cases_slice(2))
   hence "is_Bv (def A)" and "is_Bv (def B)"
     by (metis assms(4) styping_def ty.simps(3) type_of.simps(2) val.collapse(2))+
   hence "0 , def , {} , 0, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (def A))" and

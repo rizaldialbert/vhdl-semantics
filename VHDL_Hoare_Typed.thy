@@ -874,7 +874,7 @@ lemma eval_world_raw_correctness_only_if:
 section \<open>Typed hoare logic for sequential statements\<close>
 
 abbreviation eval_world_raw2 where "eval_world_raw2 tw exp \<equiv> eval_world_raw (fst tw) (snd tw) exp"
-
+                                                                     
 lemma eval_world_raw2_irrelevant:
   assumes "sig \<notin> set_bexp v"
   shows "eval_world_raw2 a[ sig, dly :=\<^sub>2 eval_world_raw2 a exp] v = eval_world_raw2 a v"
@@ -887,10 +887,117 @@ lemma eval_world_raw2_irrelevant_inert:
   shows "eval_world_raw2 a\<lbrakk> sig, dly :=\<^sub>2 eval_world_raw2 a exp\<rbrakk> v = eval_world_raw2 a v"
   using assms
 proof (induction v)
+  case (Bsig x)
+  then show ?case 
+    apply (induction "eval_world_raw2 a exp")
+    unfolding worldline_inert_upd2_def 
+    by (smt bexp.simps(944) eval_world_raw.simps(10) fst_worldline_inert_upd2 insertCI sndI worldline_inert_upd2.simps(1) fstI fun_upd_def insertCI snd_conv worldline_inert_upd2.simps(2) worldline_inert_upd2_def worldline_inert_upd_def)+
+next
+  case (Bsig_event x)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    apply (induction "eval_world_raw2 a exp")
+     apply (smt bexp.simps(945) comp_apply eval_world_raw.simps(14) event_of_alt_def fstI insertCI mem_Collect_eq snd_conv worldline_inert_upd2.simps(1) worldline_inert_upd_def)
+    by (smt bexp.simps(945) comp_apply eval_world_raw.simps(14) event_of_alt_def fstI fun_upd_def insertCI mem_Collect_eq snd_conv worldline_inert_upd2.simps(2))
+next
+  case (Bsig_delayed x1a x2a)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    apply (induction "eval_world_raw2 a exp")
+    apply (smt bexp.simps(946) eval_world_raw.simps(13) insertCI prod.collapse prod.simps(1) worldline_inert_upd2.simps(1) worldline_inert_upd_def)
+    by (smt bexp.simps(946) eval_world_raw.simps(13) fstI fun_upd_def insertCI snd_conv worldline_inert_upd2.simps(2))
+next
+  case (Bnot v)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    apply (induction "eval_world_raw2 a exp")
+    apply (smt bexp.simps eval_world_raw.simps insertCI prod.collapse prod.simps(1) worldline_inert_upd2.simps(1) worldline_inert_upd_def)
+    by (smt bexp.simps eval_world_raw.simps fstI fun_upd_def insertCI snd_conv worldline_inert_upd2.simps(2))
+next
+  case (Band v1 v2)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    by (induction "eval_world_raw2 a exp") auto
+next
+  case (Bor v1 v2)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    by (induction "eval_world_raw2 a exp")auto
+next
+  case (Bnand v1 v2)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    by (induction "eval_world_raw2 a exp")auto
+next
+  case (Bnor v1 v2)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    by (induction "eval_world_raw2 a exp")auto
+next
+  case (Bxor v1 v2)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    by (induction "eval_world_raw2 a exp")auto
+next
+  case (Bxnor v1 v2)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    by (induction "eval_world_raw2 a exp")auto
+next
+  case Btrue
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    by (induction "eval_world_raw2 a exp")auto
+next
+  case Bfalse
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    by (induction "eval_world_raw2 a exp")auto
+next
+  case (Bslice x1a x2a x3)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    apply (induction "eval_world_raw2 a exp")
+    apply (smt bexp.simps(956) eval_world_raw.simps(10) eval_world_raw.simps(16) fst_conv insertCI sndI worldline_inert_upd2.simps(1) worldline_inert_upd_def)
+    by (smt bexp.simps(956) eval_world_raw.simps(10) eval_world_raw.simps(16) fstI fun_upd_apply insertCI snd_conv worldline_inert_upd2.simps(2))
+next
+  case (Bindex x1a x2a)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    apply (induction "eval_world_raw2 a exp")
+     apply (smt bexp.simps(957) eval_world_raw.simps(10) eval_world_raw.simps(17) fst_conv insertCI sndI worldline_inert_upd2.simps(1) worldline_inert_upd_def)
+    by (smt bexp.simps(957) eval_world_raw.simps(10) eval_world_raw.simps(17) fstI fun_upd_apply insertCI snd_conv worldline_inert_upd2.simps(2))
+next
+  case (Badd v1 v2)
+  then show ?case 
+    unfolding worldline_inert_upd2_def
+    by (induction "eval_world_raw2 a exp") auto
+next
+  case (Bmult v1 v2)
+  then show ?case 
+    by (induction "eval_world_raw2 a exp") auto
+next
+  case (Bsub v1 v2)
+  then show ?case 
+    by (induction "eval_world_raw2 a exp") auto
+next
+  case (Bshiftl v x2a)
+  then show ?case 
+    by (induction "eval_world_raw2 a exp") auto
+next
+  case (Bshiftr v x2a)
+  then show ?case 
+    by (induction "eval_world_raw2 a exp") auto
+next
   case (Bwhen v1 v2 v3)
   then show ?case 
-    by(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def event_of_alt_def split: val.splits bool.splits) presburger+
-qed(auto simp add: worldline_inert_upd2_def worldline_inert_upd_def event_of_alt_def)
+    by (induction "eval_world_raw2 a exp")
+       (auto simp add: worldline_inert_upd2_def worldline_inert_upd_def event_of_alt_def split: val.splits bool.splits) 
+next
+  case (Bliteral x1a x2a)
+  then show ?case 
+    by (induction "eval_world_raw2 a exp") auto
+qed
 
 lemma eval_world_raw2_simp:
   assumes "0 < dly"
@@ -2493,7 +2600,7 @@ next
 next
   case (6 tw exp x tw' sig dly)
   then show ?case 
-   by (smt beval_world_raw2_def eval_world_raw_correctness_only_if seq_wt_cases(5) sndI type_of_eval_world_raw2 worldline_inert_upd2_def worldline_inert_upd_preserve_wityping)
+    by (smt beval_world_raw2_def eval_world_raw_correctness_only_if seq_wt_cases(5) sndI type_of_eval_world_raw2 worldline_inert_upd2_def worldline_inert_upd_preserve_wityping')
 qed auto
 
 

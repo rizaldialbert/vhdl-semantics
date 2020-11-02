@@ -55,6 +55,21 @@ definition worldline_inert_upd :: "'signal worldline_init \<Rightarrow> 'signal 
              in
                 if s' \<noteq> s \<or> t' < t then snd w s' t' else if t' < time then snd w s' t  else v))"
 
+definition to_worldline_init_bit :: "'signal worldline_init \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> 'signal worldline_init" where
+  "to_worldline_init_bit w sig b = ((fst w)(sig := to_bit b (fst w sig)),  
+                                    (snd w)(sig := to_bit b o (snd w sig)))"
+
+fun worldline_inert_upd2 :: "'signal worldline_init \<Rightarrow> 'signal \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> val \<Rightarrow> 'signal worldline_init"
+  where
+  "worldline_inert_upd2 w s t dly (Bv v) = worldline_inert_upd w s t dly (Bv v)"
+| "worldline_inert_upd2 w s t dly (Lv sign bs) = 
+      (fst w, (snd w)(s := \<lambda>n.  let 
+                                    w' = \<lambda>b. snd (worldline_inert_upd (to_worldline_init_bit w s b) s t dly (Bv (bs ! b))); 
+                                    time = if \<exists>n. t < n \<and> n \<le> t + dly \<and> (\<exists>b \<in> set [0..< length bs] . w' b s (n - 1) \<noteq> w' b s n) then 
+                                              LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b \<in> set [0..< length bs] . w' b s (n - 1) \<noteq> w' b s n)
+                                           else t + dly
+                                in if n < t then snd w s n else if n < time then snd w s t else Lv sign (map (\<lambda>b. bval_of (snd (worldline_inert_upd (to_worldline_init_bit w s b) s t dly (Bv (bs ! b))) s n)) [0..<length bs]))) "
+
 text \<open>These are the two constructs we can use to update or modify a @{typ "'signal worldline"}. Note
 that the syntax between these two are quite similar. The only difference is the number of arguments
 on the left of the equality sign: @{term "worldline_upd"} has two while @{term
@@ -1548,6 +1563,1138 @@ next
     by auto
 qed
 
+lemma purge'_trans_post_preserve_non_stuttering_bv:
+  fixes \<tau> sig t dly cur_val b
+  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
+  defines "\<tau>'  \<equiv> purge_raw' \<tau> t dly sig (\<sigma> sig) (Bv b)"
+  defines "\<tau>'' \<equiv> trans_post_raw sig (Bv b) (\<sigma> sig) \<tau>' t dly"
+  assumes "\<forall>n. n \<le> t \<longrightarrow>  \<tau> n = 0"
+  shows "non_stuttering (to_trans_raw_sig \<tau>'') \<sigma> sig"
+  using purge_trans_post_preserve_non_stuttering assms
+  unfolding purge_raw'_def by auto
+
+(* lemma signal_of_to_trans_raw_bit:
+  assumes "signal_of def \<tau> sig t = Lv sign bs"
+  shows   "signal_of (Bv (lval_of def ! b)) (to_trans_raw_bit def \<tau> b sig) sig t = Bv (bs ! b)"
+proof -
+  have "signal_of (Bv (case def of Lv sign bs \<Rightarrow> bs ! b | Bv b' \<Rightarrow> b')) (to_trans_raw_bit def \<tau> b sig) sig t = Bv (bs ! b)"
+    using to_bit_signal_of' assms  by (metis to_bit.simps(2)) 
+  thus ?thesis
+    sledgehammer
+ *)
+
+(* lemma keys_unchanged_to_trans_raw_bit:
+  assumes "\<forall>k. k \<in> keys (to_trans_raw_sig \<tau> sig) \<longrightarrow> (type_of o the) (\<tau> k sig) \<noteq> Bty"
+  shows   "\<forall>k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit def \<tau> b sig) sig) \<longleftrightarrow> k \<in> keys (to_trans_raw_sig \<tau> sig)"
+  using assms
+  unfolding to_trans_raw_sig_def to_trans_raw_bit_def keys_def by (auto simp add: zero_fun_def zero_option_def split: option.splits val.splits)
+ *)
+
+lemma purge'_trans_post_preserve_non_stuttering_lv:
+  fixes \<tau> sig t dly cur_val sign bs
+  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
+  defines "\<tau>'  \<equiv> purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)"
+  defines "\<tau>'' \<equiv> trans_post_raw sig (Lv sign bs) (\<sigma> sig) \<tau>' t dly"
+  assumes "\<forall>n. n \<le> t \<longrightarrow>  \<tau> n = 0"
+  shows "non_stuttering (to_trans_raw_sig \<tau>'') \<sigma> sig"
+proof -
+  have 1: "\<tau>' = combine_trans_bit \<tau>
+          (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) 
+               (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))
+          sign sig t dly"
+    unfolding \<tau>'_def purge_raw'_def by auto
+  have "post_necessary_raw (dly - 1) \<tau>' t sig (Lv sign bs) (\<sigma> sig) \<or> 
+     \<not> post_necessary_raw (dly - 1) \<tau>' t sig (Lv sign bs) (\<sigma> sig)"
+    by auto
+  moreover
+  { assume "post_necessary_raw (dly - 1) \<tau>' t sig (Lv sign bs) (\<sigma> sig)"
+    hence 0: "\<tau>'' = post_raw sig (Lv sign bs) \<tau>' (t + dly)" and "signal_of (\<sigma> sig) \<tau>' sig (t + (dly - 1)) \<noteq> Lv sign bs"
+      unfolding \<tau>''_def trans_post_raw_def by auto
+    have ?thesis
+      unfolding non_stuttering_def 
+    proof (rule, rule, rule, rule)
+      fix k1 k2
+      assume "k1 < k2 \<and> k1 \<in> keys (to_trans_raw_sig \<tau>'' sig) \<and> k2 \<in> keys (to_trans_raw_sig \<tau>'' sig) \<and> (\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau>'' sig))"
+      hence "k1 < k2" and "k1 \<in> keys (to_trans_raw_sig \<tau>'' sig)" and "k2 \<in> keys (to_trans_raw_sig \<tau>'' sig)" and 
+        2: "(\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau>'' sig))" by auto
+      have "k2 \<le> t + dly"
+      proof (rule ccontr)
+        assume "\<not> k2 \<le> t + dly" hence "t + dly < k2" by auto
+        hence "\<tau>'' k2 sig = None"
+          using `\<tau>'' = post_raw sig (Lv sign bs) \<tau>' (t + dly)` unfolding post_raw_def by auto
+        with `k2 \<in> keys (to_trans_raw_sig \<tau>'' sig)` show False 
+          unfolding to_trans_raw_sig_def keys_def zero_option_def by auto
+      qed
+      have "k1 \<in> keys (to_trans_raw_sig \<tau>' sig)"
+        using `k1 \<in> keys (to_trans_raw_sig \<tau>'' sig)` unfolding 0 post_raw_def to_trans_raw_sig_def keys_def zero_option_def
+        using \<open>k1 < k2\<close> \<open>k2 \<le> t + dly\<close> by auto
+      have 3: "(\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau>' sig))"
+        using `k2 \<le> t + dly` 0 2 `k1 < k2` unfolding post_raw_def 
+        by (metis domIff dom_def dual_order.asym keys_def less_le_trans to_trans_raw_sig_def zero_option_def)
+      have "k2 < t \<or> k2 \<ge> t"
+        by auto
+      moreover
+      { assume "k2 < t"
+        hence "\<tau>'' k2 sig = \<tau>' k2 sig"
+          using 0 unfolding post_raw_def by auto
+        also have "... = \<tau> k2 sig"
+          using 1 `k2 < t` unfolding combine_trans_bit_def Let_def by auto
+        finally have "\<tau>'' k2 sig = \<tau> k2 sig"
+          by auto
+        hence "False"
+          by (metis (full_types) \<open>k1 < k2 \<and> k1 \<in> keys (to_trans_raw_sig \<tau>'' sig) \<and> k2 \<in> keys
+          (to_trans_raw_sig \<tau>'' sig) \<and> (\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau>'' sig))\<close>
+          \<open>k2 < t\<close> assms(4) domIff dom_def keys_def less_imp_le_nat to_trans_raw_sig_def
+          zero_fun_def zero_option_def)
+        hence "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+          by auto }
+      moreover
+      { assume "k2 \<ge> t"
+        have "dly = 0 \<or> dly \<noteq> 0"
+          by auto
+        moreover
+        { assume "dly = 0"
+          hence "k2 = t" 
+            using \<open>k2 \<le> t + dly\<close> \<open>t \<le> k2\<close> by linarith
+          have "k1 < t"
+            using `k1 < k2` `k2 = t` by auto
+          hence "\<tau>''  k1 sig = \<tau>' k1 sig"
+            using 0 unfolding post_raw_def by auto
+          also have "... = \<tau> k1 sig"
+            using `k1 < t` unfolding 1 combine_trans_bit_def Let_def by auto
+          also have "... = 0"
+            using `k1 < t` assms(4) by (auto simp add: zero_fun_def zero_option_def)
+          finally have "\<tau>'' k1 sig = 0"
+            by auto
+          hence "k1 \<notin> keys (to_trans_raw_sig \<tau>'' sig)"
+            unfolding to_trans_raw_sig_def keys_def by auto
+          with `k1 \<in> keys (to_trans_raw_sig \<tau>'' sig)` have False
+            by auto
+          hence "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+            by auto }
+        moreover
+        { assume "dly \<noteq> 0"
+          have "k2 = t + dly \<or> k2 < t + dly"
+            using `k2 \<le> t + dly` by auto
+          moreover
+          { assume "k2 = t + dly"
+            hence "\<tau>'' k2 sig = Some (Lv sign bs)"
+              unfolding 0 post_raw_def by auto
+            have "t < k1"
+            proof (rule ccontr)
+              assume "\<not> t < k1" hence "k1 \<le> t" by auto
+              hence "\<tau>'' k1 sig = \<tau>' k1 sig"
+                using ` dly \<noteq> 0` unfolding 0 post_raw_def by auto
+              also have "... = \<tau> k1 sig"
+                unfolding 1 combine_trans_bit_def using `k1 \<le> t` by auto
+              also have "... = 0"
+                using assms(4)  by (simp add: \<open>k1 \<le> t\<close> zero_fun_def)
+              finally have "\<tau>'' k1 sig = 0"
+                by auto
+              with `k1 \<in> keys (to_trans_raw_sig \<tau>'' sig)` show False
+                by (simp add: keys_def to_trans_raw_sig_def)
+            qed
+            hence "\<tau>'' k1 sig = \<tau>' k1 sig"
+              using `k1 < k2` `k2 = t + dly` unfolding 0 post_raw_def by auto
+            have "inf_time (to_trans_raw_sig \<tau>') sig (t + (dly - 1)) = Some k1"
+            proof (rule inf_time_someI)
+              show "k1 \<in> dom (to_trans_raw_sig \<tau>' sig)"
+                using `k1 \<in> keys (to_trans_raw_sig \<tau>' sig)`  by (simp add: dom_def keys_def zero_option_def)
+            next
+              show "k1 \<le> t + (dly - 1)"
+                using \<open>k1 < k2\<close> \<open>k2 = t + dly\<close> by linarith
+            next
+              { fix ta
+                assume "ta \<in> dom (to_trans_raw_sig \<tau>' sig)"
+                assume "k1 < ta"
+                assume "ta \<le> t + (dly - 1)"
+                have "ta < k2"
+                  using \<open>dly \<noteq> 0\<close> \<open>k2 = t + dly\<close> \<open>ta \<le> t + (dly - 1)\<close> by linarith
+                hence "ta \<notin> keys (to_trans_raw_sig \<tau>' sig)"
+                  using 3 \<open>k1 < ta\<close> by blast
+                with `ta \<in> dom (to_trans_raw_sig \<tau>' sig)` have False
+                  by (simp add: dom_def keys_def zero_option_def) }
+              thus "\<forall>ta\<in>dom (to_trans_raw_sig \<tau>' sig). ta \<le> t + (dly - 1) \<longrightarrow> ta \<le> k1"
+                using leI by blast
+            qed
+            hence "the (to_trans_raw_sig \<tau>' sig k1) \<noteq> Lv sign bs"
+              using `(signal_of (\<sigma> sig) \<tau>' sig (t + (dly - 1)) \<noteq> Lv sign bs)`
+              unfolding to_signal_def comp_def by auto
+            hence "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+              by (metis \<open>\<tau>'' k1 sig = \<tau>' k1 sig\<close> \<open>\<tau>'' k2 sig = Some (Lv sign bs)\<close> option.sel to_trans_raw_sig_def) }
+          moreover
+          { assume "k2 < t + dly"
+            hence "\<tau>'' k2 sig = \<tau>' k2 sig"
+              using 0 unfolding post_raw_def by auto
+            have "t < k2"
+            proof (rule ccontr)
+              assume "\<not> t < k2" hence "k2 \<le> t" by auto
+              hence "\<tau>' k2 sig = \<tau> k2 sig"
+                unfolding 1 combine_trans_bit_def by auto
+              also have "... = 0"
+                using assms  by (simp add: \<open>k2 \<le> t\<close> zero_fun_def)
+              finally have "\<tau>'' k2 sig = 0"
+                by (simp add: \<open>\<tau>'' k2 sig = \<tau>' k2 sig\<close>)
+              with `k2 \<in> keys (to_trans_raw_sig \<tau>'' sig)` show False
+                by (simp add: keys_def to_trans_raw_sig_def)
+            qed
+            hence "k2 \<in> keys (to_trans_raw_sig \<tau>' sig)"
+              using `k2 \<in> keys (to_trans_raw_sig \<tau>'' sig)` 
+              by (simp add: \<open>\<tau>'' k2 sig = \<tau>' k2 sig\<close> keys_def to_trans_raw_sig_def)
+            hence "\<tau>' k2 sig \<noteq> None"
+              by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+            hence k2inset: "k2 \<in> fold (\<union>)
+            (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+              (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))
+            {}"
+              using `t < k2` `k2 < t + dly` unfolding 1 combine_trans_bit_def Let_def 
+              by (meson dual_order.asym leD)
+            hence "\<tau>' k2 sig = Some
+                (Lv sign
+                  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k2))
+                    (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))"
+              unfolding 1 combine_trans_bit_def Let_def  using \<open>k2 < t + dly\<close> \<open>t < k2\<close> by auto
+            hence 4: "(lval_of o the) (\<tau>' k2 sig) =  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k2))
+                    (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))"
+              by auto
+            have 5: "\<And>b. b \<in> set [0..< length bs] \<Longrightarrow> (lval_of o the) (\<tau>' k2 sig) ! b = 
+                      bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k2)"
+            proof -
+              fix b
+              assume "b \<in> set [0 ..< length bs]"
+              have "(lval_of o the) (\<tau>' k2 sig) ! b = (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k2))
+                    (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) ! b" (is "_ = ?complex")
+                using 4 by auto
+              have *: "b < length (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))"
+                using `b \<in> set [0 ..< length bs]` by auto
+              have **: "?complex = bval_of
+     (signal_of
+       (fst (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+       (snd (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+       sig k2)"
+                unfolding  nth_map[OF *] by auto 
+              moreover have "[0 ..< length bs] ! b = b"
+                using `b \<in> set [0 ..< length bs]` by auto
+              ultimately have "?complex = bval_of 
+                (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k2)"
+                unfolding **  using \<open>b \<in> set [0..<length bs]\<close> 
+                by (simp add: val.case_eq_if)
+              thus "(lval_of \<circ> the) (\<tau>' k2 sig) ! b = bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k2)"
+                using 4 by auto
+            qed
+            have helper: "\<And>f. length (map f [0..<length bs]) \<le> length bs - 0"
+              by auto
+            have  "k2 \<in> fold (\<union>) (map keys
+                   (map (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig)
+                     (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n)))
+                       [0..<length bs]))) {}"
+              using k2inset unfolding map_map[THEN sym] map_snd_zip_take  length_map min.idem length_upt
+              take_all[OF helper] by auto
+            hence helper2:" k2 \<in> fold (\<union>)
+               (map (\<lambda>x. keys
+                      (to_trans_raw_sig
+                        (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> x sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! x)) (Bv (bs ! x))) sig))
+             [0..<length bs]) {}" 
+              unfolding map_map comp_def  by auto                   
+            obtain b2 where "b2 \<in> set [0..< length bs]" and "k2 \<in> keys (to_trans_raw_sig
+                            (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig)"
+              using member_fold_union[OF helper2] by auto
+            hence purge_neq: "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) k2 sig \<noteq> 0"
+              unfolding keys_def to_trans_raw_sig_def by auto
+            have the_time: "Some k2 = inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig)) sig (t + dly)" and 
+              sig_neq: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig t \<noteq> Bv (bs ! b2)" and 
+              sig_eq: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig (t + dly) = Bv (bs ! b2)"
+              using `t < k2` `k2 < t + dly` purge_raw_neq_0_imp[OF purge_neq `t < k2` `k2 < t + dly`] 
+              by auto
+            moreover hence "to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig k2 sig = Some (Bv (bs ! b2))"
+              unfolding to_signal_def comp_def to_trans_raw_sig_def 
+              by (smt inf_time_some_exists keys_def mem_Collect_eq not_None_eq option.sel
+              option.simps(5) zero_option_def)
+            ultimately have "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) k2 sig = Some (Bv (bs ! b2))"
+              using `t < k2` `k2 < t + dly` unfolding purge_raw_def Let_def 
+              by (smt "3" UnE \<open>k1 < k2\<close> \<open>k2 \<in> keys (to_trans_raw_sig \<tau>' sig)\<close> greaterThanAtMost_iff greaterThanLessThan_iff option.sel override_on_apply_notin)
+            hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) 
+                            (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig k2 = Bv (bs ! b2)"
+              using trans_some_signal_of'  by (metis o_apply option.sel )
+            hence "(lval_of o the) (\<tau>' k2 sig) ! b2 = bs ! b2"
+              using 5[OF `b2 \<in> set [0..< length bs]`] by auto
+
+            have "k1 < t + dly"
+              using `k1 < k2` `k2 < t + dly` by auto
+            have "t < k1"
+            proof (rule ccontr)
+              assume "\<not> t < k1" hence "k1 \<le> t" by auto
+              hence "\<tau>' k1 sig = \<tau> k1 sig"
+                unfolding 1 combine_trans_bit_def by auto
+              also have "... = 0"
+                using assms  by (simp add: \<open>k1 \<le> t\<close> zero_fun_def)
+              finally have "\<tau>' k1 sig = 0"
+                by (simp)
+              with `k1 \<in> keys (to_trans_raw_sig \<tau>' sig)` show False
+                by (simp add: keys_def to_trans_raw_sig_def)
+            qed
+            have "\<tau>' k1 sig \<noteq> None"
+              using `k1 \<in> keys (to_trans_raw_sig \<tau>' sig)` 
+              by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+            hence k1inset: "k1 \<in> fold (\<union>)
+            (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+              (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))
+            {}"
+              using `t < k1` `k1 < t + dly` unfolding 1 combine_trans_bit_def Let_def 
+              by (meson dual_order.asym leD)
+            have  "k1 \<in> fold (\<union>) (map keys
+                   (map (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig)
+                     (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n)))
+                       [0..<length bs]))) {}"
+              using k1inset unfolding map_map[THEN sym] map_snd_zip_take  length_map min.idem length_upt
+              take_all[OF helper] by auto
+            hence k1inset':" k1 \<in> fold (\<union>)
+               (map (\<lambda>x. keys
+                      (to_trans_raw_sig
+                        (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> x sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! x)) (Bv (bs ! x))) sig))
+             [0..<length bs]) {}" 
+              unfolding map_map comp_def  by auto     
+            obtain b1 where "b1 \<in> set [0..< length bs]" and "k1 \<in> keys (to_trans_raw_sig
+                            (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b1)) (Bv (bs ! b1))) sig)"
+              using member_fold_union[OF k1inset'] by auto 
+            hence purge_neq: "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b1)) (Bv (bs ! b1)) k1 sig \<noteq> 0"
+              unfolding keys_def to_trans_raw_sig_def by auto
+            have "Some k1 = inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig)) sig (t + dly)" and 
+              "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b1)) (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) sig t \<noteq> Bv (bs ! b1)" and 
+              "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b1)) (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) sig (t + dly) = Bv (bs ! b1)"
+              using `t < k1` `k1 < t + dly` purge_raw_neq_0_imp[OF purge_neq `t < k1` `k1 < t + dly`] 
+              by auto
+            have "Some k1 = inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig)) sig (t + dly)" and 
+              "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b1)) (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) sig t \<noteq> Bv (bs ! b1)" and 
+              "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b1)) (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) sig (t + dly) = Bv (bs ! b1)"
+              using `t < k1` `k1 < t + dly` purge_raw_neq_0_imp[OF purge_neq `t < k1` `k1 < t + dly`] 
+              by auto
+            hence "\<tau>' k1 sig = Some
+                (Lv sign
+                  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k1))
+                    (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))"
+              unfolding 1 combine_trans_bit_def Let_def  using \<open>k1 < t + dly\<close> \<open>t < k1\<close> k1inset by auto
+            hence 5: "(lval_of o the) (\<tau>' k1 sig) =  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k1))
+                    (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))"
+              by auto
+            have 6: "\<And>b. b \<in> set [0..< length bs] \<Longrightarrow> (lval_of o the) (\<tau>' k1 sig) ! b = 
+                      bval_of (signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k1)"
+            proof -
+              fix b
+              assume "b \<in> set [0 ..< length bs]"
+              have "(lval_of o the) (\<tau>' k1 sig) ! b = (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k1))
+                    (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) ! b" (is "_ = ?complex")
+                using 5 by auto
+              have *: "b < length (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))"
+                using `b \<in> set [0 ..< length bs]` by auto
+              have **: "?complex = bval_of
+     (signal_of
+       (fst (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+       (snd (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+       sig k1)"
+                unfolding  nth_map[OF *] by auto 
+              moreover have "[0 ..< length bs] ! b = b"
+                using `b \<in> set [0 ..< length bs]` by auto
+              ultimately have "?complex = bval_of 
+                (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k1)"
+                unfolding **
+                using \<open>b \<in> set [0..<length bs]\<close>  by (simp add: val.case_eq_if)
+              thus "(lval_of \<circ> the) (\<tau>' k1 sig) ! b = bval_of (signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k1)"
+                using 5 by auto
+            qed
+          
+            have "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) k1 sig = None"
+              using `t < k1` `k1 < k2` sig_neq sig_eq the_time unfolding purge_raw_def Let_def
+              by (smt Un_iff fun_upd_eqD fun_upd_triv greaterThanLessThan_iff option.sel override_on_apply_in)
+            have 7: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig k1 = 
+                  signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig t"
+            proof (intro signal_of_less_ind')
+              fix n
+              assume "t < n" and "n \<le> k1"
+              thus " purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) n sig = 0"
+                using `k1 < k2` sig_neq sig_eq the_time unfolding purge_raw_def Let_def
+                apply (auto simp add: override_on_def to_trans_raw_bit_def zero_option_def zero_fun_def split: option.splits val.splits intro!: ext)
+                   apply (metis linorder_neqE_nat not_le option.sel)
+                using \<open>k2 \<le> t + dly\<close> apply linarith
+                 apply (metis le_less_trans option.sel)
+                using \<open>k1 < t + dly\<close> by linarith
+              next
+              show "t \<le> k1"
+                using `t < k1` by auto
+            qed 
+            also have "... = signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig t "
+            proof (rule signal_of_equal_when_trans_equal_upto)
+              fix n 
+              assume "n \<le> t"
+              thus "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) n = to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig n"
+                unfolding purge_raw_def Let_def override_on_def 
+                by (smt Un_iff \<open>t \<le> k2\<close> greaterThanAtMost_iff greaterThanLessThan_iff leD less_le_trans option.sel the_time)
+            qed (auto)
+            also have "... \<noteq> Bv (bs ! b2)"
+              using sig_neq by auto
+            finally have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig k1 \<noteq> Bv (bs ! b2)"
+              by auto
+            moreover have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig t  = (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2))"
+              apply (rule signal_of_def)
+              using assms(4)
+              unfolding to_trans_raw_bit_def by (simp add: zero_fun_def zero_option_def)
+            ultimately have "(lval_of o the) (\<tau>' k1 sig) ! b2 \<noteq> bs ! b2"
+              using 6[OF `b2 \<in> set [0 ..< length bs]`] 
+              using "7"
+              using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig t = signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig t\<close> by auto
+            with `(lval_of o the) (\<tau>' k2 sig) ! b2 = bs ! b2` have "\<tau>' k1 sig \<noteq> \<tau>' k2 sig"
+              by auto
+            moreover have "\<tau>'' k1 sig = \<tau>' k1 sig"
+              using 0 `t < k1` `k1 < t + dly` unfolding post_raw_def by auto
+            ultimately have "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+              using `\<tau>'' k2 sig = \<tau>' k2 sig`  unfolding to_trans_raw_sig_def by auto }
+          ultimately have "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+            by auto }
+        ultimately have "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+          by auto }
+      ultimately show "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+        by auto 
+    next
+      have "t + dly \<in> keys (to_trans_raw_sig \<tau>'' sig)"
+        unfolding 0 post_raw_def to_trans_raw_sig_def keys_def by (auto simp add: zero_fun_def zero_option_def)
+      hence "(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<le> t + dly"
+        using Least_le  by (simp add: Least_le)
+      hence "(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = t + dly \<or> (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) < t + dly"
+        by auto
+      moreover
+      { assume "(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = t + dly"
+        hence "(to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig))) = Some (Lv sign bs)"
+          using 0 unfolding post_raw_def  by (simp add: to_trans_raw_sig_def)
+        have "\<And>n. n < t + dly \<Longrightarrow> to_trans_raw_sig \<tau>'' sig n = 0"
+          using `(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = t + dly`
+            not_less_Least unfolding 0 post_raw_def   by (smt keys_def mem_Collect_eq)
+        have "0 < dly \<or> dly = 0"
+          by auto
+        moreover 
+        { assume "0 < dly"
+          have "signal_of (\<sigma> sig) \<tau>' sig (t + (dly - 1)) = \<sigma> sig"
+            apply (intro signal_of_def)
+            using `\<And>n. n < t + dly \<Longrightarrow> to_trans_raw_sig \<tau>'' sig n = 0` 
+            unfolding to_trans_raw_sig_def 0 post_raw_def 
+          proof -
+            fix n :: nat
+            assume a1: "n \<le> t + (dly - 1)"
+            assume a2: "\<And>n. n < t + dly \<Longrightarrow> (if n = t + dly then \<tau>' n(sig \<mapsto> Lv sign bs) else if t + dly < n then (\<tau>' n)(sig := None) else \<tau>' n) sig = 0"
+            have "Suc 0 \<le> dly"
+              by (metis (no_types) Suc_leI \<open>0 < dly\<close>)
+            then show "\<tau>' n sig = 0"
+              using a2 a1 by simp
+          qed
+          hence "\<sigma> sig \<noteq> the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+            using \<open>post_necessary_raw (dly - 1) \<tau>' t sig (Lv sign bs) (\<sigma> sig)\<close> \<open>to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = Some (Lv sign bs)\<close> by auto }
+        moreover
+        { assume "dly = 0"
+          hence "(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = t"
+            using `(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = t + dly` by auto
+          have "to_trans_raw_sig \<tau>'' sig t = Some (Lv sign bs)"
+            unfolding 0 
+            using "0" \<open>(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = t + dly\<close> \<open>dly = 0\<close>
+            \<open>to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = Some (Lv sign
+            bs)\<close> by auto
+          have "signal_of (\<sigma> sig) \<tau>' sig (t + (dly - 1)) = signal_of (\<sigma> sig) \<tau>' sig t"
+            using `dly = 0` by auto
+          also have "... = \<sigma> sig"
+            using assms(4) 
+            by (metis \<tau>'_def purge_preserve_trans_removal_nonstrict' signal_of_def zero_fun_def)
+          finally have "signal_of (\<sigma> sig) \<tau>' sig (t + (dly - 1)) = \<sigma> sig"
+            by auto
+          hence "\<sigma> sig \<noteq> the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+            using \<open>post_necessary_raw (dly - 1) \<tau>' t sig (Lv sign bs) (\<sigma> sig)\<close> \<open>to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = Some (Lv sign bs)\<close> by auto }
+        ultimately have "\<sigma> sig \<noteq> the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+          by auto }
+      moreover
+      { assume lt: " (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) < t + dly"
+        have "(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<in> keys (to_trans_raw_sig \<tau>'' sig)"
+          using LeastI  by (metis \<open>t + dly \<in> keys (to_trans_raw_sig \<tau>'' sig)\<close>)      
+        hence "to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<noteq> 0"
+          unfolding keys_def by auto
+        with lt have "\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig \<noteq> 0"
+          unfolding 0 post_raw_def to_trans_raw_sig_def by auto
+        have "t < (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig))"
+        proof (rule ccontr)
+          assume "\<not> t < (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig))"
+          hence " (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<le> t"
+            by auto
+          hence "\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = 0"
+            using assms(4)
+            unfolding 1  combine_trans_bit_def Let_def by (auto simp add :zero_fun_def)
+          with `\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig \<noteq> 0`
+          show False
+            unfolding to_trans_raw_sig_def by auto
+        qed
+        hence "\<tau>'' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = \<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig"
+          using lt unfolding 0 post_raw_def by auto
+        let ?t = "LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)"
+        have **: "?t \<in> fold (\<union>)
+          (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+            (zip (map (\<lambda>n.  (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig  (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+          using `\<tau>' ?t sig \<noteq> 0` `t < ?t` `?t < t + dly` unfolding 1 combine_trans_bit_def
+          using not_le zero_option_def by fastforce
+        hence "?t \<in> fold (\<union>) (map keys (map (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) 
+                                       (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig  (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+          unfolding map_map[THEN sym] map_snd_zip_take length_map min.idem length_upt
+          using take_all by auto
+        hence *: "?t  \<in> fold (\<union>) (map (keys \<circ> ((\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))))) [0..<length bs]) {}"
+          unfolding map_map by auto
+        have "(\<exists>x\<in>set (map (keys \<circ> ((\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))))) [0..<length bs]).
+                      ?t \<in> x)"
+          using member_fold_union[OF *] unfolding empty_iff by auto
+        then obtain b where "?t \<in> keys (((\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n)))) b)" and 
+          "b \<in> set [0..< length bs]" by auto
+        hence "?t \<in>  keys (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) n sig)"
+          unfolding comp_def to_trans_raw_sig_def by auto
+        hence "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?t sig \<noteq> 0"
+          unfolding keys_def by auto
+        from purge_raw_neq_0_imp[OF this `t < ?t` `?t < t + dly`]
+        have inf_time: " inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly) = Some ?t"
+          and sig_neq: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t \<noteq> Bv (bs ! b) "
+          and sig_eq: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) = Bv (bs ! b)" 
+          by auto
+        hence "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?t sig = 
+               to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?t sig"
+          using `t < ?t` `?t < t + dly` unfolding purge_raw_def Let_def by auto
+        also have "... = Some (Bv (bs ! b))"
+          using sig_eq inf_time unfolding to_signal_def comp_def 
+          by (metis (mono_tags, lifting) \<open>purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma>
+          sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) (LEAST k. k \<in> keys (to_trans_raw_sig
+          \<tau>'' sig)) sig \<noteq> 0\<close> calculation option.collapse option.simps(5) to_trans_raw_sig_def
+          zero_option_def)
+        finally have ***: "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?t sig = Some (Bv (bs ! b))"
+          by auto
+        have "\<tau>' ?t sig = Some
+            (Lv sign
+              (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig ?t))
+                (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))"
+          using ** unfolding 1 combine_trans_bit_def Let_def  using \<open>?t < t + dly\<close> \<open>t < ?t\<close> by auto
+        hence 4: "(lval_of o the) (\<tau>' ?t sig) =  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig ?t))
+                (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))"
+          by auto        
+        have 5: "\<And>b. b \<in> set [0..< length bs] \<Longrightarrow> (lval_of o the) (\<tau>' ?t sig) ! b = 
+                  bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                    (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t)"
+        proof -
+          fix b
+          assume "b \<in> set [0 ..< length bs]"
+          have "(lval_of o the) (\<tau>' ?t sig) ! b = (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig ?t))
+                (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) ! b" (is "_ = ?complex")
+            using 4 by auto
+          have *: "b < length (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))"
+            using `b \<in> set [0 ..< length bs]` by auto
+          have **: "?complex = bval_of
+ (signal_of
+   (fst (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+             (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+   (snd (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+             (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+   sig ?t)"
+            unfolding  nth_map[OF *] by auto 
+          moreover have "[0 ..< length bs] ! b = b"
+            using `b \<in> set [0 ..< length bs]` by auto
+          ultimately have "?complex = bval_of 
+            (signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t)"
+            using \<open>b \<in> set [0..<length bs]\<close> unfolding ** by (simp add: val.case_eq_if)
+          thus "(lval_of \<circ> the) (\<tau>' ?t sig) ! b = bval_of (signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) 
+                          (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t)"
+            using 4 by auto
+        qed
+        hence h: "(lval_of o the) (\<tau>' ?t sig) ! b = 
+          bval_of (signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) 
+              (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t)"
+          using `b \<in> set [0..< length bs]` by auto
+        have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) 
+                (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t = Bv (bs ! b)"
+        proof (rule signal_of_intro, rule, rule)
+          show "?t \<le> ?t" by auto
+        next
+          have "to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig 
+                                (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = Some (Bv (bs ! b))"
+            using ***  unfolding to_trans_raw_sig_def by auto
+          moreover have "(\<forall>j>LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig).
+        j \<le> (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<longrightarrow> to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig j = None)"
+            by auto
+          ultimately show " to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = Some (Bv (bs ! b)) \<and>
+    (\<forall>j>LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig).
+        j \<le> (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<longrightarrow> to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig j = None) \<or>
+    (\<forall>i\<le>LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig). purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) i sig = None) \<and>
+    Bv (bs ! b) = (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b))"
+            by auto
+        qed
+        hence "bval_of (signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t) = bs ! b"
+          by auto
+        hence "(lval_of o the) (\<tau>' ?t sig) ! b = bs ! b"
+          using h by auto
+        have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t = (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b))"
+          apply (intro signal_of_def)
+          using assms(4) unfolding to_trans_raw_bit_def  by (simp add: zero_fun_def zero_option_def)
+        hence " (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b) \<noteq> bs ! b"
+          using sig_neq by auto
+        hence "\<sigma> sig \<noteq> the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+          using \<open>(lval_of \<circ> the) (\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig) ! b =
+          bs ! b\<close> \<open>\<tau>'' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = \<tau>' (LEAST k. k \<in> keys
+          (to_trans_raw_sig \<tau>'' sig)) sig\<close> comp_apply to_trans_raw_sig_def 
+          apply auto
+          subgoal 
+          proof -
+            assume a1: "\<tau>'' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = \<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig"
+            assume a2: "\<sigma> sig = the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+            assume a3: "case the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig))) of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b"
+            assume a4: "\<not> lval_of (the (\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig)) ! b"
+            have "Some (Lv sign (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig)))) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))) = to_trans_raw_sig \<tau>'' sig (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig))"
+              using a1 by (metis (no_types) \<open>\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = Some (Lv sign (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))\<close> to_trans_raw_sig_def)
+            then have f5: "Lv sign (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig)))) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) = \<sigma> sig"
+              using a2  by (metis (no_types, lifting) option.sel)
+            then have "map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig)))) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])) = lval_of (\<sigma> sig)"
+              by (metis (no_types, lifting) val.sel(3))
+            then have "Lv sign (lval_of (\<sigma> sig)) = \<sigma> sig"
+              using f5 by presburger
+            then show False
+              using a4 a3 a2 a1 by (metis to_trans_raw_sig_def val.case(2))
+          qed
+          subgoal
+          proof -
+            assume a1: "\<tau>'' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = \<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig"
+            assume a2: "\<sigma> sig = the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+            assume "\<not> (case the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig))) of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)"
+            assume a3: "bs ! b"
+            have "Lv sign (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig)))) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) = \<sigma> sig"
+              using a2 a1 by (metis (lifting) \<open>\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = Some (Lv sign (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))\<close> option.sel to_trans_raw_sig_def)
+            then have "Lv sign ((lval_of \<circ> the) (\<tau>' (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig)) = \<sigma> sig"
+              by (metis (lifting) "4") 
+            then show False
+              using a3 
+              by (metis \<open>(lval_of \<circ> the) (\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig) ! b = bs ! b\<close> \<open>\<not> (case the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig))) of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)\<close> a2 val.simps(6))
+          qed
+          done }
+      ultimately have "\<sigma> sig \<noteq> the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+        by auto
+      thus "keys (to_trans_raw_sig \<tau>'' sig) \<noteq> {} \<longrightarrow> \<sigma> sig \<noteq> the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+        by auto
+    qed }
+  moreover
+  { assume "\<not> post_necessary_raw (dly - 1) \<tau>' t sig (Lv sign bs) (\<sigma> sig)"
+    hence 0: "\<tau>'' = preempt_raw sig \<tau>' (t + dly)"
+      unfolding \<tau>''_def trans_post_raw_def by auto
+    have ?thesis
+      unfolding non_stuttering_def
+    proof (rule, rule, rule, rule)
+      fix k1 k2
+      assume "k1 < k2 \<and> k1 \<in> keys (to_trans_raw_sig \<tau>'' sig) \<and> k2 \<in> keys (to_trans_raw_sig \<tau>'' sig) \<and> (\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau>'' sig))"
+      hence "k1 < k2" and "k1 \<in> keys (to_trans_raw_sig \<tau>'' sig)" and "k2 \<in> keys (to_trans_raw_sig \<tau>'' sig)" and 
+        2: "(\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau>'' sig))" by auto
+      have "k2 \<le> t + dly"
+      proof (rule ccontr)
+        assume "\<not> k2 \<le> t + dly" hence "t + dly < k2" by auto
+        hence "\<tau>'' k2 sig = None"
+          using `\<tau>'' = preempt_raw sig  \<tau>' (t + dly)` unfolding preempt_raw_def by auto
+        with `k2 \<in> keys (to_trans_raw_sig \<tau>'' sig)` show False 
+          unfolding to_trans_raw_sig_def keys_def zero_option_def by auto
+      qed
+      have "k1 \<in> keys (to_trans_raw_sig \<tau>' sig)"
+        using `k1 \<in> keys (to_trans_raw_sig \<tau>'' sig)` unfolding 0 preempt_raw_def to_trans_raw_sig_def keys_def zero_option_def
+        using \<open>k1 < k2\<close> \<open>k2 \<le> t + dly\<close> by auto
+      have 3: "(\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau>' sig))"
+        using `k2 \<le> t + dly` 0 2 `k1 < k2` unfolding preempt_raw_def 
+        by (metis domIff dom_def dual_order.asym keys_def less_le_trans to_trans_raw_sig_def zero_option_def)
+      have "k2 < t \<or> k2 \<ge> t"
+        by auto
+      moreover
+      { assume "k2 < t"
+        hence "\<tau>'' k2 sig = \<tau>' k2 sig"
+          using 0 unfolding preempt_raw_def by auto
+        also have "... = \<tau> k2 sig"
+          using 1 `k2 < t` unfolding combine_trans_bit_def Let_def by auto
+        finally have "\<tau>'' k2 sig = \<tau> k2 sig"
+          by auto
+        hence "False"
+          by (metis (full_types) \<open>k1 < k2 \<and> k1 \<in> keys (to_trans_raw_sig \<tau>'' sig) \<and> k2 \<in> keys
+          (to_trans_raw_sig \<tau>'' sig) \<and> (\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau>'' sig))\<close>
+          \<open>k2 < t\<close> assms(4) domIff dom_def keys_def less_imp_le_nat to_trans_raw_sig_def
+          zero_fun_def zero_option_def)
+        hence "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+          by auto }
+      moreover
+      { assume "k2 \<ge> t"
+        have "dly = 0 \<or> dly \<noteq> 0"
+          by auto
+        moreover
+        { assume "dly = 0"
+          hence "k2 = t" 
+            using \<open>k2 \<le> t + dly\<close> \<open>t \<le> k2\<close> by linarith
+          have "k1 < t"
+            using `k1 < k2` `k2 = t` by auto
+          hence "\<tau>''  k1 sig = \<tau>' k1 sig"
+            using 0 unfolding preempt_raw_def by auto
+          also have "... = \<tau> k1 sig"
+            using `k1 < t` unfolding 1 combine_trans_bit_def Let_def by auto
+          also have "... = 0"
+            using `k1 < t` assms(4) by (auto simp add: zero_fun_def zero_option_def)
+          finally have "\<tau>'' k1 sig = 0"
+            by auto
+          hence "k1 \<notin> keys (to_trans_raw_sig \<tau>'' sig)"
+            unfolding to_trans_raw_sig_def keys_def by auto
+          with `k1 \<in> keys (to_trans_raw_sig \<tau>'' sig)` have False
+            by auto
+          hence "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+            by auto }
+        moreover
+        { assume "dly \<noteq> 0"
+          have "k2 = t + dly \<or> k2 < t + dly"
+            using `k2 \<le> t + dly` by auto
+          moreover
+          { assume "k2 = t + dly"
+            hence "\<tau>'' k2 sig = None"
+              unfolding 0 preempt_raw_def by auto
+            hence False 
+              using `k2 \<in> keys (to_trans_raw_sig \<tau>'' sig)` unfolding keys_def to_trans_raw_sig_def
+              by (simp add: zero_option_def)
+            hence "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+              by auto }
+          moreover
+          { assume "k2 < t + dly"
+            hence "\<tau>'' k2 sig = \<tau>' k2 sig"
+              using 0 unfolding preempt_raw_def by auto
+            have "t < k2"
+            proof (rule ccontr)
+              assume "\<not> t < k2" hence "k2 \<le> t" by auto
+              hence "\<tau>' k2 sig = \<tau> k2 sig"
+                unfolding 1 combine_trans_bit_def by auto
+              also have "... = 0"
+                using assms  by (simp add: \<open>k2 \<le> t\<close> zero_fun_def)
+              finally have "\<tau>'' k2 sig = 0"
+                by (simp add: \<open>\<tau>'' k2 sig = \<tau>' k2 sig\<close>)
+              with `k2 \<in> keys (to_trans_raw_sig \<tau>'' sig)` show False
+                by (simp add: keys_def to_trans_raw_sig_def)
+            qed
+            hence "k2 \<in> keys (to_trans_raw_sig \<tau>' sig)"
+              using `k2 \<in> keys (to_trans_raw_sig \<tau>'' sig)` 
+              by (simp add: \<open>\<tau>'' k2 sig = \<tau>' k2 sig\<close> keys_def to_trans_raw_sig_def)
+            hence "\<tau>' k2 sig \<noteq> None"
+              by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+            hence k2inset: "k2 \<in> fold (\<union>)
+            (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+              (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))
+            {}"
+              using `t < k2` `k2 < t + dly` unfolding 1 combine_trans_bit_def Let_def 
+              by (meson dual_order.asym leD)
+            hence "\<tau>' k2 sig = Some
+                (Lv sign
+                  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k2))
+                    (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))"
+              unfolding 1 combine_trans_bit_def Let_def  using \<open>k2 < t + dly\<close> \<open>t < k2\<close> by auto
+            hence 4: "(lval_of o the) (\<tau>' k2 sig) =  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k2))
+                    (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))"
+              by auto
+            have 5: "\<And>b. b \<in> set [0..< length bs] \<Longrightarrow> (lval_of o the) (\<tau>' k2 sig) ! b = 
+                      bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                              (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k2)"
+            proof -
+              fix b
+              assume "b \<in> set [0 ..< length bs]"
+              have "(lval_of o the) (\<tau>' k2 sig) ! b = (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k2))
+                    (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) ! b" (is "_ = ?complex")
+                using 4 by auto
+              have *: "b < length (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))"
+                using `b \<in> set [0 ..< length bs]` by auto
+              have **: "?complex = bval_of
+     (signal_of
+       (fst (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+       (snd (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+       sig k2)"
+                unfolding  nth_map[OF *] by auto 
+              moreover have "[0 ..< length bs] ! b = b"
+                using `b \<in> set [0 ..< length bs]` by auto
+              ultimately have "?complex = bval_of 
+                (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k2)"
+                using \<open>b \<in> set [0..<length bs]\<close> unfolding ** 
+                by (simp add: nth_map val.case_eq_if)
+              thus "(lval_of o the) (\<tau>' k2 sig) ! b = 
+                      bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                              (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k2)"
+                using 4 by auto
+            qed
+            have helper: "\<And>f. length (map f [0..<length bs]) \<le> length bs - 0"
+              by auto
+            have  "k2 \<in> fold (\<union>) (map keys
+                   (map (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig)
+                     (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n)))
+                       [0..<length bs]))) {}"
+              using k2inset unfolding map_map[THEN sym] map_snd_zip_take  length_map min.idem length_upt
+              take_all[OF helper] by auto
+            hence helper2:" k2 \<in> fold (\<union>)
+               (map (\<lambda>x. keys
+                      (to_trans_raw_sig
+                        (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> x sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! x)) (Bv (bs ! x))) sig))
+             [0..<length bs]) {}" 
+              unfolding map_map comp_def  by auto                   
+            obtain b2 where "b2 \<in> set [0..< length bs]" and "k2 \<in> keys (to_trans_raw_sig
+                            (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig)"
+              using member_fold_union[OF helper2] by auto
+            hence purge_neq: "purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) k2 sig \<noteq> 0"
+              unfolding keys_def to_trans_raw_sig_def by auto
+            have the_time: "Some k2 = inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig)) sig (t + dly)" and 
+              sig_neq: "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig t \<noteq> Bv (bs ! b2)" and 
+              sig_eq: "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig (t + dly) = Bv (bs ! b2)"
+              using `t < k2` `k2 < t + dly` purge_raw_neq_0_imp[OF purge_neq `t < k2` `k2 < t + dly`] 
+              by auto
+            moreover hence "to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig k2 sig = Some (Bv (bs ! b2))"
+              unfolding to_signal_def comp_def to_trans_raw_sig_def 
+              by (smt inf_time_some_exists keys_def mem_Collect_eq not_None_eq option.sel
+              option.simps(5) zero_option_def)
+            ultimately have "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) k2 sig = Some (Bv (bs ! b2))"
+              using `t < k2` `k2 < t + dly` unfolding purge_raw_def Let_def 
+              by (smt "3" UnE \<open>k1 < k2\<close> \<open>k2 \<in> keys (to_trans_raw_sig \<tau>' sig)\<close> greaterThanAtMost_iff greaterThanLessThan_iff option.sel override_on_apply_notin)
+            hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig k2 = Bv (bs ! b2)"
+              using trans_some_signal_of'  by (metis o_apply option.sel )
+            hence "(lval_of o the) (\<tau>' k2 sig) ! b2 = bs ! b2"
+              using 5[OF `b2 \<in> set [0..< length bs]`] by auto
+
+            have "k1 < t + dly"
+              using `k1 < k2` `k2 < t + dly` by auto
+            have "t < k1"
+            proof (rule ccontr)
+              assume "\<not> t < k1" hence "k1 \<le> t" by auto
+              hence "\<tau>' k1 sig = \<tau> k1 sig"
+                unfolding 1 combine_trans_bit_def by auto
+              also have "... = 0"
+                using assms  by (simp add: \<open>k1 \<le> t\<close> zero_fun_def)
+              finally have "\<tau>' k1 sig = 0"
+                by (simp)
+              with `k1 \<in> keys (to_trans_raw_sig \<tau>' sig)` show False
+                by (simp add: keys_def to_trans_raw_sig_def)
+            qed
+            have "\<tau>' k1 sig \<noteq> None"
+              using `k1 \<in> keys (to_trans_raw_sig \<tau>' sig)` 
+              by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+            hence k1inset: "k1 \<in> fold (\<union>)
+            (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+              (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))
+            {}"
+              using `t < k1` `k1 < t + dly` unfolding 1 combine_trans_bit_def Let_def 
+              by (meson dual_order.asym leD)
+            have  "k1 \<in> fold (\<union>) (map keys
+                   (map (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig)
+                     (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n)))
+                       [0..<length bs]))) {}"
+              using k1inset unfolding map_map[THEN sym] map_snd_zip_take  length_map min.idem length_upt
+              take_all[OF helper] by auto
+            hence k1inset':" k1 \<in> fold (\<union>)
+               (map (\<lambda>x. keys
+                      (to_trans_raw_sig
+                        (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> x sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! x)) (Bv (bs ! x))) sig))
+             [0..<length bs]) {}" 
+              unfolding map_map comp_def  by auto     
+            obtain b1 where "b1 \<in> set [0..< length bs]" and "k1 \<in> keys (to_trans_raw_sig
+                            (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b1)) (Bv (bs ! b1))) sig)"
+              using member_fold_union[OF k1inset'] by auto 
+            hence purge_neq: "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b1)) (Bv (bs ! b1)) k1 sig \<noteq> 0"
+              unfolding keys_def to_trans_raw_sig_def by auto
+            have "Some k1 = inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig)) sig (t + dly)" and 
+              "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b1)) (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) sig t \<noteq> Bv (bs ! b1)" and 
+              "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b1)) (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) sig (t + dly) = Bv (bs ! b1)"
+              using `t < k1` `k1 < t + dly` purge_raw_neq_0_imp[OF purge_neq `t < k1` `k1 < t + dly`] 
+              by auto
+            have "Some k1 = inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig)) sig (t + dly)" and 
+              "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b1)) (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) sig t \<noteq> Bv (bs ! b1)" and 
+              "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b1)) (to_trans_raw_bit (\<sigma> sig) \<tau> b1 sig) sig (t + dly) = Bv (bs ! b1)"
+              using `t < k1` `k1 < t + dly` purge_raw_neq_0_imp[OF purge_neq `t < k1` `k1 < t + dly`] 
+              by auto
+            hence "\<tau>' k1 sig = Some
+                (Lv sign
+                  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k1))
+                    (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))"
+              unfolding 1 combine_trans_bit_def Let_def  using \<open>k1 < t + dly\<close> \<open>t < k1\<close> k1inset by auto
+            hence 5: "(lval_of o the) (\<tau>' k1 sig) =  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k1))
+                    (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))"
+              by auto
+            have 6: "\<And>b. b \<in> set [0..< length bs] \<Longrightarrow> (lval_of o the) (\<tau>' k1 sig) ! b = 
+                      bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k1)"
+            proof -
+              fix b
+              assume "b \<in> set [0 ..< length bs]"
+              have "(lval_of o the) (\<tau>' k1 sig) ! b = (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig k1))
+                    (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) ! b" (is "_ = ?complex")
+                using 5 by auto
+              have *: "b < length (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))"
+                using `b \<in> set [0 ..< length bs]` by auto
+              have **: "?complex = bval_of
+     (signal_of
+       (fst (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+       (snd (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+       sig k1)"
+                unfolding  nth_map[OF *] by auto 
+              moreover have "[0 ..< length bs] ! b = b"
+                using `b \<in> set [0 ..< length bs]` by auto
+              ultimately have "?complex = bval_of 
+                (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k1)"
+                using \<open>b \<in> set [0..<length bs]\<close> unfolding **  by (simp add: val.case_eq_if)
+              thus "(lval_of o the) (\<tau>' k1 sig) ! b = 
+                      bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig k1)"
+                using 5 by auto
+            qed
+          
+            have "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) k1 sig = None"
+              using `t < k1` `k1 < k2` sig_neq sig_eq the_time unfolding purge_raw_def Let_def
+              by (smt Un_iff fun_upd_eqD fun_upd_triv greaterThanLessThan_iff option.sel override_on_apply_in)
+            have 7: "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig k1 = 
+                  signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig t"
+            proof (intro signal_of_less_ind')
+              fix n
+              assume "t < n" and "n \<le> k1"
+              thus " purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) n sig = 0"
+                using `k1 < k2` sig_neq sig_eq the_time unfolding purge_raw_def Let_def
+                apply (auto simp add: override_on_def to_trans_raw_bit_def zero_option_def zero_fun_def split: option.splits val.splits intro!: ext)
+                apply (metis linorder_neqE_nat not_le option.sel)
+                using \<open>k1 < t + dly\<close> apply linarith
+                apply (metis le_less_trans option.sel)
+                using \<open>k1 < t + dly\<close> by linarith
+            next
+              show "t \<le> k1"
+                using `t < k1` by auto
+            qed 
+            also have "... = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig t "
+            proof (rule signal_of_equal_when_trans_equal_upto)
+              fix n 
+              assume "n \<le> t"
+              thus "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2)) n = to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig n"
+                unfolding purge_raw_def Let_def override_on_def 
+                by (smt Un_iff \<open>t \<le> k2\<close> greaterThanAtMost_iff greaterThanLessThan_iff leD less_le_trans option.sel the_time)
+            qed (auto)
+            also have "... \<noteq> Bv (bs ! b2)"
+              using sig_neq by auto
+            finally have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (Bv (bs ! b2))) sig k1 \<noteq> Bv (bs ! b2)"
+              by auto
+            moreover have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig t  = (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2))"
+              apply (rule signal_of_def)
+              using assms(4)
+              unfolding to_trans_raw_bit_def by (simp add: zero_fun_def zero_option_def)
+            ultimately have "(lval_of o the) (\<tau>' k1 sig) ! b2 \<noteq> bs ! b2"
+              using 6[OF `b2 \<in> set [0 ..< length bs]`] 
+              using "7" 
+              using \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b2)) (purge_raw
+              (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs
+              ! b2)) (Bv (bs ! b2))) sig t = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow>
+              bs ! b2)) (to_trans_raw_bit (\<sigma> sig) \<tau> b2 sig) sig t\<close> by auto
+            with `(lval_of o the) (\<tau>' k2 sig) ! b2 = bs ! b2` have "\<tau>' k1 sig \<noteq> \<tau>' k2 sig"
+              by auto
+            moreover have "\<tau>'' k1 sig = \<tau>' k1 sig"
+              using 0 `t < k1` `k1 < t + dly` unfolding preempt_raw_def by auto
+            ultimately have "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+              using `\<tau>'' k2 sig = \<tau>' k2 sig`  unfolding to_trans_raw_sig_def by auto }
+          ultimately have "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+            by auto }
+        ultimately have "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+          by auto }
+      ultimately show "to_trans_raw_sig \<tau>'' sig k1 \<noteq> to_trans_raw_sig \<tau>'' sig k2"
+        by auto 
+    next  
+      { assume "keys (to_trans_raw_sig \<tau>'' sig) \<noteq> {}"
+        have lt: "(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) < t + dly"
+        proof (rule ccontr)
+          assume "\<not> (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) < t + dly"
+          hence atmost: "t + dly \<le> (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig))"
+            by auto
+          have "(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<in> keys (to_trans_raw_sig \<tau>'' sig)"
+            using `keys (to_trans_raw_sig \<tau>'' sig) \<noteq> {}`  by (meson LeastI all_not_in_conv)
+          hence "to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<noteq> 0"
+            unfolding keys_def by auto
+          moreover have "to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = 0"
+            using atmost unfolding 0 to_trans_raw_sig_def preempt_raw_def by (auto simp add: zero_option_def)
+          ultimately show False
+            by auto
+        qed
+        have "(LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<in> keys (to_trans_raw_sig \<tau>'' sig)"
+          using `keys (to_trans_raw_sig \<tau>'' sig) \<noteq> {}`  by (meson LeastI all_not_in_conv)      
+        hence "to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<noteq> 0"
+          unfolding keys_def by auto
+        with lt have "\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig \<noteq> 0"
+          unfolding 0 preempt_raw_def to_trans_raw_sig_def by auto
+        have "t < (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig))"
+        proof (rule ccontr)
+          assume "\<not> t < (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig))"
+          hence " (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<le> t"
+            by auto
+          hence "\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = 0"
+            using assms(4)
+            unfolding 1  combine_trans_bit_def Let_def by (auto simp add :zero_fun_def)
+          with `\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig \<noteq> 0`
+          show False
+            unfolding to_trans_raw_sig_def by auto
+        qed
+        hence "\<tau>'' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = \<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig"
+          using lt unfolding 0 preempt_raw_def by auto
+        let ?t = "LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)"
+        have **: "?t \<in> fold (\<union>)
+          (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+            (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+                 (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+          using `\<tau>' ?t sig \<noteq> 0` `t < ?t` `?t < t + dly` unfolding 1 combine_trans_bit_def
+          using not_le zero_option_def by force
+        hence "?t \<in> fold (\<union>) (map keys (map (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+          unfolding map_map[THEN sym] map_snd_zip_take length_map min.idem length_upt
+          using take_all by auto
+        hence *: "?t  \<in> fold (\<union>) (map (keys \<circ> ((\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))))) [0..<length bs]) {}"
+          unfolding map_map by auto
+        have "(\<exists>x\<in>set (map (keys \<circ> ((\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))))) [0..<length bs]).
+                      ?t \<in> x)"
+          using member_fold_union[OF *] unfolding empty_iff by auto
+        then obtain b where "?t \<in> keys (((\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n)))) b)" and 
+          "b \<in> set [0..< length bs]" by auto
+        hence "?t \<in>  keys (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) n sig)"
+          unfolding comp_def to_trans_raw_sig_def by auto
+        hence "purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?t sig \<noteq> 0"
+          unfolding keys_def by auto
+        from purge_raw_neq_0_imp[OF this `t < ?t` `?t < t + dly`]
+        have inf_time: " inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly) = Some ?t"
+          and sig_neq: "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig t \<noteq> Bv (bs ! b) "
+          and sig_eq: "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig (t + dly) = Bv (bs ! b)" 
+          by auto
+        hence "purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?t sig = 
+               to_trans_raw_bit (\<sigma> sig)  \<tau> b sig ?t sig"
+          using `t < ?t` `?t < t + dly` unfolding purge_raw_def Let_def by auto
+        also have "... = Some (Bv (bs ! b))"
+          using sig_eq inf_time unfolding to_signal_def comp_def 
+          by (metis (mono_tags, lifting) \<open>purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma>
+          sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) (LEAST k. k \<in> keys
+          (to_trans_raw_sig \<tau>'' sig)) sig \<noteq> 0\<close> calculation option.collapse option.simps(5)
+          to_trans_raw_sig_def zero_option_def)
+        finally have ***: "purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?t sig = Some (Bv (bs ! b))"
+          by auto
+        have "\<tau>' ?t sig = Some
+            (Lv sign
+              (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig ?t))
+                (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))"
+          using ** unfolding 1 combine_trans_bit_def Let_def  using \<open>?t < t + dly\<close> \<open>t < ?t\<close> by auto
+        hence 4: "(lval_of o the) (\<tau>' ?t sig) =  (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig ?t))
+                (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))"
+          by auto        
+        have 5: "\<And>b. b \<in> set [0..< length bs] \<Longrightarrow> (lval_of o the) (\<tau>' ?t sig) ! b = 
+                  bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t)"
+        proof -
+          fix b
+          assume "b \<in> set [0 ..< length bs]"
+          have "(lval_of o the) (\<tau>' ?t sig) ! b = (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig ?t))
+                (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) ! b" (is "_ = ?complex")
+            using 4 by auto
+          have *: "b < length (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])
+                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))"
+            using `b \<in> set [0 ..< length bs]` by auto
+          have **: "?complex = bval_of
+  (signal_of
+   (fst (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+             (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+   (snd (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) 
+             (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) ! b))
+   sig ?t)"
+            unfolding  nth_map[OF *] by auto 
+          moreover have "[0 ..< length bs] ! b = b"
+            using `b \<in> set [0 ..< length bs]` by auto
+          ultimately have "?complex = bval_of 
+            (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t)"
+            using \<open>b \<in> set [0..<length bs]\<close> unfolding **  by (simp add: val.case_eq_if)
+          thus " (lval_of o the) (\<tau>' ?t sig) ! b = bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t)"
+            using 4 by auto
+        qed
+        hence h: "(lval_of o the) (\<tau>' ?t sig) ! b = 
+          bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t)"
+          using `b \<in> set [0..< length bs]` by auto
+        have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?t = Bv (bs ! b)"
+        proof (rule signal_of_intro, rule, rule)
+          show "?t \<le> ?t" by auto
+        next
+          have "to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) = Some (Bv (bs ! b))"
+            using ***  unfolding to_trans_raw_sig_def by auto
+          moreover have "(\<forall>j>LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig).
+        j \<le> (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<longrightarrow> to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (lval_of (\<sigma> sig) ! b)) (Bv (bs ! b))) sig j = None)"
+            by auto
+          ultimately show " to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig
+     (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) =
+    Some (Bv (bs ! b)) \<and>
+    (\<forall>j>LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig).
+        j \<le> (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) \<longrightarrow>
+        to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig j = None) \<or>
+    (\<forall>i\<le>LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig). purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) i sig = None) \<and>
+    Bv (bs ! b) = Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)"
+            by auto
+        qed
+        hence "bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b))(Bv (bs ! b))) sig ?t) = bs ! b"
+          by auto
+        hence "(lval_of o the) (\<tau>' ?t sig) ! b = bs ! b"
+          using h by auto
+        have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t = (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b))"
+          apply (intro signal_of_def)
+          using assms(4) unfolding to_trans_raw_bit_def  by (simp add: zero_fun_def zero_option_def)
+        hence "(case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b) \<noteq> bs ! b"
+          using sig_neq by auto
+        hence "\<sigma> sig \<noteq> the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+        proof -
+          { assume "Lv sign ((lval_of \<circ> the) (\<tau>'' (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig)) \<noteq> the (\<tau>'' (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig)"
+            moreover
+            { assume "map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig)))) (zip (map (\<lambda>n. Bv (case the (to_trans_raw_sig \<tau>'' sig (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig))) of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])) \<noteq> (lval_of \<circ> the) (\<tau>'' (LEAST n. n \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig)"
+              then have ?thesis
+                by (metis "4" \<open>\<tau>'' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = \<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig\<close>) (* > 1.0 s, timed out *) }
+            ultimately have ?thesis
+              by (simp add: \<open>\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = Some (Lv sign (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig)  \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))\<close> \<open>\<tau>'' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = \<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig\<close>) }
+          then show ?thesis
+            by (metis \<open>(case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b) \<noteq> bs ! b\<close> \<open>(lval_of \<circ> the) (\<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig) ! b = bs ! b\<close> \<open>\<tau>'' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig = \<tau>' (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)) sig\<close> to_trans_raw_sig_def val.simps(6))
+        qed }
+      thus "keys (to_trans_raw_sig \<tau>'' sig) \<noteq> {} \<longrightarrow> \<sigma> sig \<noteq> the (to_trans_raw_sig \<tau>'' sig (LEAST k. k \<in> keys (to_trans_raw_sig \<tau>'' sig)))"
+        by auto
+    qed }
+  ultimately show ?thesis
+    by auto
+qed
+
+lemma purge'_trans_post_preserve_non_stuttering:
+  fixes \<tau> sig t dly cur_val
+  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
+  defines "\<tau>'  \<equiv> purge_raw' \<tau> t dly sig (\<sigma> sig) cur_val"
+  defines "\<tau>'' \<equiv> trans_post_raw sig cur_val (\<sigma> sig) \<tau>' t dly"
+  assumes "\<forall>n. n \<le> t \<longrightarrow>  \<tau> n = 0"
+  shows "non_stuttering (to_trans_raw_sig \<tau>'') \<sigma> sig"
+  using purge'_trans_post_preserve_non_stuttering_bv purge'_trans_post_preserve_non_stuttering_lv
+  by (metis \<tau>''_def \<tau>'_def assms(1) assms(4) val.exhaust)
+    
 lemma post_raw_preserves_non_stuttering:
   fixes dly t val
   assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
@@ -1914,16 +3061,16 @@ next
     by (meson b_seq_exec.intros(5) trans_post_preserves_non_stuttering)
 next
   case (6 t \<sigma> \<gamma> \<theta> def e x sig \<tau> dly \<tau>')
-  hence \<tau>'_def': "\<tau>' = trans_post_raw sig x (\<sigma> sig) (purge_raw \<tau> t dly sig (\<sigma> sig) x) t dly"
-    using 6  by (simp add: inr_post_raw_def)
-  let ?\<tau> = "purge_raw \<tau> t dly sig (\<sigma> sig) x"
+  hence \<tau>'_def': "\<tau>' = trans_post_raw sig x (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) x) t dly"
+    using 6  by (simp add: inr_post_raw'_def)
+  let ?\<tau> = "purge_raw' \<tau> t dly sig (\<sigma> sig) x"
   have "s = sig \<or> s \<noteq> sig"
     by auto
   moreover
   { assume "s \<noteq> sig"
     hence "\<And>n. to_trans_raw_sig \<tau>' s n = to_trans_raw_sig \<tau> s n"
       using \<tau>'_def'
-      by (metis inr_post_raw_def inr_post_raw_does_not_affect_other_sig to_trans_raw_sig_def)
+      by (metis "6.hyps"(2) inr_post_raw_does_not_affect_other_sig' to_trans_raw_sig_def)
     hence "to_trans_raw_sig \<tau>' s = to_trans_raw_sig \<tau> s"
       by blast
     hence ?case
@@ -1931,14 +3078,14 @@ next
   moreover
   { assume "s = sig"
     moreover have 3: "\<And>n. n \<le> t \<Longrightarrow> ?\<tau> n = 0"
-      by (simp add: "6.prems"(2) purge_preserve_trans_removal_nonstrict)
+      by (simp add: "6.prems"(2) purge_preserve_trans_removal_nonstrict')
     obtain cs2 where cs2_def: "cs2 = Bassign_trans sig e dly"
       by auto
     hence 2: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs2, ?\<tau>> \<longrightarrow>\<^sub>s \<tau>'"
       using \<tau>'_def' by (meson "6.hyps"(1) b_seq_exec.intros(5))
     hence ?case
       using "6.prems"(1) "6.prems"(2)  \<tau>'_def' calculation
-      purge_trans_post_preserve_non_stuttering by force }
+      purge'_trans_post_preserve_non_stuttering by metis }
   ultimately show ?case
     by auto
 qed auto
@@ -2001,7 +3148,7 @@ Null: "\<turnstile>\<^sub>t {P} Bnull {P}"
 
 | Assign: "\<turnstile>\<^sub>t {\<lambda>w . (\<exists>x. beval_world_raw w t exp x \<and> P (w[sig, t + dly := x]))} Bassign_trans sig exp dly {P}"
 
-| AssignI: "\<turnstile>\<^sub>t {\<lambda>w . (\<exists>x. beval_world_raw w  t exp x \<and> P (w[sig, t, dly := x]))} Bassign_inert sig exp dly {P}"
+| AssignI: "\<turnstile>\<^sub>t {\<lambda>w . (\<exists>x. beval_world_raw w  t exp x \<and> P (worldline_inert_upd2 w sig t dly x))} Bassign_inert sig exp dly {P}"
 
 | Comp: "\<lbrakk> \<turnstile>\<^sub>t {P} s1 {Q}; \<turnstile>\<^sub>t {Q} s2 {R}\<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>t {P} Bcomp s1 s2 {R}"
 
@@ -2064,7 +3211,7 @@ lemma BassignE2:
 lemma Bassign_inertE:
   assumes "\<turnstile>\<^sub>t {P} s {Q}"
   assumes "s = Bassign_inert sig exp dly"
-  shows "\<forall>w. P w \<longrightarrow> (\<exists>x. beval_world_raw w t exp x \<and> Q (w[sig, t, dly := x]))"
+  shows "\<forall>w. P w \<longrightarrow> (\<exists>x. beval_world_raw w t exp x \<and> Q (worldline_inert_upd2 w sig t dly x))"
   using assms
 proof (induction rule: seq_hoare.induct)
   case (Conseq P' P t s Q Q')
@@ -2074,7 +3221,7 @@ qed auto
 lemma Bassign_inertE2:
   assumes "\<turnstile>\<^sub>t {P} s {Q}"
   assumes "s = Bassign_inert sig exp dly"
-  shows "\<forall>w x. P w \<and> beval_world_raw w t exp x \<longrightarrow> Q (w[sig, t, dly := x])"
+  shows "\<forall>w x. P w \<and> beval_world_raw w t exp x \<longrightarrow> Q (worldline_inert_upd2 w sig t dly x)"
   using Bassign_inertE[OF assms] beval_world_raw_deterministic by metis
 
 lemma BcompE:
@@ -2700,18 +3847,18 @@ lemma lift_inr_post_worldline_upd:
   assumes "0 < dly"
   assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
   assumes "All (non_stuttering (to_trans_raw_sig \<theta>) def)"
-  assumes "beval_world_raw \<omega> t exp x"
-  shows "worldline_raw t \<sigma> \<theta> def \<tau>' = \<omega>[sig, t, dly := x]"
+  assumes "beval_world_raw \<omega> t exp (Bv v)"
+  shows "worldline_raw t \<sigma> \<theta> def \<tau>' = worldline_inert_upd2 \<omega> sig t dly (Bv v)"
 proof (rule, rule_tac[2] ext, rule_tac[2] ext)
   fix s' t'
-  have "beval_raw t \<sigma> \<gamma> \<theta> def exp x"
+  have "beval_raw t \<sigma> \<gamma> \<theta> def exp (Bv v)"
     using assms beval_beval_world_raw_ci by metis
-  have "\<tau>' = inr_post_raw sig x (\<sigma> sig) \<tau> t dly"
-    using assms(3) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b x\<close> beval_raw_deterministic by (metis seq_cases_inert)
+  have "\<tau>' = inr_post_raw' sig (Bv v) (\<sigma> sig) \<tau> t dly"
+    using assms(3) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b(Bv v)\<close> beval_raw_deterministic  by (metis seq_cases_inert)
   moreover have "beval_raw t \<sigma> \<gamma> \<theta> def exp = beval_world_raw \<omega> t exp"
     using `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau> ` and `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>`
     by (simp add: assms(6) beval_beval_world_raw_ci)
-  hence \<tau>'_def: "\<tau>' = inr_post_raw sig x (\<sigma> sig) \<tau> t dly"
+  hence \<tau>'_def: "\<tau>' = inr_post_raw' sig(Bv v) (\<sigma> sig) \<tau> t dly"
     by (simp add: calculation)
   have "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>'"
     using b_seq_exec_preserves_context_invariant[OF assms(2-3)] `0 < dly` by auto
@@ -2728,60 +3875,60 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
         unfolding worldline_raw_def by auto
       have "t' < t + dly"
         using `t' < t` by auto
-      hence "snd (\<omega>[sig, t,  dly := x]) s' t' = snd (worldline_raw t \<sigma> \<theta> def \<tau>) s' t'"
+      hence "snd (\<omega>[sig, t,  dly :=(Bv v)]) s' t' = snd (worldline_raw t \<sigma> \<theta> def \<tau>) s' t'"
         unfolding `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau>` worldline_inert_upd_def  by (simp add: \<open>t' < t\<close>)
       also have "... = signal_of (def s') \<theta> s' t'"
         using `t' < t` unfolding worldline_raw_def by auto
-      finally have "snd (\<omega>[sig, t, dly := x]) s' t' = signal_of (def s') \<theta> s' t'"
+      finally have "snd (\<omega>[sig, t, dly :=(Bv v)]) s' t' = signal_of (def s') \<theta> s' t'"
         by auto
-      hence "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t'"
+      hence "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly :=(Bv v)]) s' t'"
         using 0 by auto }
     moreover
     { assume "s' \<noteq> sig"
-      hence "snd (\<omega>[sig, t, dly := x]) s' t' = snd (worldline_raw t \<sigma> \<theta> def \<tau>) s' t'"
+      hence "snd (\<omega>[sig, t, dly :=(Bv v)]) s' t' = snd (worldline_raw t \<sigma> \<theta> def \<tau>) s' t'"
         unfolding worldline_inert_upd_def `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau>` by auto
       also have "... = snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t'"
       proof -
         have "\<And>n. (to_trans_raw_sig \<tau> s') n = (to_trans_raw_sig \<tau>' s') n"
-          using `s' \<noteq> sig` unfolding \<tau>'_def inr_post_raw_def
-          by (metis purge_raw_does_not_affect_other_sig to_trans_raw_sig_def trans_post_raw_diff_sig)
+          using `s' \<noteq> sig` unfolding \<tau>'_def inr_post_raw'_def
+          by (metis purge_raw_does_not_affect_other_sig' to_trans_raw_sig_def trans_post_raw_diff_sig)
         hence "signal_of (\<sigma> s') \<tau> s' t' = signal_of (\<sigma> s') \<tau>'  s' t'"
           by (meson signal_of_equal_when_trans_sig_equal_upto)
         thus ?thesis
           unfolding worldline_raw_def by auto
       qed
-      finally have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t'"
+      finally have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly :=(Bv v)]) s' t'"
         by auto }
-    ultimately have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t'"
+    ultimately have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := Bv v]) s' t'"
       by auto }
   moreover
   { assume "s' = sig \<and> t \<le> t'"
-    have "(snd \<omega> sig t = x \<or> snd \<omega> sig (t + dly) \<noteq> x) \<or> (snd \<omega> sig t \<noteq> x \<and> snd \<omega> sig (t + dly) = x)"
+    have "(snd \<omega> sig t = (Bv v) \<or> snd \<omega> sig (t + dly) \<noteq> (Bv v)) \<or> (snd \<omega> sig t \<noteq> (Bv v) \<and> snd \<omega> sig (t + dly) = (Bv v))"
       by auto
     moreover
-    { assume "snd \<omega> sig t = x \<or> snd \<omega> sig (t + dly) \<noteq> x"
+    { assume "snd \<omega> sig t = (Bv v) \<or> snd \<omega> sig (t + dly) \<noteq> (Bv v)"
       have "t + dly \<le> t' \<or> t' < t + dly" and "s' = sig" and "t \<le> t'"
         using leI \<open>s' = sig \<and> t \<le> t'\<close> by auto
       moreover
       { assume "t + dly \<le> t'"
-        hence 2: "beval_world_raw (worldline_raw t \<sigma> \<theta> def \<tau>) t exp (snd (\<omega>[sig, t, dly := x]) s' t')"
+        hence 2: "beval_world_raw (worldline_raw t \<sigma> \<theta> def \<tau>) t exp (snd (\<omega>[sig, t, dly := (Bv v)]) s' t')"
             using `s' = sig`  `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau>` worldline_inert_upd_def
-            using \<open>snd \<omega> sig t = x \<or> snd \<omega> sig (t + dly) \<noteq> x\<close> assms(1)
+            using \<open>snd \<omega> sig t = (Bv v) \<or> snd \<omega> sig (t + dly) \<noteq> (Bv v)\<close> assms(1)
             by (smt \<open>s' = sig \<and> t \<le> t'\<close> assms(7) not_le snd_conv)
         have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = signal_of (\<sigma> s') \<tau>' s' t'"
           using `t' \<ge> t` unfolding worldline_raw_def by auto
         hence "beval_world_raw (worldline_raw t \<sigma> \<theta> def \<tau>) t exp (signal_of (\<sigma> s') \<tau>' s' t')"
-          using signal_of_inr_post[OF `t + dly \<le> t'`, of _ "\<sigma> s'" "sig"]  \<tau>'_def
+          using signal_of_inr_post'[OF `t + dly \<le> t'`, of _ "\<sigma> s'" "sig"]  \<tau>'_def
           `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau>`  using \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>s' = sig \<and> t \<le> t'\<close> `0 < dly`
           assms(7) by auto
-        hence "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t' "
+        hence "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := (Bv v)]) s' t' "
           using 2 \<open>snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = signal_of (\<sigma> s') \<tau>' s' t'\<close>
           beval_world_raw_deterministic by metis }
       moreover
       { assume "t' < t + dly"
-        hence "snd (\<omega>[sig, t, dly := x]) s' t' = snd \<omega> sig t"
+        hence "snd (\<omega>[sig, t, dly := (Bv v)]) s' t' = snd \<omega> sig t"
           unfolding worldline_inert_upd_def using `s' = sig`  using \<open>s' = sig \<and> t \<le> t'\<close>
-          using \<open>snd \<omega> sig t = x \<or> snd \<omega> sig (t + dly) \<noteq> x\<close> by auto
+          using \<open>snd \<omega> sig t = (Bv v) \<or> snd \<omega> sig (t + dly) \<noteq> (Bv v)\<close> by auto
         also have "... = signal_of (\<sigma> sig) \<tau> sig t"
           unfolding `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau>` worldline_raw_def by auto
         also have "... = \<sigma> sig"
@@ -2804,70 +3951,70 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
           then show ?thesis
             unfolding Femto_VHDL_raw.to_signal_def comp_def by auto
         qed
-        finally have l: "snd (\<omega>[sig, t, dly := x]) s' t' = \<sigma> sig"
+        finally have l: "snd (\<omega>[sig, t, dly := (Bv v)]) s' t' = \<sigma> sig"
           by auto
         have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = signal_of (\<sigma> s') \<tau>' s' t'"
           unfolding worldline_raw_def using `s' = sig \<and> t \<le> t'` by auto
         also have "... = \<sigma> s'"
         proof -
-          have 0: "signal_of (\<sigma> s') \<tau> s' t = x \<or> signal_of (\<sigma> s') \<tau> s' (t + dly) \<noteq> x"
-            using `snd \<omega> sig t = x \<or> snd \<omega> sig (t + dly) \<noteq> x` \<open>s' = sig\<close>
+          have 0: "signal_of (\<sigma> s') \<tau> s' t = (Bv v) \<or> signal_of (\<sigma> s') \<tau> s' (t + dly) \<noteq> (Bv v)"
+            using `snd \<omega> sig t = (Bv v) \<or> snd \<omega> sig (t + dly) \<noteq> (Bv v)` \<open>s' = sig\<close>
             unfolding assms(1) worldline_raw_def by auto
           thus ?thesis
             using signal_of_inr_post3[OF `t \<le> t'` `t' < t + dly` `\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0`] \<open>s' = sig\<close>
-            unfolding \<tau>'_def
+            unfolding \<tau>'_def inr_post_raw'_eq_inr_post_raw
             by (meson \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>s' = sig \<and> t \<le> t'\<close> \<open>t' < t + dly\<close> signal_of_inr_post3)
         qed
         finally have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = \<sigma> s'"
           by auto
-        with l have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t' "
+        with l have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := (Bv v)]) s' t' "
           using `s' = sig` by auto }
-      ultimately have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t' "
+      ultimately have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := (Bv v)]) s' t' "
         by auto }
     moreover
-    { assume "snd \<omega> sig t \<noteq> x \<and> snd \<omega> sig (t + dly) = x"
-      hence sig_not_eq: "signal_of (\<sigma> sig) \<tau> sig t \<noteq> x" and  sig_eq: "signal_of (\<sigma> sig) \<tau> sig (t + dly) = x"
+    { assume "snd \<omega> sig t \<noteq> (Bv v) \<and> snd \<omega> sig (t + dly) = (Bv v)"
+      hence sig_not_eq: "signal_of (\<sigma> sig) \<tau> sig t \<noteq> (Bv v)" and  sig_eq: "signal_of (\<sigma> sig) \<tau> sig (t + dly) = (Bv v)"
         unfolding assms(1) worldline_raw_def by auto
-      hence exist_mapping: "\<exists>k > t. k\<le>t + dly \<and> \<tau> k sig = Some x"
+      hence exist_mapping: "\<exists>k > t. k\<le>t + dly \<and> \<tau> k sig = Some (Bv v)"
         using switch_signal_ex_mapping[of "\<sigma>", OF sig_not_eq] `\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0`
         by (simp add: zero_fun_def)
-      let ?time = "GREATEST n. n \<le> t + dly \<and> (snd \<omega> sig (n - 1) \<noteq> x) \<and> snd \<omega> sig n = x"
+      let ?time = "GREATEST n. n \<le> t + dly \<and> (snd \<omega> sig (n - 1) \<noteq> (Bv v)) \<and> snd \<omega> sig n = (Bv v)"
       have "?time \<le> t' \<or> t' < ?time" and "s' = sig" and "t \<le> t'"
         using \<open>s' = sig \<and> t \<le> t'\<close> by auto
       moreover
       { assume "?time \<le> t'"
-        hence 2: "beval_world_raw (worldline_raw t \<sigma> \<theta> def \<tau>) t exp (snd (\<omega>[sig, t, dly := x]) s' t')"
+        hence 2: "beval_world_raw (worldline_raw t \<sigma> \<theta> def \<tau>) t exp (snd (\<omega>[sig, t, dly := (Bv v)]) s' t')"
             using `s' = sig` unfolding `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau>` worldline_inert_upd_def
-            using \<open>snd \<omega> sig t \<noteq> x \<and> snd \<omega> sig (t + dly) = x\<close>
+            using \<open>snd \<omega> sig t \<noteq> (Bv v) \<and> snd \<omega> sig (t + dly) = (Bv v)\<close>
             \<open>s' = sig \<and> t \<le> t'\<close> assms(1)  using assms(7) by auto
         have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = signal_of (\<sigma> s') \<tau>' s' t'"
           using `t' \<ge> t` unfolding worldline_raw_def by auto
-        also have "... = x"
-          unfolding \<tau>'_def \<open>s' = sig\<close>
+        also have "... = (Bv v)"
+          unfolding \<tau>'_def \<open>s' = sig\<close> inr_post_raw'_eq_inr_post_raw
         proof (rule signal_of_inr_post4)
-          show "signal_of (\<sigma> sig) \<tau> sig t \<noteq> x"
-            using \<open>snd \<omega> sig t \<noteq> x \<and> snd \<omega> sig (t + dly) = x\<close>
+          show "signal_of (\<sigma> sig) \<tau> sig t \<noteq> (Bv v)"
+            using \<open>snd \<omega> sig t \<noteq> (Bv v) \<and> snd \<omega> sig (t + dly) = (Bv v)\<close>
             by (simp add: assms(1) worldline_raw_def)
         next
-          show "signal_of (\<sigma> sig) \<tau> sig (t + dly) = x"
-            using \<open>snd \<omega> sig t \<noteq> x \<and> snd \<omega> sig (t + dly) = x\<close>
+          show "signal_of (\<sigma> sig) \<tau> sig (t + dly) = (Bv v)"
+            using \<open>snd \<omega> sig t \<noteq> (Bv v) \<and> snd \<omega> sig (t + dly) = (Bv v)\<close>
             by (simp add: assms(1) worldline_raw_def)
         next
-          have "?time = (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x)" (is "_ = ?time2")
+          have "?time = (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v))" (is "_ = ?time2")
           proof (rule Greatest_equality)
-            have "?time2 \<le> t + dly" and "\<tau> ?time2 sig = Some x"
-              using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau> n sig = Some x" and b="t + dly"]
+            have "?time2 \<le> t + dly" and "\<tau> ?time2 sig = Some (Bv v)"
+              using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)" and b="t + dly"]
               exist_mapping by auto
             have "t < ?time2"
               by (metis (no_types, lifting) \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close>
-                 \<open>\<tau> (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) sig = Some x\<close> leI
+                 \<open>\<tau> (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) sig = Some (Bv v)\<close> leI
               option.distinct(1) zero_fun_def zero_option_def)
-            have "signal_of (\<sigma> sig) \<tau> sig ?time2 = x"
-              using trans_some_signal_of'[of "\<tau>", OF `\<tau> ?time2 sig = Some x`]
+            have "signal_of (\<sigma> sig) \<tau> sig ?time2 = (Bv v)"
+              using trans_some_signal_of'[of "\<tau>", OF `\<tau> ?time2 sig = Some (Bv v)`]
               by auto
-            hence "snd \<omega> sig ?time2 = x"
+            hence "snd \<omega> sig ?time2 = (Bv v)"
               using `t < ?time2` unfolding assms(1) worldline_raw_def by auto
-            have "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) \<noteq> x"
+            have "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) \<noteq> (Bv v)"
             proof (cases "\<exists>n. t < n \<and> n < ?time2 \<and> \<tau> n sig \<noteq> None")
               case False
               hence none: "\<And>n. t < n \<Longrightarrow> n \<le> ?time2 - 1 \<Longrightarrow> \<tau> n sig = 0"
@@ -2875,9 +4022,9 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
               have "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) = signal_of (\<sigma> sig) \<tau> sig t"
                 using signal_of_less_ind'[of "t" "?time2 - 1" "\<tau>" "sig", OF none] `t < ?time2`
                 by auto
-              also have "... \<noteq> x"
+              also have "... \<noteq> (Bv v)"
                 using sig_not_eq by auto
-              finally show "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) \<noteq> x"
+              finally show "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) \<noteq> (Bv v)"
                 by auto
             next
               case True
@@ -2886,7 +4033,7 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
                 using GreatestI_ex_nat[OF True]  using less_imp_le_nat by blast+
               have *: "\<And>n. n > ?key1 \<Longrightarrow> n < ?time2 \<Longrightarrow> \<tau> n sig = None"
                 using Greatest_le_nat[where P="\<lambda>x. t < x \<and> x < ?time2 \<and> \<tau> x sig \<noteq> None" and b="?time2"]
-                by (smt \<open>t < (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) \<and>
+                by (smt \<open>t < (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) \<and>
                 \<tau> n sig \<noteq> None)\<close> leD less_imp_le_nat less_trans)
               have inf_some: "inf_time (to_trans_raw_sig \<tau>) sig (?time2 - 1) = Some ?key1"
               proof (rule inf_time_someI)
@@ -2913,7 +4060,7 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
                 have "?key1 \<in> keys (to_trans_raw_sig \<tau> sig)"
                   using `\<tau> ?key1 sig \<noteq> None`  by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
                 moreover have "?time2 \<in> keys (to_trans_raw_sig \<tau> sig)"
-                  using `\<tau> ?time2 sig = Some x`
+                  using `\<tau> ?time2 sig = Some (Bv v)`
                   by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
                 moreover have "\<forall>k. ?key1 < k \<and> k < ?time2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau> sig)"
                   using *  by (metis (mono_tags, lifting) domIff keys_def mem_Collect_eq to_trans_raw_sig_def
@@ -2922,27 +4069,27 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
                   using `?key1 < ?time2` assms(5) unfolding non_stuttering_def
                   by (simp add: to_trans_raw_sig_def)
               qed
-              hence "\<tau> ?key1 sig \<noteq> Some x"
-                using \<open>\<tau> (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) sig = Some x\<close>
-                      \<open>\<tau> (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) \<and> \<tau> n sig \<noteq> None) sig \<noteq> None\<close> by auto
+              hence "\<tau> ?key1 sig \<noteq> Some (Bv v)"
+                using \<open>\<tau> (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) sig = Some (Bv v)\<close>
+                      \<open>\<tau> (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) \<and> \<tau> n sig \<noteq> None) sig \<noteq> None\<close> by auto
               thus ?thesis
                 unfolding to_signal_def comp_def using inf_some
                 by (metis (no_types, lifting) \<open>\<tau> (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly \<and>
-                \<tau> n sig = Some x) \<and> \<tau> n sig \<noteq> None) sig \<noteq> None\<close> not_None_eq option.sel
+                \<tau> n sig = Some (Bv v)) \<and> \<tau> n sig \<noteq> None) sig \<noteq> None\<close> not_None_eq option.sel
                 option.simps(5) to_trans_raw_sig_def)
             qed
-            hence "snd \<omega> sig (?time2 - 1) \<noteq>  x"
+            hence "snd \<omega> sig (?time2 - 1) \<noteq>  (Bv v)"
               using `t < ?time2` unfolding assms(1) worldline_raw_def  by (simp add: leD)
-            thus "?time2 \<le> t + dly \<and> snd \<omega> sig (?time2 - 1) \<noteq> x \<and> snd \<omega> sig ?time2 = x"
-              using \<open>(GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) \<le> t + dly\<close>
-              \<open>snd \<omega> sig (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) = x\<close> by blast
+            thus "?time2 \<le> t + dly \<and> snd \<omega> sig (?time2 - 1) \<noteq> (Bv v) \<and> snd \<omega> sig ?time2 = (Bv v)"
+              using \<open>(GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) \<le> t + dly\<close>
+              \<open>snd \<omega> sig (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) = (Bv v)\<close> by blast
           next
             fix y
-            assume "y \<le> t + dly \<and> snd \<omega> sig (y - 1) \<noteq> x \<and> snd \<omega> sig y = x"
-            hence "y \<le> t + dly" and "snd \<omega> sig (y - 1) \<noteq> x" and "snd \<omega> sig y = x"
+            assume "y \<le> t + dly \<and> snd \<omega> sig (y - 1) \<noteq> (Bv v) \<and> snd \<omega> sig y = (Bv v)"
+            hence "y \<le> t + dly" and "snd \<omega> sig (y - 1) \<noteq> (Bv v)" and "snd \<omega> sig y = (Bv v)"
               by auto
-            have "?time2 \<le> t + dly" and "\<tau> ?time2 sig = Some x"
-              using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau> n sig = Some x" and b="t + dly"]
+            have "?time2 \<le> t + dly" and "\<tau> ?time2 sig = Some (Bv v)"
+              using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)" and b="t + dly"]
               exist_mapping by auto
             hence "t < ?time2"
               by (metis (no_types, lifting) \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> leI
@@ -2957,16 +4104,16 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
             { assume "t < y"
               hence "snd \<omega> sig (y - 1) = signal_of (\<sigma> sig) \<tau> sig (y - 1)"
                 unfolding assms(1) worldline_raw_def by auto
-              hence 0: "... \<noteq> x"
-                using `snd \<omega> sig (y - 1) \<noteq> x` by auto
+              hence 0: "... \<noteq> (Bv v)"
+                using `snd \<omega> sig (y - 1) \<noteq> (Bv v)` by auto
               have "snd \<omega> sig y = signal_of (\<sigma> sig) \<tau> sig y"
                 unfolding assms(1) worldline_raw_def using `t < y` by auto
-              hence 1: "... = x"
-                using `snd \<omega> sig y = x` `t < y` by auto
-              have "\<tau> y sig = Some x"
+              hence 1: "... = (Bv v)"
+                using `snd \<omega> sig y = (Bv v)` `t < y` by auto
+              have "\<tau> y sig = Some (Bv v)"
               proof (rule ccontr)
-                assume "\<not> \<tau> y sig = Some x"
-                then obtain x' where "\<tau> y sig = None \<or> \<tau> y sig = Some x' \<and> x' \<noteq> x"
+                assume "\<not> \<tau> y sig = Some (Bv v)"
+                then obtain x' where "\<tau> y sig = None \<or> \<tau> y sig = Some x' \<and> x' \<noteq> (Bv v)"
                   using domIff by fastforce
                 moreover
                 { assume "\<tau> y sig = None"
@@ -2974,8 +4121,8 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
                     by (intro signal_of_less_sig)(simp add: zero_option_def)
                   with 0 1 have False by auto }
                 moreover
-                { assume "\<tau> y sig = Some x' \<and> x' \<noteq> x"
-                  hence "signal_of (\<sigma> sig) \<tau> sig y = x'" and "x' \<noteq> x"
+                { assume "\<tau> y sig = Some x' \<and> x' \<noteq> (Bv v)"
+                  hence "signal_of (\<sigma> sig) \<tau> sig y = x'" and "x' \<noteq> (Bv v)"
                     using trans_some_signal_of' by fastforce+
                   with 1 have False by auto }
                 ultimately show False by auto
@@ -2985,21 +4132,21 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
             ultimately show "y \<le> ?time2"
               by auto
           qed
-          thus "(GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) \<le> t'"
-            using \<open>(GREATEST n. n \<le> t + dly \<and> snd \<omega> sig (n - 1) \<noteq> x \<and> snd \<omega> sig n = x) \<le> t'\<close> by linarith
+          thus "(GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) \<le> t'"
+            using \<open>(GREATEST n. n \<le> t + dly \<and> snd \<omega> sig (n - 1) \<noteq> Bv v \<and> snd \<omega> sig n = Bv v) \<le> t'\<close> by linarith
         next
           show "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
             using \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> by auto
         qed
-        hence "beval_world_raw (worldline_raw t \<sigma> \<theta> def \<tau>) t exp x"
+        hence "beval_world_raw (worldline_raw t \<sigma> \<theta> def \<tau>) t exp (Bv v)"
           using assms(1) assms(7) by metis
-        hence "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t' "
-          using 2  by (metis \<open>signal_of (\<sigma> s') \<tau>' s' t' = x\<close> beval_world_raw_deterministic calculation) }
+        hence "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := (Bv v)]) s' t' "
+          using 2  by (metis \<open>signal_of (\<sigma> s') \<tau>' s' t' = (Bv v)\<close> beval_world_raw_deterministic calculation) }
       moreover
       { assume " t' < ?time"
-        hence "snd (\<omega>[sig, t, dly := x]) s' t' = snd \<omega> sig t"
+        hence "snd (\<omega>[sig, t, dly := (Bv v)]) s' t' = snd \<omega> sig t"
           unfolding worldline_inert_upd_def using `s' = sig`  using \<open>s' = sig \<and> t \<le> t'\<close>
-          using \<open>snd \<omega> sig t \<noteq> x \<and> snd \<omega> sig (t + dly) = x\<close> by auto
+          using \<open>snd \<omega> sig t \<noteq> (Bv v) \<and> snd \<omega> sig (t + dly) = (Bv v)\<close> by auto
         also have "... = signal_of (\<sigma> sig) \<tau> sig t"
           unfolding `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau>` worldline_raw_def by auto
         also have "... = \<sigma> sig"
@@ -3022,12 +4169,12 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
           then show ?thesis
             unfolding Femto_VHDL_raw.to_signal_def comp_def by auto
         qed
-        finally have l: "snd (\<omega>[sig, t, dly := x]) s' t' = \<sigma> sig"
+        finally have l: "snd (\<omega>[sig, t, dly := (Bv v)]) s' t' = \<sigma> sig"
           by auto
         have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = signal_of (\<sigma> s') \<tau>' s' t'"
           unfolding worldline_raw_def using `s' = sig \<and> t \<le> t'` by auto
         also have "... = \<sigma> s'"
-          unfolding \<tau>'_def \<open>s' = sig\<close>
+          unfolding \<tau>'_def \<open>s' = sig\<close> inr_post_raw'_eq_inr_post_raw
         proof(rule signal_of_inr_post2)
           show "t \<le> t'"
             by (simp add: \<open>s' = sig \<and> t \<le> t'\<close>)
@@ -3035,27 +4182,27 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
           show "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
             using \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> by blast
         next
-          show "\<sigma> sig \<noteq> x"
-            using \<open>snd \<omega> sig t = signal_of (\<sigma> sig) \<tau> sig t\<close> \<open>snd \<omega> sig t \<noteq> x \<and> snd \<omega> sig (t + dly) = x\<close>
+          show "\<sigma> sig \<noteq> (Bv v)"
+            using \<open>snd \<omega> sig t = signal_of (\<sigma> sig) \<tau> sig t\<close> \<open>snd \<omega> sig t \<noteq> (Bv v) \<and> snd \<omega> sig (t + dly) = (Bv v)\<close>
             \<open>signal_of (\<sigma> sig) \<tau> sig t = \<sigma> sig\<close> by simp
         next
-          show "signal_of (\<sigma> sig) \<tau> sig (t + dly) = x"
+          show "signal_of (\<sigma> sig) \<tau> sig (t + dly) = (Bv v)"
             using sig_eq by blast
         next
-          have "?time = (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x)" (is "_ = ?time2")
+          have "?time = (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v))" (is "_ = ?time2")
           proof (rule Greatest_equality)
-            have "?time2 \<le> t + dly" and "\<tau> ?time2 sig = Some x"
-              using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau> n sig = Some x" and b="t + dly"]
+            have "?time2 \<le> t + dly" and "\<tau> ?time2 sig = Some (Bv v)"
+              using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)" and b="t + dly"]
               exist_mapping by auto
             have "t < ?time2"
               by (metis (no_types, lifting) \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>\<tau> (GREATEST n. n \<le> t + dly \<and> \<tau> n
-              sig = Some x) sig = Some x\<close> leI option.distinct(1) zero_fun_def zero_option_def)
-            have "signal_of (\<sigma> sig) \<tau> sig ?time2 = x"
-              using trans_some_signal_of'[of "\<tau>", OF `\<tau> ?time2 sig = Some x`]
+              sig = Some (Bv v)) sig = Some (Bv v)\<close> leI option.distinct(1) zero_fun_def zero_option_def)
+            have "signal_of (\<sigma> sig) \<tau> sig ?time2 = (Bv v)"
+              using trans_some_signal_of'[of "\<tau>", OF `\<tau> ?time2 sig = Some (Bv v)`]
               by auto
-            hence "snd \<omega> sig ?time2 = x"
+            hence "snd \<omega> sig ?time2 = (Bv v)"
               using `t < ?time2` unfolding assms(1) worldline_raw_def by auto
-            have "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) \<noteq>  x"
+            have "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) \<noteq>  (Bv v)"
             proof (cases "\<exists>n. t < n \<and> n < ?time2 \<and> \<tau> n sig \<noteq> None")
               case False
               hence none: "\<And>n. t < n \<Longrightarrow> n \<le> ?time2 - 1 \<Longrightarrow> \<tau> n sig = 0"
@@ -3063,9 +4210,9 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
               have "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) = signal_of (\<sigma> sig) \<tau> sig t"
                 using signal_of_less_ind'[of "t" "?time2 - 1" "\<tau>" "sig", OF none] `t < ?time2`
                 by auto
-              also have "... \<noteq> x"
+              also have "... \<noteq> (Bv v)"
                 using sig_not_eq by auto
-              finally show "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) \<noteq> x"
+              finally show "signal_of (\<sigma> sig) \<tau> sig (?time2 - 1) \<noteq> (Bv v)"
                 by auto
             next
               case True
@@ -3074,7 +4221,7 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
                 using GreatestI_ex_nat[OF True]  using less_imp_le_nat by blast+
               have *: "\<And>n. n > ?key1 \<Longrightarrow> n < ?time2 \<Longrightarrow> \<tau> n sig = None"
                 using Greatest_le_nat[where P="\<lambda>x. t < x \<and> x < ?time2 \<and> \<tau> x sig \<noteq> None" and b="?time2"]
-                by (smt \<open>t < (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) \<and>
+                by (smt \<open>t < (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) \<and>
                 \<tau> n sig \<noteq> None)\<close> leD less_imp_le_nat less_trans)
               have inf_some: "inf_time (to_trans_raw_sig \<tau>) sig (?time2 - 1) = Some ?key1"
               proof (rule inf_time_someI)
@@ -3101,7 +4248,7 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
                 have "?key1 \<in> keys (to_trans_raw_sig \<tau> sig)"
                   using `\<tau> ?key1 sig \<noteq> None`  by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
                 moreover have "?time2 \<in> keys (to_trans_raw_sig \<tau> sig)"
-                  using `\<tau> ?time2 sig = Some x`
+                  using `\<tau> ?time2 sig = Some (Bv v)`
                   by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
                 moreover have "\<forall>k. ?key1 < k \<and> k < ?time2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig \<tau> sig)"
                   using *  by (metis (mono_tags, lifting) domIff keys_def mem_Collect_eq to_trans_raw_sig_def
@@ -3110,28 +4257,28 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
                   using `?key1 < ?time2` assms(5) unfolding non_stuttering_def
                   by (simp add: to_trans_raw_sig_def)
               qed
-              hence "\<tau> ?key1 sig \<noteq> Some x"
-                using \<open>\<tau> (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) sig =
-                Some x\<close> \<open>\<tau> (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly
-                \<and> \<tau> n sig = Some x) \<and> \<tau> n sig \<noteq> None) sig \<noteq> None\<close> by auto
+              hence "\<tau> ?key1 sig \<noteq> Some (Bv v)"
+                using \<open>\<tau> (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) sig =
+                Some (Bv v)\<close> \<open>\<tau> (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly
+                \<and> \<tau> n sig = Some (Bv v)) \<and> \<tau> n sig \<noteq> None) sig \<noteq> None\<close> by auto
               thus ?thesis
                 unfolding to_signal_def comp_def using inf_some
                 by (metis (no_types, lifting) \<open>\<tau> (GREATEST n. t < n \<and> n < (GREATEST n. n \<le> t + dly \<and>
-                \<tau> n sig = Some x) \<and> \<tau> n sig \<noteq> None) sig \<noteq> None\<close> not_None_eq option.sel
+                \<tau> n sig = Some (Bv v)) \<and> \<tau> n sig \<noteq> None) sig \<noteq> None\<close> not_None_eq option.sel
                 option.simps(5) to_trans_raw_sig_def)
             qed
-            hence "snd \<omega> sig (?time2 - 1) \<noteq>  x"
+            hence "snd \<omega> sig (?time2 - 1) \<noteq>  (Bv v)"
               using `t < ?time2` unfolding assms(1) worldline_raw_def  by (simp add: leD)
-            thus "?time2 \<le> t + dly \<and> snd \<omega> sig (?time2 - 1) \<noteq> x \<and> snd \<omega> sig ?time2 = x"
-              using \<open>(GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) \<le> t + dly\<close>
-              \<open>snd \<omega> sig (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x) = x\<close> by blast
+            thus "?time2 \<le> t + dly \<and> snd \<omega> sig (?time2 - 1) \<noteq> (Bv v) \<and> snd \<omega> sig ?time2 = (Bv v)"
+              using \<open>(GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) \<le> t + dly\<close>
+              \<open>snd \<omega> sig (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)) = (Bv v)\<close> by blast
           next
             fix y
-            assume "y \<le> t + dly \<and> snd \<omega> sig (y - 1) \<noteq> x \<and> snd \<omega> sig y = x"
-            hence "y \<le> t + dly" and "snd \<omega> sig (y - 1) \<noteq> x" and "snd \<omega> sig y = x"
+            assume "y \<le> t + dly \<and> snd \<omega> sig (y - 1) \<noteq> (Bv v) \<and> snd \<omega> sig y = (Bv v)"
+            hence "y \<le> t + dly" and "snd \<omega> sig (y - 1) \<noteq> (Bv v)" and "snd \<omega> sig y = (Bv v)"
               by auto
-            have "?time2 \<le> t + dly" and "\<tau> ?time2 sig = Some x"
-              using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau> n sig = Some x" and b="t + dly"]
+            have "?time2 \<le> t + dly" and "\<tau> ?time2 sig = Some (Bv v)"
+              using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v)" and b="t + dly"]
               exist_mapping by auto
             hence "t < ?time2"
               by (metis (no_types, lifting) \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> leI
@@ -3146,16 +4293,16 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
             { assume "t < y"
               hence "snd \<omega> sig (y - 1) = signal_of (\<sigma> sig) \<tau> sig (y - 1)"
                 unfolding assms(1) worldline_raw_def by auto
-              hence 0: "... \<noteq> x"
-                using `snd \<omega> sig (y - 1) \<noteq> x` by auto
+              hence 0: "... \<noteq> (Bv v)"
+                using `snd \<omega> sig (y - 1) \<noteq> (Bv v)` by auto
               have "snd \<omega> sig y = signal_of (\<sigma> sig) \<tau> sig y"
                 unfolding assms(1) worldline_raw_def using `t < y` by auto
-              hence 1: "... = x"
-                using `snd \<omega> sig y = x` `t < y` by auto
-              have "\<tau> y sig = Some x"
+              hence 1: "... = (Bv v)"
+                using `snd \<omega> sig y = (Bv v)` `t < y` by auto
+              have "\<tau> y sig = Some (Bv v)"
               proof (rule ccontr)
-                assume "\<not> \<tau> y sig = Some x"
-                then obtain x' where "\<tau> y sig = None \<or> \<tau> y sig = Some x' \<and> x' \<noteq> x"
+                assume "\<not> \<tau> y sig = Some (Bv v)"
+                then obtain x' where "\<tau> y sig = None \<or> \<tau> y sig = Some x' \<and> x' \<noteq> (Bv v)"
                   using domIff by fastforce
                 moreover
                 { assume "\<tau> y sig = None"
@@ -3163,8 +4310,8 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
                     by (intro signal_of_less_sig)(simp add: zero_option_def)
                   with 0 1 have False by auto }
                 moreover
-                { assume "\<tau> y sig = Some x' \<and> x' \<noteq> x"
-                  hence "signal_of (\<sigma> sig) \<tau> sig y = x'" and "x' \<noteq> x"
+                { assume "\<tau> y sig = Some x' \<and> x' \<noteq> (Bv v)"
+                  hence "signal_of (\<sigma> sig) \<tau> sig y = x'" and "x' \<noteq> (Bv v)"
                     using trans_some_signal_of' by fastforce+
                   with 1 have False by auto }
                 ultimately show False by auto
@@ -3174,28 +4321,3116 @@ proof (rule, rule_tac[2] ext, rule_tac[2] ext)
             ultimately show "y \<le> ?time2"
               by auto
           qed
-          thus "t' < (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some x)"
-            using \<open>t' < (GREATEST n. n \<le> t + dly \<and> snd \<omega> sig (n - 1) \<noteq> x \<and> snd \<omega> sig n = x)\<close>
+          thus "t' < (GREATEST n. n \<le> t + dly \<and> \<tau> n sig = Some (Bv v))"
+            using \<open>t' < (GREATEST n. n \<le> t + dly \<and> snd \<omega> sig (n - 1) \<noteq> (Bv v) \<and> snd \<omega> sig n = (Bv v))\<close>
             by linarith
         qed
         finally have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = \<sigma> s'"
           by auto
-        with l have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t' "
+        with l have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := (Bv v)]) s' t' "
           using `s' = sig` by auto }
-      ultimately have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t'"
+      ultimately have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := (Bv v)]) s' t'"
         by auto }
-    ultimately  have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t'"
+    ultimately  have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := (Bv v)]) s' t'"
       by auto }
-  ultimately show "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (\<omega>[sig, t, dly := x]) s' t' "
-    by auto
+  ultimately show "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (worldline_inert_upd2 \<omega> sig t dly (Bv v)) s' t' "
+    by (simp add: assms(1) worldline_inert_upd_def worldline_raw_def)
 qed (simp add: assms(1) worldline_inert_upd_def worldline_raw_def)
+
+lemma to_bit_signal_of_eq:
+  "signal_of (Bv (bs ! b)) (to_trans_raw_bit (Lv sign bs) \<tau> b sig) sig t = v \<longleftrightarrow> to_bit b (signal_of (Lv sign bs) \<tau> sig t) = v"
+  by (metis (no_types, lifting) to_bit_signal_of' val.case_eq_if val.collapse(1) val.distinct(1) val.sel(3))
+
+lemma non_stuttering_to_trans_raw_bit:
+  assumes " non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
+  shows   " non_stuttering (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) (to_bit b o \<sigma>) sig"
+  unfolding non_stuttering_def
+proof (rule)+
+  fix k1 k2 :: nat
+  assume "k1 < k2 \<and>
+       k1 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig) \<and>
+       k2 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig) \<and>
+       (\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig))"
+  hence "k1 < k2" and "k1 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)" 
+    and "k2 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)" 
+    and *: "(\<forall>k. k1 < k \<and> k < k2 \<longrightarrow> k \<notin> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig))"
+    by auto
+  hence "to_trans_raw_bit (\<sigma> sig) \<tau> b sig k1 sig \<noteq> None" and  "to_trans_raw_bit (\<sigma> sig) \<tau> b sig k2 sig \<noteq> None" and "0 < k2"
+    unfolding keys_def to_trans_raw_sig_def by (auto simp add: zero_option_def)
+  hence "\<tau> k2 sig \<noteq> None" and "to_bit b (signal_of (\<sigma> sig) \<tau> sig (k2 - 1)) \<noteq> to_bit b (the (\<tau> k2 sig))"
+    unfolding to_trans_raw_bit_def by (auto split: option.splits)
+  have " inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (k2 - 1) = Some k1"
+  proof (rule inf_time_someI)
+    show " k1 \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+      using \<open> k1 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> 
+      unfolding dom_def keys_def zero_option_def by auto
+  next
+    show "k1 \<le> k2 - 1" using \<open>k1 < k2\<close> by auto
+  next
+    show "\<forall>t\<in>dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). t \<le> k2 - 1 \<longrightarrow> t \<le> k1"
+      using * unfolding dom_def keys_def zero_option_def  using leI by force
+  qed
+  hence " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (k2 - 1) = 
+         the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig k1)"
+    unfolding to_bit_signal_of'_eq[THEN sym] to_signal_def comp_def by auto
+  moreover have " the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig k2)  = to_bit b (the (\<tau> k2 sig))"
+    using \<open>0 < k2\<close> \<open>to_bit b (signal_of (\<sigma> sig) \<tau> sig (k2 - 1)) \<noteq> to_bit b (the (\<tau> k2 sig))\<close>
+    unfolding to_trans_raw_sig_def to_trans_raw_bit_def  using \<open>\<tau> k2 sig \<noteq> None\<close> by auto
+  ultimately have "to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig k1 \<noteq> to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig k2"
+    using to_bit_signal_of'_eq 
+    using \<open>to_bit b (signal_of (\<sigma> sig) \<tau> sig (k2 - 1)) \<noteq> to_bit b (the (\<tau> k2 sig))\<close> by fastforce
+  moreover assume "to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig k1 = to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig k2"
+  ultimately show False
+    by auto
+next
+  { assume ex: " keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig) \<noteq> {}"
+    let ?time = "(LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig))"
+    have "?time \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+      using ex  by (meson LeastI all_not_in_conv)
+    have "\<tau> ?time sig \<noteq> None"
+    proof -
+      have "\<exists>n v. to_trans_raw_bit v \<tau> n sig (LEAST n. n \<in> {n. to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig n \<noteq> None}) sig \<noteq> None"
+        by (metis \<open>(LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> domD dom_def keys_def option.simps(3) to_trans_raw_sig_def zero_option_def)
+      then have "\<tau> (LEAST n. n \<in> {n. to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig n \<noteq> None}) sig \<noteq> None"
+        by (smt option.simps(4) to_trans_raw_bit_def)
+      then show ?thesis
+        by (simp add: keys_def zero_option_def)
+    qed
+    have "?time = 0 \<or> ?time \<noteq> 0"
+      by auto
+    moreover
+    { assume "?time = 0"
+      hence "the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig) \<noteq> to_bit b (\<sigma> sig)"
+        unfolding to_trans_raw_bit_def 
+      proof -
+        assume a1: "(LEAST k. k \<in> keys (to_trans_raw_sig (\<lambda>n siga. if siga \<noteq> sig then \<tau> n siga else case \<tau> n siga of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit b (signal_of (\<sigma> sig) \<tau> siga (n - 1)) = to_bit b v then None else if n = 0 \<and> to_bit b (\<sigma> sig) = to_bit b v then None else Some (to_bit b v)) sig)) = 0"
+        have "0 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+          using \<open>(LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)) = 0\<close> \<open>(LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> by presburger
+        then have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig 0 sig \<noteq> None"
+          by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+        then have f2: "(case \<tau> 0 sig of None \<Rightarrow> None | Some v \<Rightarrow> if (0::nat) < 0 \<and> to_bit b (signal_of (\<sigma> sig) \<tau> sig (0 - 1)) = to_bit b v then None else if to_bit b (\<sigma> sig) = to_bit b v then None else Some (to_bit b v)) \<noteq> None"
+          by (smt option.case_eq_if to_trans_raw_bit_def)  
+        then have f3: "\<tau> 0 sig \<noteq> None"
+          by (metis option.case_eq_if)
+        obtain vv :: "val option \<Rightarrow> val" where
+          "\<And>z za v. (z = None \<or> Some (vv z) = z) \<and> (za \<noteq> None \<or> za \<noteq> Some (v::val))"
+          by (metis (full_types) not_None_eq)
+        then have f4: "\<And>z za f. z = None \<or> (case z of None \<Rightarrow> za::val option | Some x \<Rightarrow> f x) = f (vv z)"
+          by (metis (full_types) option.case_eq_if option.sel)
+        then have f5: "(if (0::nat) < 0 \<and> to_bit b (signal_of (\<sigma> sig) \<tau> sig (0 - 1)) = to_bit b (vv (\<tau> 0 sig)) then None else if to_bit b (\<sigma> sig) = to_bit b (vv (\<tau> 0 sig)) then None else Some (to_bit b (vv (\<tau> 0 sig)))) \<noteq> None \<or> \<tau> 0 sig = None"
+          using f2  by smt
+        { assume "(if (0::nat) < 0 \<and> to_bit b (signal_of (\<sigma> sig) \<tau> sig (0 - 1)) = to_bit b (vv (\<tau> 0 sig)) then None else if True \<and> to_bit b (\<sigma> sig) = to_bit b (vv (\<tau> 0 sig)) then None else Some (to_bit b (vv (\<tau> 0 sig)))) \<noteq> Some (to_bit b (\<sigma> sig))"
+          have "\<tau> 0 sig \<noteq> None \<and> the (if (0::nat) < 0 \<and> to_bit b (signal_of (\<sigma> sig) \<tau> sig (0 - 1)) = to_bit b (vv (\<tau> 0 sig)) then None else if True \<and> to_bit b (\<sigma> sig) = to_bit b (vv (\<tau> 0 sig)) then None else Some (to_bit b (vv (\<tau> 0 sig)))) \<noteq> to_bit b (\<sigma> sig)"
+            using f5 f3 by force }
+        then have "\<tau> 0 sig \<noteq> None \<and> the (if (0::nat) < 0 \<and> to_bit b (signal_of (\<sigma> sig) \<tau> sig (0 - 1)) = to_bit b (vv (\<tau> 0 sig)) then None else if True \<and> to_bit b (\<sigma> sig) = to_bit b (vv (\<tau> 0 sig)) then None else Some (to_bit b (vv (\<tau> 0 sig)))) \<noteq> to_bit b (\<sigma> sig)"
+          by simp
+        then have "the (if False then \<tau> 0 sig else case \<tau> 0 sig of None \<Rightarrow> None | Some v \<Rightarrow> if (0::nat) < 0 \<and> to_bit b (signal_of (\<sigma> sig) \<tau> sig (0 - 1)) = to_bit b v then None else if to_bit b (\<sigma> sig) = to_bit b v then None else Some (to_bit b v)) \<noteq> to_bit b (\<sigma> sig)"
+          using f4  by (metis (no_types, lifting))
+        then show "the (if sig \<noteq> sig then \<tau> (LEAST n. n \<in> keys (to_trans_raw_sig (\<lambda>n a. if a \<noteq> sig then \<tau> n a else case \<tau> n a of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit b (signal_of (\<sigma> sig) \<tau> a (n - 1)) = to_bit b v then None else if n = 0 \<and> to_bit b (\<sigma> sig) = to_bit b v then None else Some (to_bit b v)) sig)) sig else case \<tau> (LEAST n. n \<in> keys (to_trans_raw_sig (\<lambda>n a. if a \<noteq> sig then \<tau> n a else case \<tau> n a of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit b (signal_of (\<sigma> sig) \<tau> a (n - 1)) = to_bit b v then None else if n = 0 \<and> to_bit b (\<sigma> sig) = to_bit b v then None else Some (to_bit b v)) sig)) sig of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < (LEAST n. n \<in> keys (to_trans_raw_sig (\<lambda>n a. if a \<noteq> sig then \<tau> n a else case \<tau> n a of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit b (signal_of (\<sigma> sig) \<tau> a (n - 1)) = to_bit b v then None else if n = 0 \<and> to_bit b (\<sigma> sig) = to_bit b v then None else Some (to_bit b v)) sig)) \<and> to_bit b (signal_of (\<sigma> sig) \<tau> sig ((LEAST n. n \<in> keys (to_trans_raw_sig (\<lambda>n a. if a \<noteq> sig then \<tau> n a else case \<tau> n a of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit b (signal_of (\<sigma> sig) \<tau> a (n - 1)) = to_bit b v then None else if n = 0 \<and> to_bit b (\<sigma> sig) = to_bit b v then None else Some (to_bit b v)) sig)) - 1)) = to_bit b v then None else if (LEAST n. n \<in> keys (to_trans_raw_sig (\<lambda>n a. if a \<noteq> sig then \<tau> n a else case \<tau> n a of None \<Rightarrow> None | Some v \<Rightarrow> if 0 < n \<and> to_bit b (signal_of (\<sigma> sig) \<tau> a (n - 1)) = to_bit b v then None else if n = 0 \<and> to_bit b (\<sigma> sig) = to_bit b v then None else Some (to_bit b v)) sig)) = 0 \<and> to_bit b (\<sigma> sig) = to_bit b v then None else Some (to_bit b v)) \<noteq> to_bit b (\<sigma> sig)"
+          using a1 by presburger
+      qed
+      hence " (to_bit b o \<sigma>) sig \<noteq> the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?time)"
+      proof -
+        have f1: "\<And>n. n \<notin> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig) \<or> to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig n \<noteq> 0"
+          by (simp add: keys_def)
+        have "\<forall>v n. \<exists>b. to_bit n v = Bv b"
+          by (metis to_bit.elims)
+        then obtain bb :: "val \<Rightarrow> nat \<Rightarrow> bool" where
+          f2: "\<And>n v. to_bit n v = Bv (bb v n)"
+          by moura
+        moreover
+        { assume "\<exists>n. Bv (bb (\<sigma> sig) n) \<noteq> \<sigma> sig"
+          then have "\<exists>f v. Some (\<sigma> sig) = Some (f sig) \<and> signal_of v (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (LEAST n. n \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)) \<noteq> f sig"
+            using f2 by (metis to_bit.simps(1) to_bit_signal_of')
+          then have "the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (LEAST n. n \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)) sig) \<noteq> \<sigma> sig"
+            using f1 by (metis \<open>(LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> option.collapse to_trans_raw_sig_def trans_some_signal_of' zero_option_def) }
+        ultimately show ?thesis
+          by (metis \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)) sig) \<noteq> to_bit b (\<sigma> sig)\<close> comp_apply to_trans_raw_sig_def)
+      qed }
+    moreover
+    { assume "?time \<noteq> 0"
+      hence "  to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time - 1)) \<noteq> to_bit b (the (\<tau> ?time sig))"
+        using \<open>?time \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close>
+        unfolding to_trans_raw_sig_def keys_def to_trans_raw_bit_def  by (smt mem_Collect_eq neq0_conv option.case_eq_if zero_option_def)
+      moreover have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time - 1)) = (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b))"
+        unfolding to_bit_signal_of'_eq[THEN sym]
+      proof (rule signal_of_def)
+        fix n 
+        assume "n \<le> ?time - 1"
+        thus "         to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig = 0"
+        proof -
+          have "n \<le> (LEAST n. n \<in> {n. to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig n \<noteq> 0}) - 1"
+            by (metis \<open>n \<le> (LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)) - 1\<close> keys_def)
+          then have f1: "\<forall>na. na \<le> (LEAST n. n \<in> {n. to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig n \<noteq> 0}) - 1 \<or> \<not> na \<le> n"
+            by (meson le_trans)
+          have "(LEAST n. n \<in> {n. to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig n \<noteq> 0}) \<noteq> 0"
+            by (metis \<open>(LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)) \<noteq> 0\<close> keys_def)
+          then have "n \<notin> {n. to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig n \<noteq> 0}"
+            using f1 by (metis Least_le diff_le_self le_antisym minus_eq zero_neq_one)
+          then show ?thesis
+            by (simp add: to_trans_raw_sig_def)
+        qed
+      qed
+      ultimately have "(to_bit b \<circ> \<sigma>) sig \<noteq> to_bit b (the (\<tau> ?time sig))"
+        unfolding comp_def
+        by (metis to_bit.simps(1) to_bit.simps(2) val.case_eq_if val.collapse(1) val.collapse(2))
+      moreover have " to_bit b (the (\<tau> ?time sig)) = the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?time)"
+        using \<open>\<tau> ?time sig \<noteq> None\<close> \<open>to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time - 1)) \<noteq> to_bit b (the (\<tau> ?time sig))\<close>
+        unfolding to_trans_raw_sig_def to_trans_raw_bit_def apply auto
+        by (smt inf_time_at_most le_zero_eq option.exhaust option.sel option.simps(4) option.simps(5) to_signal_def) 
+      ultimately have " (to_bit b \<circ> \<sigma>) sig \<noteq> the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?time)"
+        by auto }
+    ultimately have "(to_bit b \<circ> \<sigma>) sig \<noteq>
+    the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig
+          (LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)))"
+      by auto }
+  thus "keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig) \<noteq> {} \<longrightarrow>
+    (to_bit b \<circ> \<sigma>) sig \<noteq>
+    the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig
+          (LEAST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)))"
+    by auto
+qed
+  
+lemma lift_inr_post_worldline_upd2:
+  assumes "\<omega> = worldline_raw t \<sigma> \<theta> def \<tau>"
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>"
+  assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  assumes "0 < dly"
+  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
+  assumes "All (non_stuttering (to_trans_raw_sig \<theta>) def)"
+  assumes "beval_world_raw \<omega> t exp (Lv sign bs)"
+  shows   "worldline_raw t \<sigma> \<theta> def \<tau>' = worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)"
+proof (rule, rule_tac[2] ext, rule_tac[2] ext)
+  fix s' t'
+  have "beval_raw t \<sigma> \<gamma> \<theta> def exp (Lv sign bs)"
+    using assms beval_beval_world_raw_ci by metis
+  have "\<tau>' = inr_post_raw' sig (Lv sign bs) (\<sigma> sig) \<tau> t dly"
+    using assms(3) \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> exp \<longrightarrow>\<^sub>b(Lv sign bs)\<close> beval_raw_deterministic  by (metis seq_cases_inert)
+  moreover have "beval_raw t \<sigma> \<gamma> \<theta> def exp = beval_world_raw \<omega> t exp"
+    using `\<omega> = worldline_raw t \<sigma> \<theta> def \<tau> ` and `context_invariant t \<sigma> \<gamma> \<theta> def \<tau>`
+    by (simp add: assms(6) beval_beval_world_raw_ci)
+  hence \<tau>'_def: "\<tau>' = inr_post_raw' sig(Lv sign bs) (\<sigma> sig) \<tau> t dly"
+    by (simp add: calculation)
+  have "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>'"
+    using b_seq_exec_preserves_context_invariant[OF assms(2-3)] `0 < dly` by auto
+
+  have "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
+    using assms(2) unfolding context_invariant_def by auto
+  have "s' \<noteq> sig \<or> t' < t \<or> s' = sig \<and> t \<le> t'"
+    by auto
+  moreover
+  { assume "s' = sig \<and> t \<le> t'"
+    hence "t + dly \<le> t' \<or> t' < t + dly" and "s' = sig" and "t \<le> t'"
+      by auto
+    moreover
+    { assume "t + dly \<le> t'"
+      hence "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = signal_of (\<sigma> s') \<tau>' s' t'"
+        unfolding worldline_raw_def snd_conv by auto
+      also have "... = signal_of (\<sigma> s') (inr_post_raw' sig (Lv sign bs) (\<sigma> sig) \<tau> t dly) s' t'"
+        unfolding \<tau>'_def by auto
+      also have "... = signal_of (\<sigma> s') (trans_post_raw sig (Lv sign bs) (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) t dly) s' t'"
+        unfolding inr_post_raw'_def by auto
+      also have "... = Lv sign bs"
+        unfolding `s' = sig`
+      proof (intro signal_of_trans_post3)
+        show "t + dly \<le> t'"
+          using `t + dly \<le> t'` by auto
+      next
+        show "\<forall>i<t. purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) i = 0"
+          using assms(2) unfolding purge_raw'_def combine_trans_bit_def context_invariant_def by auto
+      next
+        show "0 < dly"
+          by (simp add: assms(4))
+      qed
+      also have "... = snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t'"
+        unfolding worldline_inert_upd2.simps snd_conv `s' = sig`
+      proof -
+        have "bs = map (\<lambda>b. bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t')) [0..<length bs]"
+        proof (rule nth_equalityI)
+          fix i 
+          assume "i < length bs"
+          hence "map (\<lambda>b. bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t')) [0..<length bs] ! i = 
+                 bval_of (snd to_worldline_init_bit \<omega> sig i[sig, t, dly := Bv (bs ! i)] sig t')"
+            by auto
+          also have "... = bs ! i"
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv
+          proof (cases "((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig t = Bv (bs ! i) \<or> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! i)")
+            case False
+            hence "((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! i)" and 
+                  "((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! i)"
+              by auto
+            have *: "\<exists>k\<le>t + dly. ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (k - 1) \<noteq> Bv (bs ! i) \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig k = Bv (bs ! i) "
+            proof (rule ccontr)
+              assume "\<not> (\<exists>k\<le>t + dly. ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (k - 1) \<noteq> Bv (bs ! i) \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig k = Bv (bs ! i))"
+              hence ind: "\<forall>k. k \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (k - 1) \<noteq> Bv (bs ! i) \<longrightarrow> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig k \<noteq> Bv (bs ! i)"
+                by auto
+              { fix k
+                assume "t \<le> k"
+                assume "k \<le> t + dly"
+                hence "((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig k \<noteq> Bv (bs ! i)"
+                  using ind `t \<le> k` `((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! i)`
+                proof (induction "k - t" arbitrary: t dly)
+                  case 0
+                  then show ?case  by auto
+                next
+                  case (Suc x)
+                  hence 0: "x = k - Suc t" and 1: "k \<le> Suc t + (dly - 1)"
+                    by linarith+
+                  have "k = Suc x + t"
+                    using Suc by linarith
+                  have 3: "\<forall>k. k \<le> Suc t + (dly - 1) \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (k - 1) \<noteq> Bv (bs ! i) \<longrightarrow> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig k \<noteq> Bv (bs ! i)"
+                    using Suc(4) 
+                    by (metis (no_types, lifting) One_nat_def Suc.hyps(2) Suc.prems(1) Suc_pred add_Suc_shift less_add_same_cancel1 less_le_trans zero_less_Suc zero_less_diff)
+                  have 4: "Suc t \<le> k"
+                    using \<open>k = Suc x + t\<close> by linarith
+                  have 5: "((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (Suc t) \<noteq> Bv (bs ! i)"
+                    using Suc  by (metis "3" diff_Suc_1 le_add1)
+                  show ?case 
+                    using Suc(1)[OF 0 1 3 4 5] by auto
+                qed }
+              with `((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! i)`
+              show False
+                by auto
+            qed
+            have "(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! i) \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig n = Bv (bs ! i)) \<le> t + dly"
+              using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! i) \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig n = Bv (bs ! i)" and b="t + dly", OF *]
+              by auto
+            thus "bval_of (let time = if ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig t = Bv (bs ! i) \<or> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! i) then t + dly
+                                      else GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! i) \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig n = Bv (bs ! i)
+                           in if sig \<noteq> sig \<or> t' < t then ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig t' else if t' < time then ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig t else Bv (bs ! i)) = bs ! i"
+              using False  using \<open>t + dly \<le> t'\<close> by auto
+          next
+            case True
+            thus "bval_of (let time = if ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig t = Bv (bs ! i) \<or> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! i) then t + dly
+                                      else GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! i) \<and> ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig n = Bv (bs ! i)
+                           in if sig \<noteq> sig \<or> t' < t then ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig t' else if t' < time then ((snd \<omega>)(sig := to_bit i \<circ> snd \<omega> sig)) sig t else Bv (bs ! i)) = bs ! i"
+              using \<open>t + dly \<le> t'\<close> by auto
+          qed
+          finally show " bs ! i = map (\<lambda>b. bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t')) [0..<length bs] ! i"
+            by auto
+        qed (auto)
+        thus " Lv sign bs =
+    ((snd \<omega>)
+     (sig :=
+        \<lambda>n. let w' = \<lambda>b. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)];
+                time =
+                  if \<exists>n>t. n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig (n - 1) \<noteq> w' b sig n)
+                  then LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. w' b sig (n - 1) \<noteq> w' b sig n) else t + dly
+            in if n < t then snd \<omega> sig n
+               else if n < time then snd \<omega> sig t else Lv sign (map (\<lambda>b. bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n)) [0..<length bs])))
+     sig t'"
+          using \<open>t \<le> t'\<close> 
+        proof ( cases "\<exists>n>t. n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd (to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)]) sig (n - 1) \<noteq> snd (to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)]) sig n)")
+          case True
+          let ?w' = "\<lambda>b. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)]"
+          have "(LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n)) \<le> t + dly"
+            using True 
+            by (metis (mono_tags, lifting) LeastI_ex)
+          then show ?thesis 
+            using True \<open>t + dly \<le> t'\<close> \<open>bs = map (\<lambda>b. bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t')) [0..<length bs]\<close>
+            by auto
+        next
+          case False
+          then show ?thesis 
+            using \<open>t + dly \<le> t'\<close> \<open>bs = map (\<lambda>b. bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t')) [0..<length bs]\<close>
+            by auto
+        qed
+      qed
+      finally have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t'"
+        by auto }
+    moreover
+    { assume "t' < t + dly"
+      hence "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = signal_of (\<sigma> s') \<tau>' s' t'"
+        using `t \<le> t'` unfolding worldline_raw_def snd_conv by auto 
+      also have "... = signal_of (\<sigma> s') (inr_post_raw' sig (Lv sign bs) (\<sigma> sig) \<tau> t dly) s' t'"
+        unfolding \<tau>'_def by auto    
+      also have "... = signal_of (\<sigma> s') (trans_post_raw sig (Lv sign bs) (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) t dly) s' t'"
+        unfolding inr_post_raw'_def by auto
+      also have "... = signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'"
+        unfolding `s' = sig`  signal_of_trans_post2[OF `t' < t + dly`] by auto
+      finally have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'"
+        by auto
+      let ?w' = "\<lambda>b. snd (to_worldline_init_bit \<omega> sig b)[sig, t, dly := Bv (bs ! b)]"
+      have "\<exists>n>t. n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n) \<or> 
+            \<not> (\<exists>n>t. n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n))"
+        by auto
+      moreover
+      { assume thereis: "\<exists>n>t. n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n)"
+        let ?zeit = "LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n)"
+        define zeit where "zeit = ?zeit"
+        have "t < ?zeit" and "?zeit \<le> t + dly" and "\<exists>b\<in>set [0..<length bs]. ?w' b sig (?zeit - 1) \<noteq> ?w' b sig ?zeit"
+          using LeastI_ex[OF thereis] by auto
+        then obtain index where "index \<in> set [0..< length bs]" and "?w' index sig (?zeit - 1) \<noteq> ?w' index sig ?zeit"
+          by auto
+        have "?w' index sig (zeit - 1) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t"
+        proof (cases "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t = Bv (bs ! index) \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index)")
+          case True
+          then show ?thesis 
+            using \<open>?zeit \<le> t + dly\<close>
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+            by (smt One_nat_def Suc_leI Suc_pred \<open>(LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n)) \<le> t + dly\<close> \<open>t < (LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n))\<close> diff_less le_eq_less_or_eq le_zero_eq less_numeral_extra(1) less_trans not_le zeit_def)
+        next
+          case False
+          hence "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)" and "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)"
+            by auto
+          have *: "\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)"
+          proof (rule ccontr)
+            assume "\<not> (\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+            hence imp: "\<And>n. t < n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+              by auto
+            { fix n 
+              assume "t \<le> n" and "n \<le> t + dly"
+              hence "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)\<close> imp
+              proof (induction "n - t" arbitrary: t dly)
+                case 0 hence "n = t" by auto
+                then show ?case 
+                  using 0 by auto
+              next
+                case (Suc x)
+                hence 0: "x = n - Suc t"
+                  by auto
+                have 2: "n \<le> Suc t + (dly - 1) "
+                  using Suc by auto
+                hence 1: "Suc t \<le> n "
+                  using Suc by linarith
+                hence "Suc t \<le> t + dly"
+                  using Suc by linarith
+                hence 3: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (Suc t) \<noteq> Bv (bs ! index)"
+                  using Suc(5-6) by auto
+                have 4: "\<And>n. Suc t < n \<Longrightarrow> n \<le> Suc t + (dly - 1) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                  using Suc(6) by auto
+                have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                  using  Suc(1)[OF 0 1 2 3 4] by auto
+                thus ?case
+                  by auto
+              qed }
+            hence "\<And>n. t \<le> n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+              by auto
+            thus False
+              using False le_add1 by blast
+          qed
+          let ?time_again ="GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)"
+
+          have "t < ?time_again"
+            using * 
+          proof -
+            have f1: "\<forall>p n na. (n::nat) \<le> Greatest p \<or> (\<exists>n. \<not> n \<le> na \<and> p n) \<or> \<not> p n"
+              by (metis (lifting) Greatest_le_nat)
+            obtain nn :: nat where
+              f2: "Bv (bs ! index) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig nn \<and> Bv (bs ! index) \<noteq> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (nn - 1) \<and> nn \<le> t + dly \<and> t < nn"
+              by (metis (no_types) "*")
+            then have "nn \<le> (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+              using f1 by force
+            then show ?thesis
+              using f2 by (meson less_le_trans)
+          qed
+          hence "?time_again - 1 < ?time_again"
+            by auto
+          have "?time_again \<le> t + dly" and "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time_again - 1) \<noteq> Bv (bs ! index)" and "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig ?time_again = Bv (bs ! index)"
+            using GreatestI_ex_nat *  apply (metis (mono_tags, lifting))
+            using GreatestI_ex_nat *  apply (metis (mono_tags, lifting))
+            using GreatestI_ex_nat *  by smt
+          have "?w' index sig (?time_again - 1) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t"
+            using \<open>t < ?time_again\<close> \<open>?time_again - 1 < ?time_again\<close> False
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          moreover have "?w' index sig (?time_again) = Bv (bs ! index)"
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+            using False \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> by auto
+          ultimately have "?w' index sig (?time_again - 1) \<noteq> ?w' index sig ?time_again"
+            using False by auto
+          hence "?zeit \<le> ?time_again"
+          proof -
+            have "t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<and> (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<le> t + dly \<and> (\<exists>n. n \<in> set [0..<length bs] \<and> snd to_worldline_init_bit \<omega> sig n[sig, t, dly := Bv (bs ! n)] sig ((GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) - 1) \<noteq> snd to_worldline_init_bit \<omega> sig n[sig, t, dly := Bv (bs ! n)] sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)))"
+              using \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<le> t + dly\<close> \<open>index \<in> set [0..<length bs]\<close> \<open>snd to_worldline_init_bit \<omega> sig index[sig, t, dly := Bv (bs ! index)] sig ((GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) - 1) \<noteq> snd to_worldline_init_bit \<omega> sig index[sig, t, dly := Bv (bs ! index)] sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> by blast
+            then show ?thesis
+              by (simp add: Bex_def_raw Least_le)
+          qed
+              
+          show ?thesis 
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv
+            by (smt False One_nat_def Suc_leI Suc_pred \<open>?zeit \<le> ?time_again\<close> \<open>t <
+            (LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig
+            b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t,
+            dly := Bv (bs ! b)] sig n))\<close> le_eq_less_or_eq le_zero_eq lessI less_trans not_le
+            zeit_def)
+        qed
+        also have "... =  (to_bit index \<circ> snd (worldline_raw t \<sigma> \<theta> def \<tau>) sig) t"
+          unfolding assms(1) fun_upd_def by auto
+        also have "... = to_bit index (signal_of (\<sigma> sig) \<tau> sig t)"
+          unfolding worldline_raw_def snd_conv by auto
+        finally have "?w' index sig (zeit - 1) = to_bit index (signal_of (\<sigma> sig) \<tau> sig t)"
+          by auto
+        have "\<not> zeit < t"
+          using \<open>t < (LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd
+          to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd
+          to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n))\<close> not_le zeit_def 
+          by linarith
+        have "\<not> zeit - 1 < t"
+          using \<open>t < (LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n))\<close> zeit_def by linarith
+        have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t  \<noteq> Bv (bs ! index)"
+        proof (rule ccontr)
+          assume "\<not> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)"
+          hence "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t = Bv (bs ! index)"
+            by auto
+          have "zeit < t + dly \<or> zeit = t + dly"
+            using \<open>(LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n)) \<le> t + dly\<close> le_eq_less_or_eq zeit_def by blast 
+          moreover
+          { assume "zeit < t + dly"
+            hence "?w' index sig zeit = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t"
+              unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+              using \<open>\<not> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)\<close> \<open>\<not> zeit < t\<close> by auto
+            hence False
+              using \<open>?w' index sig (zeit - 1) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t\<close>
+              \<open>?w' index sig (?zeit - 1) \<noteq> ?w' index sig (?zeit)\<close> zeit_def by auto }
+          moreover
+          { assume "zeit = t + dly"
+            hence "?w' index sig zeit = Bv (bs ! index)"
+              unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+              using \<open>\<not> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)\<close> by auto
+            with \<open>?w' index sig (zeit - 1) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t\<close> have False
+              unfolding \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t = Bv (bs ! index)\<close>
+              using \<open>?w' index sig (zeit - 1) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t\<close>
+              \<open>?w' index sig (?zeit - 1) \<noteq> ?w' index sig (?zeit)\<close> zeit_def by auto }
+          ultimately show False
+            by auto
+        qed
+        hence "?w' index sig (zeit - 1) \<noteq> Bv (bs ! index)"
+          using \<open>snd to_worldline_init_bit \<omega> sig index[sig, t, dly := Bv (bs ! index)] sig (zeit -
+          1) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t\<close> by auto
+        have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index) \<Longrightarrow> zeit = t + dly"
+        proof (rule ccontr)
+          assume as: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index)"
+          assume "\<not> zeit = t + dly" hence "zeit < t + dly"
+            using \<open>?zeit \<le> t + dly\<close> unfolding zeit_def by auto
+          hence "?w' index sig zeit = ?w' index sig (zeit - 1)"
+            using \<open>\<not> zeit < t\<close> \<open>\<not> zeit - 1 < t\<close>  as
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          thus False
+            using \<open>?w' index sig (?zeit - 1) \<noteq> ?w' index sig ?zeit\<close> unfolding zeit_def
+            by auto
+        qed
+        have "?w' index sig (zeit) =  Bv (bs ! index) "
+        proof (cases "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index)")
+          case True
+          then show ?thesis 
+            using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index) \<Longrightarrow> zeit = t + dly\<close>
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+        next
+          case False
+          let ?time_again ="GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)"
+          have cond1: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)" and cond2: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)"
+            using False  using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)\<close> by blast+
+          have *: "\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)"
+          proof (rule ccontr)
+            assume "\<not> (\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+            hence imp: "\<And>n. t < n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+              by auto
+            { fix n 
+              assume "t \<le> n" and "n \<le> t + dly"
+              hence "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)\<close> imp
+              proof (induction "n - t" arbitrary: t dly)
+                case 0 hence "n = t" by auto
+                then show ?case 
+                  using 0 by auto
+              next
+                case (Suc x)
+                hence 0: "x = n - Suc t"
+                  by auto
+                have 2: "n \<le> Suc t + (dly - 1) "
+                  using Suc by auto
+                hence 1: "Suc t \<le> n "
+                  using Suc by linarith
+                hence "Suc t \<le> t + dly"
+                  using Suc by linarith
+                hence 3: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (Suc t) \<noteq> Bv (bs ! index)"
+                  using Suc(5-6) by auto
+                have 4: "\<And>n. Suc t < n \<Longrightarrow> n \<le> Suc t + (dly - 1) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                  using Suc(6) by auto
+                have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                  using  Suc(1)[OF 0 1 2 3 4] by auto
+                thus ?case
+                  by auto
+              qed }
+            hence "\<And>n. t \<le> n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+              by auto
+            thus False
+              using False le_add1 by blast
+          qed
+          { assume "\<not> ?w' index sig zeit = Bv (bs ! index)"
+            hence "zeit < ?time_again"
+              using cond1 cond2
+              unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+              using \<open>\<not> zeit < t\<close> by presburger
+            hence "?w' index sig zeit = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t"
+              using cond1 cond2
+              unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+              by (simp add: \<open>\<not> zeit < t\<close>)
+            hence "?w' index sig zeit = ?w' index sig (zeit - 1)"
+              using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t = (to_bit index \<circ> snd (worldline_raw t \<sigma> \<theta> def \<tau>) sig) t\<close> \<open>(to_bit index \<circ> snd (worldline_raw t \<sigma> \<theta> def \<tau>) sig) t = to_bit index (signal_of (\<sigma> sig) \<tau> sig t)\<close> \<open>snd to_worldline_init_bit \<omega> sig index[sig, t, dly := Bv (bs ! index)] sig (zeit - 1) = to_bit index (signal_of (\<sigma> sig) \<tau> sig t)\<close> by auto
+            hence False
+              using \<open>?w' index sig (?zeit - 1) \<noteq> ?w' index sig (?zeit)\<close> zeit_def 
+              by auto }
+          thus ?thesis 
+            by auto
+        qed
+        hence "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> 
+                zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+          unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv
+        proof -
+          assume "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)"
+          let ?time_again ="GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)"
+          have cond1: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)" and cond2: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)"
+            using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)\<close> apply blast
+            using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)\<close> by blast
+          have *: "\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)"
+          proof (rule ccontr)
+            assume "\<not> (\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+            hence imp: "\<And>n. t < n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+              by auto
+            { fix n 
+              assume "t \<le> n" and "n \<le> t + dly"
+              hence "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)\<close> imp
+              proof (induction "n - t" arbitrary: t dly)
+                case 0 hence "n = t" by auto
+                then show ?case 
+                  using 0 by auto
+              next
+                case (Suc x)
+                hence 0: "x = n - Suc t"
+                  by auto
+                have 2: "n \<le> Suc t + (dly - 1) "
+                  using Suc by auto
+                hence 1: "Suc t \<le> n "
+                  using Suc by linarith
+                hence "Suc t \<le> t + dly"
+                  using Suc by linarith
+                hence 3: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (Suc t) \<noteq> Bv (bs ! index)"
+                  using Suc(5-6) by auto
+                have 4: "\<And>n. Suc t < n \<Longrightarrow> n \<le> Suc t + (dly - 1) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                  using Suc(6) by auto
+                have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                  using  Suc(1)[OF 0 1 2 3 4] by auto
+                thus ?case
+                  by auto
+              qed }
+            hence "\<And>n. t \<le> n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+              by auto
+            thus False
+              using cond2 le_add1 by blast
+          qed          
+          have "t < ?time_again"
+            using * 
+          proof -
+            have f1: "\<forall>p n na. (n::nat) \<le> Greatest p \<or> (\<exists>n. \<not> n \<le> na \<and> p n) \<or> \<not> p n"
+              by (metis (lifting) Greatest_le_nat)
+            obtain nn :: nat where
+              f2: "Bv (bs ! index) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig nn \<and> Bv (bs ! index) \<noteq> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (nn - 1) \<and> nn \<le> t + dly \<and> t < nn"
+              by (metis (no_types) "*")
+            then have "nn \<le> (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+              using f1 by force
+            then show ?thesis
+              using f2 by (meson less_le_trans)
+          qed
+          hence "?time_again - 1 < ?time_again"
+            by auto
+          have "?time_again \<le> t + dly" and "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time_again - 1) \<noteq> Bv (bs ! index)" and "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig ?time_again = Bv (bs ! index)"
+            using GreatestI_ex_nat *  apply (metis (mono_tags, lifting))
+            using GreatestI_ex_nat *  apply (metis (mono_tags, lifting))
+            using GreatestI_ex_nat *  by smt
+          have "?w' index sig (?time_again - 1) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t"
+            using \<open>t < ?time_again\<close> \<open>?time_again - 1 < ?time_again\<close> cond1 cond2
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          moreover have "?w' index sig (?time_again) = Bv (bs ! index)"
+            unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+            using cond1 cond2 \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> by auto
+          ultimately have "?w' index sig (?time_again - 1) \<noteq> ?w' index sig ?time_again"
+            using cond1 cond2 by auto
+          hence "?zeit \<le> ?time_again"
+          proof -
+            have "t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<and> (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<le> t + dly \<and> (\<exists>n. n \<in> set [0..<length bs] \<and> snd to_worldline_init_bit \<omega> sig n[sig, t, dly := Bv (bs ! n)] sig ((GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) - 1) \<noteq> snd to_worldline_init_bit \<omega> sig n[sig, t, dly := Bv (bs ! n)] sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)))"
+              using \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<le> t + dly\<close> \<open>index \<in> set [0..<length bs]\<close> \<open>snd to_worldline_init_bit \<omega> sig index[sig, t, dly := Bv (bs ! index)] sig ((GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) - 1) \<noteq> snd to_worldline_init_bit \<omega> sig index[sig, t, dly := Bv (bs ! index)] sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> by blast
+            then show ?thesis
+              by (simp add: Bex_def_raw Least_le)
+          qed
+          hence "zeit \<le> ?time_again"
+            unfolding zeit_def by auto
+          moreover have "\<not> zeit < ?time_again"
+            by (smt One_nat_def Suc_leI Suc_pred \<open>?w' index sig (?time_again - 1) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t\<close> 
+            \<open>?w' index sig (?time_again) = Bv (bs ! index)\<close> \<open>?w' index sig (zeit) =  Bv (bs ! index)\<close> 
+            \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig
+            (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs !
+            index))\<close> \<open>t < ?zeit\<close> cond1 gr_implies_not0
+            leD not_less_iff_gr_or_eq prod.sel(2) worldline_inert_upd_def zeit_def)
+          thus ?thesis
+            using calculation le_eq_less_or_eq by blast
+        qed
+        hence "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> 
+               ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (zeit - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (zeit) = Bv (bs ! index)"
+        proof -
+          assume "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)"
+          hence "zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+            using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> by blast
+          have cond1: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)" and cond2: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)"
+            using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)\<close> apply blast
+            using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)\<close> by blast
+          have *: "\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)"
+          proof (rule ccontr)
+            assume "\<not> (\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+            hence imp: "\<And>n. t < n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+              by auto
+            { fix n 
+              assume "t \<le> n" and "n \<le> t + dly"
+              hence "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! index)\<close> imp
+              proof (induction "n - t" arbitrary: t dly)
+                case 0 hence "n = t" by auto
+                then show ?case 
+                  using 0 by auto
+              next
+                case (Suc x)
+                hence 0: "x = n - Suc t"
+                  by auto
+                have 2: "n \<le> Suc t + (dly - 1) "
+                  using Suc by auto
+                hence 1: "Suc t \<le> n "
+                  using Suc by linarith
+                hence "Suc t \<le> t + dly"
+                  using Suc by linarith
+                hence 3: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (Suc t) \<noteq> Bv (bs ! index)"
+                  using Suc(5-6) by auto
+                have 4: "\<And>n. Suc t < n \<Longrightarrow> n \<le> Suc t + (dly - 1) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                  using Suc(6) by auto
+                have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+                  using  Suc(1)[OF 0 1 2 3 4] by auto
+                thus ?case
+                  by auto
+              qed }
+            hence "\<And>n. t \<le> n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)"
+              by auto
+            thus False
+              using cond2 le_add1 by blast
+          qed         
+          thus ?thesis
+          proof -
+            obtain nn :: "(nat \<Rightarrow> bool) \<Rightarrow> nat \<Rightarrow> nat" where
+              f1: "\<And>p n na nb. (\<not> p n \<or> p (Greatest p) \<or> p (nn p na)) \<and> (\<not> p nb \<or> \<not> nn p na \<le> na \<or> p (Greatest p))"
+              by (metis (lifting) GreatestI_ex_nat)
+            then have "\<And>n na. (\<not> n \<le> t + dly \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) = Bv (bs ! index) \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! index)) \<or> zeit \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (zeit - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig zeit = Bv (bs ! index) \<or> nn (\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) na \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (nn (\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) na - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (nn (\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) na) = Bv (bs ! index)"
+              by (smt \<open>zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close>) 
+            moreover
+            { assume "\<exists>n\<le>t + dly. ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)"
+              { assume "\<exists>n. (n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<and> (\<not> zeit \<le> t + dly \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (zeit - 1) = Bv (bs ! index) \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig zeit \<noteq> Bv (bs ! index))"
+                then have "\<exists>n. (n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<and> (\<not> (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>) (sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>) (sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<le> t + dly \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig ((GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) - 1) = Bv (bs ! index) \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<noteq> Bv (bs ! index))"
+                  using \<open>zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> by force
+                then have "\<exists>n. \<not> nn (\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>) (sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>) (sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) n \<le> t + dly \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (nn (\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) n - 1) = Bv (bs ! index) \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (nn (\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) n) \<noteq> Bv (bs ! index)"
+                  using f1 by smt }
+              then have "(\<exists>n. \<not> nn (\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>) (sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>) (sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) n \<le> t + dly \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (nn (\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) n - 1) = Bv (bs ! index) \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (nn (\<lambda>n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) n) \<noteq> Bv (bs ! index)) \<or> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (zeit - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig zeit = Bv (bs ! index)"
+                by blast }
+            ultimately show ?thesis
+              using "*" by blast
+          qed
+        qed
+        have "\<And>b2. b2 < length bs \<Longrightarrow> bval_of (snd to_worldline_init_bit \<omega> sig b2[sig, t, dly := Bv (bs ! b2)] sig t') = bval_of (to_bit b2 (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+        proof-
+          fix b
+          assume "b < length bs"
+          have *: "bval_of (snd (to_worldline_init_bit \<omega> sig b)[sig, t, dly := Bv (bs ! b)] sig t') =  bval_of
+       (let time =
+              if ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t = Bv (bs ! b) \<or> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! b) then t + dly
+              else GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)
+        in if t' < time then ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t else Bv (bs ! b))"
+            using `t \<le> t'` unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv by auto
+          have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t = Bv (bs ! b) \<or> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! b) \<or> 
+                ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! b)"
+            by auto
+          moreover
+          { assume "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t = Bv (bs ! b) \<or> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! b)"
+            hence "bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t') = 
+                   bval_of (((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t)"
+              using `t' < t + dly` unfolding * by auto
+            also have "... =  bval_of (to_bit b (signal_of (\<sigma> sig) \<tau> sig t))"
+              unfolding assms(1) worldline_raw_def snd_conv by auto
+            also have "... = bval_of (to_bit b (\<sigma> sig))"
+            proof -
+              have "inf_time (to_trans_raw_sig \<tau>) sig t = None"
+                using assms(2) unfolding context_invariant_def 
+              proof -
+                assume a1: "(\<forall>n\<le>t. \<tau> n = 0) \<and> \<gamma> = {s. \<sigma> s \<noteq> signal_of (def s) \<theta> s (t - 1)} \<and> (\<forall>n\<ge>t. \<theta> n = 0)"
+                have "\<forall>f a n. \<exists>na. (na \<le> n \<or> inf_time f (a::'a) n = None) \<and> (na \<in> keys (f a) \<or> inf_time f a n = None)"
+                  by (metis (lifting) inf_time_def)
+                then obtain nn :: "('a \<Rightarrow> nat \<Rightarrow> val option) \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> nat" where
+                  f2: "\<And>f a n. (nn f a n \<le> n \<or> inf_time f a n = None) \<and> (nn f a n \<in> keys (f a) \<or> inf_time f a n = None)"
+                  by moura
+                moreover
+                { assume "nn (to_trans_raw_sig \<tau>) sig t \<le> t"
+                  then have "\<tau> (nn (to_trans_raw_sig \<tau>) sig t) sig = None"
+                    using a1 by (simp add: zero_fun_def zero_option_def)
+                  then have ?thesis
+                    using f2 by (metis domIff dom_def keys_def to_trans_raw_sig_def zero_option_def) }
+                ultimately show ?thesis
+                  by blast
+              qed
+              thus ?thesis
+                unfolding to_signal_def comp_def by auto
+            qed 
+            also have "... = bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+            proof (cases "inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t'")
+              case None
+              then show ?thesis 
+                unfolding to_signal_def comp_def by auto
+            next
+              case (Some a)
+              have "t < a"
+              proof (rule ccontr)
+                assume "\<not> t < a" hence "a \<le> t" by auto
+                have "a \<in> keys (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig)" and "a \<le> t'"
+                  using Some unfolding inf_time_def  by (meson Some inf_time_some_exists)+
+                hence " purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> 0"
+                  unfolding keys_def to_trans_raw_sig_def by auto
+                hence "\<tau> a sig \<noteq> 0"
+                  unfolding purge_raw'_def combine_trans_bit_def using `a \<le> t` by auto
+                with assms(2) show False
+                  unfolding context_invariant_def using `a \<le> t`  by (simp add: zero_fun_def)
+              qed
+              have "a < t + dly"
+                using `t' < t + dly`  by (meson Some inf_time_some_exists le_less_trans)
+              have "a \<in> fold (\<union>)
+                  (map (keys \<circ> (\<lambda>\<tau> n. \<tau> n sig) \<circ> snd)
+                    (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))
+                  {}"
+              proof (rule ccontr)
+                assume anotin: "a \<notin> fold (\<union>)
+                  (map (keys \<circ> (\<lambda>\<tau> n. \<tau> n sig) \<circ> snd)
+                    (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                      (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))
+                  {}"
+                have "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> 0"
+                  using inf_time_some_exists[OF Some] 
+                  unfolding keys_def to_trans_raw_sig_def by auto
+                moreover have "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig = 0"
+                  using anotin `a < t + dly` `t < a` unfolding purge_raw'_def combine_trans_bit_def zero_option_def
+                  Let_def to_trans_raw_sig_def by auto
+                ultimately show False 
+                  by auto
+              qed
+              hence " (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig a) = Some
+                             (Lv sign         
+                               (map (\<lambda>p. bval_of ((to_signal (get_time p) \<circ> (\<lambda>\<tau> sig n. \<tau> n sig)) (snd p) sig a))
+                                 (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                                   (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))"
+                (is "_ = Some ?comp") 
+                using `t < a` `a < t + dly` unfolding to_trans_raw_sig_def purge_raw'_def combine_trans_bit_def by auto
+              have len: "b < length (zip (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))"
+                using `b < length bs` by auto
+              have len2: "b < length (map (\<lambda>n. (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))) [0..<length bs])"
+                using `b < length bs` by auto
+              have len3: "b < length (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])"
+                using `b < length bs` by auto
+              have len4: "b < length ([0..< length bs])"
+                using `b < length bs` by auto
+              have len5: "[0 ..< length bs] ! b = b"
+                using `b < length bs` by auto
+              have "to_bit b ?comp = Bv (bval_of (signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b))
+                                                             (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) n) sig a))"
+                unfolding to_bit.simps comp_def nth_map[OF len] to_trans_raw_sig_def nth_zip[OF len2 len3] nth_map[OF len4] len5 fst_conv 
+                snd_conv by auto
+              also have "... =  Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)"
+              proof -
+                have " to_bit b (signal_of (\<sigma> sig) \<tau> sig t) = Bv (bs ! b) \<or> to_bit b (signal_of (\<sigma> sig) \<tau> sig (t + dly)) \<noteq> Bv (bs ! b)"
+                  using `((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t = Bv (bs ! b) \<or> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! b)`
+                  unfolding assms(1) worldline_raw_def snd_conv by auto
+                hence "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t = Bv (bs ! b) \<or> 
+                       signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) \<noteq> Bv (bs ! b)"
+                  unfolding to_bit_signal_of'_eq[THEN sym] by auto
+                hence "inf_time (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)))) sig a = None"
+                  unfolding to_trans_raw_sig_def purge_raw_def comp_def
+                  using assms(2) unfolding context_invariant_def Let_def inf_time_none_iff[THEN sym]
+                  by (smt \<open>a < t + dly\<close> domIff fun_upd_eqD fun_upd_triv greaterThanAtMost_iff leI
+                  le_trans less_imp_le_nat option.simps(4) override_on_apply_in
+                  override_on_apply_notin to_trans_raw_bit_def zero_fun_def zero_option_def)
+                thus ?thesis
+                  unfolding to_signal_def comp_def by auto
+              qed
+              then show ?thesis 
+                unfolding to_signal_def comp_def
+                by (smt Some \<open>Bv (bval_of (signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs !
+                b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow>
+                b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a)) = Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv
+                sign bs \<Rightarrow> bs ! b)\<close> \<open>to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig
+                a = Some (Lv sign (map (\<lambda>p. bval_of ((to_signal (get_time p) \<circ> (\<lambda>\<tau> sig n. \<tau> n sig))
+                (snd p) sig a)) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))
+                [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv
+                (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))\<close>
+                calculation option.sel option.simps(5) to_bit.simps(1) to_bit.simps(2) val.case_eq_if
+                val.collapse(1) val.collapse(2))
+            qed 
+            finally have "bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t') = 
+                          bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+              by auto }
+          moreover
+          { assume 1: "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! b)"
+            let ?time = "(GREATEST n. n \<le> t + dly  \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))"
+            have exist: "\<exists>n. t < n \<and> n \<le> t + dly  \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b) "
+            proof (rule ccontr)
+              assume "\<not> (\<exists>n. t < n \<and> n \<le> t + dly  \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))"
+              hence ind: "\<And>n. t < n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<Longrightarrow> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! b)"
+                by auto
+              { fix n
+                assume "n \<le> t + dly"
+                assume "t < n"
+                hence "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! b)"
+                  using ind 1
+                proof (induction "n - t" arbitrary: t dly)
+                  case 0
+                  then show ?case using 1  using le_eq_less_or_eq by auto
+                next
+                  case (Suc m)
+                  hence h0: "m = n - Suc t"
+                    by linarith
+                  have h1: "\<And>n. Suc t < n \<Longrightarrow> n \<le> Suc t + (dly - 1) \<Longrightarrow> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<Longrightarrow> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! b)"
+                    using Suc(4) by simp
+                  have h2: "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (Suc t) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (Suc t + (dly - 1)) = Bv (bs ! b)"
+                    by (metis (no_types, lifting) Suc.prems(2) Suc.prems(3) Suc_pred add_Suc_shift diff_Suc_1 le_add1 le_eq_less_or_eq lessI less_add_same_cancel1)
+                  then show ?case 
+                    using Suc.hyps(2)  Suc.hyps(1) Suc.prems(1) Suc_lessI h0 h1 by blast
+                qed }
+              thus False
+                using 1 \<open>t \<le> t'\<close> \<open>t' < t + dly\<close> by auto
+            qed
+            hence exist': "\<exists>n. n \<le> t + dly  \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b) "
+              by auto
+            have "?time \<le> t + dly" and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time - 1) \<noteq> Bv (bs ! b)" and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig ?time = Bv (bs ! b)"
+              using GreatestI_ex_nat[OF exist'] by auto
+            have "t < ?time"
+            proof (rule ccontr)
+              assume "\<not> t < ?time" hence "?time \<le> t" by auto
+              obtain n where "t < n" and "n \<le> t + dly" and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b)"
+                and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)" using exist by auto
+              hence "n \<le> ?time"
+                using Greatest_le_nat[where k="n" and b="t + dly"] by auto
+              with `t < n` and `?time \<le> t` show False
+                by auto
+            qed
+            have "t' < ?time \<or> ?time \<le> t'" by auto
+            moreover            
+            { assume "?time \<le> t'"
+              hence "bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t') = (bs ! b)"
+                unfolding * using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig :=
+                to_bit b \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! b)\<close> by auto
+              also have "... = bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+              proof (cases "inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t'")
+                case None
+                hence "Ball (dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig)) ((<) t')"
+                  unfolding inf_time_none_iff[THEN sym] by auto
+                have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time - 1)) \<noteq> Bv (bs ! b)"
+                  using `((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time - 1) \<noteq> Bv (bs ! b)` `?time \<le> t + dly` `t < ?time`
+                  unfolding assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  by presburger
+                moreover have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time)) = Bv (bs ! b)"
+                  using `((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig ?time = Bv (bs ! b)` `?time \<le> t + dly` `t < ?time`
+                  unfolding assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  by presburger
+                ultimately have "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig) ?time sig \<noteq> None"
+                  by (metis (no_types, lifting) signal_of_less_sig to_bit_signal_of' zero_option_def)
+                have h0: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t \<noteq> Bv (bs ! b)"
+                  using 1 unfolding to_bit_signal_of'_eq assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  using to_bit_signal_of'_eq by fastforce
+                have h1: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) = Bv (bs ! b)"
+                  using 1 unfolding to_bit_signal_of'_eq assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  using to_bit_signal_of'_eq by fastforce
+                have exist_mapping: "\<exists>n>t. n \<le> t + dly \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig = Some (Bv (bs ! b))"
+                  using switch_signal_ex_mapping_gen[OF h0 h1]
+                  by (simp add: \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> to_trans_raw_bit_def zero_fun_def zero_option_def)
+                have *: "length (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) = 
+                             length (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig
+                               (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n)))
+                      [0..<length bs])"
+                  by auto  
+                have "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig
+                           (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?time sig \<noteq> None 
+                  \<or> purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig
+                           (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?time sig = None"
+                  by auto
+                moreover
+                { assume purge_neq_none: "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig
+                           (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?time sig \<noteq> None"
+                  hence time_in: "?time \<in> fold (\<union>) (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+                (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                     (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig
+                             (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n)))
+                    [0..<length bs]))) {}"
+                    using `b < length bs` 
+                    unfolding map_map[THEN sym] map_snd_zip[OF *] member_fold_union2
+                    keys_def zero_option_def  by (auto intro!: bexI[where x="b"] simp add: to_trans_raw_sig_def) 
+                  have "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) ?time sig = 
+                        combine_trans_bit \<tau>
+                        (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                          (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig
+                                     (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n)))
+                            [0..<length bs]))
+                        sign sig t dly ?time sig"
+                    unfolding purge_raw'_def by auto
+                  also have "... \<noteq> None"
+                    unfolding combine_trans_bit_def 
+                    using time_in \<open>?time \<le> t + dly\<close> \<open>t < ?time\<close> by auto
+                  finally have False
+                  proof -
+                    assume a1: "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig \<noteq> None"
+                    have "\<not> t' < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))"
+                      using \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) \<le> t'\<close> leD by blast
+                    then show ?thesis
+                      using a1 by (simp add: \<open>Ball (dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig)) ((<) t')\<close> domIff to_trans_raw_sig_def)
+                  qed
+                  hence " bs ! b = bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+                    by auto }
+                moreover
+                { assume "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)) ?time sig = None"
+                  hence "?time < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) 
+                       \<or> the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) < ?time"
+                    using `t < ?time` `?time \<le> t'` `t' < t + dly` h0 h1
+                    unfolding purge_raw_def Let_def 
+                    by (smt Un_iff \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig \<noteq> None\<close> greaterThanAtMost_iff
+                    greaterThanLessThan_iff override_on_apply_notin)
+                  moreover have "the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) < ?time \<Longrightarrow> False"
+                  proof -
+                    assume "the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) < ?time"
+                    have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly) \<noteq> None"
+                    proof -
+                      have "None \<noteq> to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))"
+                        by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig \<noteq> None\<close> to_trans_raw_sig_def)
+                      then show ?thesis
+                        using \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) \<le> t + dly\<close> inf_time_noneE2 zero_option_def by fastforce
+                    qed
+                    then obtain time' where "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly) = Some time'"
+                      by auto
+                    hence "to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?time = None"
+                      using \<open>?time \<le> t + dly\<close> \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t +
+                      dly)) < ?time\<close> inf_time_someE by fastforce
+                    with `(to_trans_raw_bit (\<sigma> sig) \<tau> b sig) ?time sig \<noteq> None` show False
+                      by (simp add: to_trans_raw_sig_def)
+                  qed
+                  ultimately have "?time < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))" (is "_ < ?time'")
+                    by auto
+                  obtain val where "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig = Some val" 
+                    using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig \<noteq> None\<close> by auto
+                  hence "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?time = val"
+                    using trans_some_signal_of'[where \<tau>="to_trans_raw_bit (\<sigma> sig) \<tau> b sig" and n="?time" and \<sigma>="(\<lambda>x. _)(sig:= val)"]
+                    by auto
+                  hence "val = Bv (bs ! b)"
+                    using to_bit_signal_of'[OF \<open>to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time)) = Bv (bs ! b)\<close>]
+                    by auto
+                  have "\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). k \<le> t + dly"
+                    by (metis (mono_tags, lifting) \<open>?time \<le> t + dly\<close> \<open>\<And>thesis. (\<And>val.
+                    to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig = Some val \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> keys_def
+                    mem_Collect_eq option.simps(3) to_trans_raw_sig_def zero_option_def)
+                  hence time'_eq: "?time' = (GREATEST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig) \<and> k \<le> t + dly)"
+                    unfolding inf_time_def by auto
+                  hence "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)" and "?time' \<le> t + dly"
+                    using GreatestI_ex_nat 
+                    by (metis (mono_tags, lifting) \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). k \<le> t + dly\<close> inf_time_def inf_time_ex1 inf_time_some_exists)+
+                  have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig"
+                  proof (rule ccontr)
+                    assume "\<not> to_trans_raw_bit (\<sigma> sig)  \<tau> b sig ?time' sig = to_trans_raw_bit (\<sigma> sig)  \<tau> b sig ?time sig"
+                    hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time =  val"
+                      using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig)  \<tau> b sig" "?time" "sig" "(\<lambda>x. _)(sig := val)"]
+                      using \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig :=
+                      to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ>
+                      snd \<omega> sig)) sig n = Bv (bs ! b)) sig = Some val\<close> by auto
+                    then obtain val' where "to_trans_raw_bit (\<sigma> sig)  \<tau> b sig ?time' sig = Some val'"
+                    proof -
+                      assume "\<And>val'. to_trans_raw_bit (\<sigma> sig)  \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) sig = Some val' \<Longrightarrow> thesis"
+                      then show ?thesis
+                        by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig)\<close> domIff dom_def keys_def not_None_eq to_trans_raw_sig_def zero_option_def)
+                    qed
+                    hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time' =  val'"
+                      using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig)  \<tau> b sig" "?time" "sig" "(\<lambda>x. _)(sig := val')"] time'_eq
+                      by (meson trans_some_signal_of')
+                    also have "... \<noteq> val"
+                      using \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig = Some val\<close> \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) sig = Some val'\<close> \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) sig \<noteq> to_trans_raw_bit (\<sigma> sig)  \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig\<close> by auto
+                    finally have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time' \<noteq> 
+                                  signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time "
+                      using \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) = val\<close> by blast
+                    have "t < ?time'"
+                      using \<open>?time < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))\<close> \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))\<close> by linarith
+                    have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time') = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time'"
+                      using `t < ?time'` to_bit_signal_of'_eq unfolding assms(1) time'_eq worldline_raw_def snd_conv fun_upd_def  by fastforce
+                    moreover have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time) = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time"
+                      using `t < ?time` to_bit_signal_of'_eq unfolding assms(1) time'_eq worldline_raw_def snd_conv fun_upd_def  by fastforce
+                    ultimately have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time') \<noteq> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time)"
+                      using \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) \<noteq> signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))\<close> by auto
+                      
+                    have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time' = val'"
+                      using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig)  \<tau> b sig" "?time'" "sig" "(\<lambda>x. _)(sig := val')"] \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> b sig ?time' sig = Some val'\<close>
+                      by auto
+                    have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) = 
+                          inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly)"
+                      using time'_eq 
+                    proof -
+                      obtain nn :: nat where
+                        f1: "nn \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig) \<and> nn \<le> t + dly"
+                          using \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig). k \<le> t + dly\<close> by blast
+                        have f2: "to_signal (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! b)) (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly) = Bv (bs ! b)"
+                      using h1 by auto
+                      have f3: "\<forall>v n a f. to_signal v f (a::'a) n = the (f a (the (inf_time f a n))) \<or> inf_time f a n = None"
+                        by (simp add: option.case_eq_if to_signal_def)
+                        have f4: "\<forall>f. f (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly)))) = f (Some val')"
+                      by (metis (no_types) \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) sig = Some val'\<close> to_trans_raw_sig_def)
+                        have "Bv (bs ! b) \<noteq> val'"
+                          by (metis (no_types) \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) = Bv (bs ! b)\<close> \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly)))\<close> \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) \<noteq> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))\<close> \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) = val'\<close>)
+                      then have f5: "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly) = None"
+                      using f4 f3 f2 option.sel 
+                        by (metis \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) sig = Some val'\<close> to_trans_raw_sig_def)
+                      have "\<forall>n. Some (GREATEST na. na \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig) \<and> na \<le> n) = inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig n \<or> \<not> nn \<le> n"
+                      using f1 by (simp add: inf_time_def)
+                        then show ?thesis
+                      using f5 f1 by force
+                    qed
+                    hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig (t + dly) = 
+                          signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time'"
+                      unfolding to_signal_def comp_def by auto
+                    hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time' = Bv (bs ! b)"
+                      using h1 by auto
+                    have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time) = Bv (bs ! b)"
+                      using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time) = Bv (bs ! b)\<close> by blast
+                    have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time') = Bv (bs ! b)"
+                      using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time') = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig ?time'\<close>
+                      using \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) = Bv (bs ! b)\<close> by auto
+                    show False
+                      using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) = Bv (bs ! b)\<close> \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) = Bv (bs ! b)\<close> \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> b sig)) sig (t + dly))) \<noteq> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))\<close> by auto
+                  qed
+                  have "?time = ?time'"
+                  proof (rule Greatest_equality)
+                    have "t \<le> ?time' - 1" using \<open>?time < ?time'\<close> \<open>t < ?time\<close> by linarith
+                    moreover have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! b)"
+                      unfolding to_bit_signal_of'_eq[THEN sym]
+                    proof (cases "\<exists>n. t < n \<and> n < ?time' \<and> (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) n sig \<noteq> None")
+                      case False
+                      hence none: "\<And>n. t < n \<Longrightarrow> n \<le> ?time' - 1 \<Longrightarrow> (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) n sig = 0"
+                        by (auto simp add: zero_option_def)
+                      have " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) = 
+                              signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t"
+                        using signal_of_less_ind'[of "t" "?time' - 1" "to_trans_raw_bit (\<sigma> sig) \<tau> b sig" "sig", OF none] `t \<le> ?time' - 1`
+                        by auto                    
+                      also have "... \<noteq> (Bv (bs ! b))"
+                        using h0 to_bit_signal_of'_eq by force
+                      finally show " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) \<noteq> (Bv (bs ! b))"
+                        by auto
+                    next
+                      case True
+                      let ?key1 = "(GREATEST n. t < n \<and> n < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig \<noteq> None)"
+                      from True have "t < ?key1" and "?key1 < ?time'" and " to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None"
+                        using GreatestI_ex_nat[OF True]  using less_imp_le_nat by blast+
+                      have *: "\<And>n. n > ?key1 \<Longrightarrow> n < ?time' \<Longrightarrow> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig = None"
+                        using Greatest_le_nat[where P="\<lambda>x. t < x \<and> x < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig x sig \<noteq> None" and b="?time'"]
+                        by (smt \<open>t < (GREATEST n. t < n \<and> n < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig \<noteq> None)\<close> leD less_imp_le_nat less_trans)
+                      have inf_some: "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (?time' - 1) = Some ?key1"
+                      proof (rule inf_time_someI)
+                        show "?key1 \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                          using `to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None`  by (simp add: domIff to_trans_raw_sig_def)
+                      next
+                        show "?key1 \<le> ?time' - 1"
+                          using `?key1 < ?time'`  by linarith
+                      next
+                        { fix ta
+                          assume "ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                          assume "ta \<le> ?time' - 1"
+                          assume "?key1 < ta"
+                          hence "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ta sig = None"
+                            using *[OF `?key1 < ta`] `ta \<le> ?time' - 1` by simp
+                          hence "ta \<notin> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                            by (simp add: domIff to_trans_raw_sig_def)
+                          with `ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)` have False by auto }
+                        thus "\<forall>ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). ta \<le> ?time' - 1 \<longrightarrow> ta \<le> ?key1"
+                          using not_le_imp_less by blast
+                      qed
+                      have non_stut: " non_stuttering (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) (to_bit b o \<sigma>) sig"
+                        using assms(5) non_stuttering_to_trans_raw_bit by force
+                      hence "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig  ?key1 sig) \<noteq> to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig"
+                      proof -
+                        have "?key1 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                          using `to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None`  by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+                        moreover have "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                          using \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> by blast
+                        moreover have "\<forall>k. ?key1 < k \<and> k < ?time' \<longrightarrow> k \<notin> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                          using *  by (metis (mono_tags, lifting) domIff keys_def mem_Collect_eq to_trans_raw_sig_def
+                          zero_option_def)
+                        ultimately show ?thesis    
+                          using `?key1 < ?time'` non_stut unfolding non_stuttering_def
+                          by (simp add: to_trans_raw_sig_def)
+                      qed
+                      moreover have "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = Some (Bv (bs ! b))"
+                      proof -
+                        have "the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig)"
+                          using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig\<close> by auto
+                        also have "... = Bv (bs ! b)"
+                          using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig = Some val\<close> \<open>val = Bv (bs ! b)\<close> by auto
+                        finally show ?thesis
+                          using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (?time) sig = Some val\<close>
+                          \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (the (inf_time (to_trans_raw_sig
+                          (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) sig = to_trans_raw_bit
+                          (\<sigma> sig) \<tau> b sig (?time) sig\<close> by auto
+                      qed
+                      ultimately have neq: "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig) \<noteq> Some (Bv (bs ! b))"
+                        by auto
+                      then obtain valu where "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig) = Some valu" and "valu \<noteq> Bv (bs ! b)"
+                        using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None\<close> by blast
+                      have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) = 
+                            the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?key1)"
+                        using inf_some unfolding to_signal_def comp_def
+                        by auto
+                      also have "... \<noteq> Bv (bs ! b)"
+                        using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None\<close> neq 
+                        by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. t < n \<and> n < the
+                        (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))
+                        \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig \<noteq> None) sig = Some valu\<close> option.sel
+                        to_trans_raw_sig_def)
+                      finally show "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) \<noteq> (Bv (bs ! b))"
+                        by blast
+                    qed
+                    ultimately have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time' - 1) = to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time' - 1))"
+                      unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def by auto
+                    hence *: "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! b)"
+                      using \<open>to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! b)\<close> by auto
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = Some (Bv (bs ! b))"
+                      using \<open>t \<le> ?time' - 1\<close> exist_mapping
+                      using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig = Some (Bv (bs ! b))" and b="t + dly"]
+                      using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig = Some val\<close> 
+                            \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig\<close> \<open>val = Bv (bs ! b)\<close> by auto
+                    have "to_bit b (signal_of (\<sigma> sig) \<tau> sig ?time') = (Bv (bs ! b))"
+                      using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig) \<tau> b sig", OF `to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = Some (Bv (bs ! b))`]
+                      using to_bit_signal_of'_eq by fastforce
+                    hence " ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) = Bv (bs ! b)"
+                      unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def 
+                      using \<open>t \<le> the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) - 1\<close> by auto
+                    thus "?time' \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! b) \<and>
+                                             ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig ?time' = Bv (bs ! b)"    
+                      using * `?time' \<le> t + dly` by auto  
+                  next
+                    have "t \<le> ?time' - 1" using \<open>?time < ?time'\<close> \<open>t < ?time\<close> by linarith
+                    fix y
+                    assume "y \<le> t + dly \<and>  ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig y = Bv (bs ! b)"
+                    hence "y \<le> t + dly" and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! b)" and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y) = Bv (bs ! b)"
+                      by auto
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = Some (Bv (bs ! b))"
+                      using \<open>t \<le> ?time' - 1\<close> exist_mapping
+                      using GreatestI_ex_nat[where P="\<lambda>n. n \<le> t + dly \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig = Some (Bv (bs ! b))" and b="t + dly"]
+                      using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig = Some val\<close> 
+                            \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig\<close> \<open>val = Bv (bs ! b)\<close> by auto
+                    hence "t < ?time'"
+                      by (meson \<open>t < ?time\<close> \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) \<Longrightarrow> False\<close> le_less_trans not_le)
+                    have "y \<le> t \<or> t < y"
+                      by auto
+                    moreover
+                    { assume "y \<le> t"
+                      hence "y < ?time'" using `t < ?time'` by linarith }
+                    moreover
+                    { assume "t < y"
+                      hence "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) =  to_bit b (signal_of (\<sigma> sig) \<tau> sig (y - 1))"
+                        unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                      hence 0: "... \<noteq> (Bv (bs ! b))"
+                        using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! b)\<close> by auto
+                      have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig y =  to_bit b (signal_of (\<sigma> sig) \<tau> sig y)"
+                        using `t < y`  unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                      hence 1: "... = Bv (bs ! b)"
+                        using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig y = Bv (bs ! b)\<close> by auto
+                      have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some (Bv (bs ! b))"
+                      proof (rule ccontr)
+                        assume "\<not> to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some (Bv (bs ! b))"
+                        then obtain x' where "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = None \<or> to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! b))"
+                          using domIff by fastforce
+                        moreover
+                        { assume "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = None"
+                          hence "signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig y = 
+                                 signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (y - 1)"
+                            by (intro signal_of_less_sig)(simp add: zero_option_def)
+                          with 0 1 have False 
+                            by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = None\<close> signal_of_less_sig to_bit_signal_of' zero_option_def) }
+                        moreover
+                        { assume "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! b))"
+                          hence "signal_of ((Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b))) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig y = x'" and "x' \<noteq> (Bv (bs ! b))"
+                            using trans_some_signal_of' by fastforce+
+                          with 1 have False 
+                            unfolding to_bit_signal_of'_eq by auto }
+                        ultimately show False
+                          by auto
+                      qed
+                      with `y \<le> t + dly` have "y \<le> ?time'"
+                        unfolding time'_eq 
+                        apply (intro Greatest_le_nat)
+                        unfolding keys_def to_trans_raw_sig_def zero_option_def by auto }
+                    ultimately show "y \<le> ?time'"
+                      by auto
+                  qed
+                  hence False
+                    using `?time < ?time'` by auto
+                  hence " bs ! b = bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+                    by auto }
+                ultimately show " bs ! b = bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+                  by auto
+              next
+                case (Some a)
+                hence "signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = the (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig)"
+                  by (simp add: to_signal_def to_trans_raw_sig_def)
+                have "\<forall>t\<in>dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig). t \<le> t' \<longrightarrow> t \<le> a"
+                  using inf_time_someE[OF Some] by auto
+                have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time - 1)) \<noteq> Bv (bs ! b)"
+                  using `((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time - 1) \<noteq> Bv (bs ! b)` `?time \<le> t + dly` `t < ?time`
+                  unfolding assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  by presburger
+                moreover have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time)) = Bv (bs ! b)"
+                  using `((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig ?time = Bv (bs ! b)` `?time \<le> t + dly` `t < ?time`
+                  unfolding assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  by presburger
+                ultimately have "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig) ?time sig \<noteq> None"
+                  by (metis (no_types, lifting) signal_of_less_sig to_bit_signal_of' zero_option_def)
+                have h0: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t \<noteq> Bv (bs ! b)"
+                  using 1 unfolding to_bit_signal_of'_eq assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  using to_bit_signal_of'_eq by fastforce
+                have h1: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) = Bv (bs ! b)"
+                  using 1 unfolding to_bit_signal_of'_eq assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  using to_bit_signal_of'_eq by fastforce
+                let ?time' = "the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))"
+                obtain val where "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig = Some val" 
+                    using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig \<noteq> None\<close> by auto
+                have "\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). k \<le> t + dly"
+                 by (metis (mono_tags, lifting) \<open>?time \<le> t + dly\<close> \<open>\<And>thesis. (\<And>val.
+                    to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig = Some val \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> keys_def
+                    mem_Collect_eq option.simps(3) to_trans_raw_sig_def zero_option_def)
+                hence time'_eq: "?time' = (GREATEST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig) \<and> k \<le> t + dly)"
+                  unfolding inf_time_def by auto
+                hence "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)" and "?time' \<le> t + dly"
+                  using GreatestI_ex_nat 
+                  by (metis (mono_tags, lifting) \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). k \<le> t + dly\<close> inf_time_def inf_time_ex1 inf_time_some_exists)+
+                have "the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = Bv (bs ! b)"
+                proof -
+                  have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly) = Some ?time'"
+                    by (simp add: \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). k \<le> t + dly\<close> inf_time_def)
+                  thus "the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = Bv (bs ! b)"
+                    using h1 unfolding to_signal_def comp_def 
+                    by (metis option.simps(5) to_trans_raw_sig_def)
+                qed
+                have "the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig) = Bv (bs ! b)"
+                proof- 
+                  have " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?time = Bv (bs ! b)"
+                    using \<open>to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time)) = Bv (bs ! b)\<close>
+                    unfolding to_bit_signal_of'_eq[THEN sym] by auto
+                  moreover have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig ?time = Some ?time"
+                  proof (intro inf_time_someI)
+                    show "?time \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                    proof -
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig \<noteq> None"
+                      by (metis (full_types) \<open>\<And>thesis. (\<And>val. to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig = Some val \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> option.simps(3))
+                    then show ?thesis
+                        by (simp add: domIff to_trans_raw_sig_def)
+                    qed
+                  qed (auto)
+                  ultimately show ?thesis
+                    unfolding to_signal_def comp_def 
+                    by (simp add: to_trans_raw_sig_def)
+                qed
+                have "?time = ?time'"
+                proof (rule Greatest_equality)
+                  have "t \<le> ?time' - 1" 
+                  proof (rule ccontr)
+                    assume "\<not> t \<le> ?time' - 1" hence "?time' - 1 < t"
+                      by auto
+                    hence "?time' \<le> t" by auto
+                    hence "\<tau> ?time' sig = None"
+                      using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig \<noteq> None"
+                      using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> 
+                      by (metis domIff dom_is_keys to_trans_raw_sig_def)
+                    thus "False"
+                      using \<open>\<tau> ?time' sig = None\<close> unfolding to_trans_raw_bit_def by auto
+                  qed
+                  moreover have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! b)"
+                    unfolding to_bit_signal_of'_eq[THEN sym]
+                  proof (cases "\<exists>n. t < n \<and> n < ?time' \<and> (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) n sig \<noteq> None")
+                    case False
+                    hence none: "\<And>n. t < n \<Longrightarrow> n \<le> ?time' - 1 \<Longrightarrow> (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) n sig = 0"
+                      by (auto simp add: zero_option_def)
+                    have " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) = 
+                            signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t"
+                      using signal_of_less_ind'[of "t" "?time' - 1" "to_trans_raw_bit (\<sigma> sig) \<tau> b sig" "sig", OF none] `t \<le> ?time' - 1`
+                      by auto                    
+                    also have "... \<noteq> (Bv (bs ! b))"
+                      using h0 to_bit_signal_of'_eq by force
+                    finally show " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) \<noteq> (Bv (bs ! b))"
+                      by auto
+                  next
+                    case True
+                    let ?key1 = "(GREATEST n. t < n \<and> n < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig \<noteq> None)"
+                    from True have "t < ?key1" and "?key1 < ?time'" and " to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None"
+                      using GreatestI_ex_nat[OF True]  using less_imp_le_nat by blast+
+                    have *: "\<And>n. n > ?key1 \<Longrightarrow> n < ?time' \<Longrightarrow> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig = None"
+                      using Greatest_le_nat[where P="\<lambda>x. t < x \<and> x < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig x sig \<noteq> None" and b="?time'"]
+                      by (smt \<open>t < (GREATEST n. t < n \<and> n < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig \<noteq> None)\<close> leD less_imp_le_nat less_trans)
+                    have inf_some: "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (?time' - 1) = Some ?key1"
+                    proof (rule inf_time_someI)
+                      show "?key1 \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        using `to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None`  by (simp add: domIff to_trans_raw_sig_def)
+                    next
+                      show "?key1 \<le> ?time' - 1"
+                        using `?key1 < ?time'`  by linarith
+                    next
+                      { fix ta
+                        assume "ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        assume "ta \<le> ?time' - 1"
+                        assume "?key1 < ta"
+                        hence "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ta sig = None"
+                          using *[OF `?key1 < ta`] `ta \<le> ?time' - 1` by simp
+                        hence "ta \<notin> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                          by (simp add: domIff to_trans_raw_sig_def)
+                        with `ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)` have False by auto }
+                      thus "\<forall>ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). ta \<le> ?time' - 1 \<longrightarrow> ta \<le> ?key1"
+                        using not_le_imp_less by blast
+                    qed
+                    have non_stut: " non_stuttering (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) (to_bit b o \<sigma>) sig"
+                      using assms(5) non_stuttering_to_trans_raw_bit by force
+                    hence "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig  ?key1 sig) \<noteq> to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig"
+                    proof -
+                      have "?key1 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        using `to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None`  by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+                      moreover have "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        using \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> by blast
+                      moreover have "\<forall>k. ?key1 < k \<and> k < ?time' \<longrightarrow> k \<notin> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        using *  by (metis (mono_tags, lifting) domIff keys_def mem_Collect_eq to_trans_raw_sig_def
+                        zero_option_def)
+                      ultimately show ?thesis    
+                        using `?key1 < ?time'` non_stut unfolding non_stuttering_def
+                        by (simp add: to_trans_raw_sig_def)
+                    qed
+                    moreover have "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = Some (Bv (bs ! b))"
+                      by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) sig) = Bv (bs ! b)\<close> domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                    ultimately have neq: "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig) \<noteq> Some (Bv (bs ! b))"
+                      by auto
+                    then obtain valu where "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig) = Some valu" and "valu \<noteq> Bv (bs ! b)"
+                      using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None\<close> by blast
+                    have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) = 
+                          the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?key1)"
+                      using inf_some unfolding to_signal_def comp_def
+                      by auto
+                    also have "... \<noteq> Bv (bs ! b)"
+                      using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None\<close> neq 
+                      by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. t < n \<and> n < the
+                      (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))
+                      \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig \<noteq> None) sig = Some valu\<close> option.sel
+                      to_trans_raw_sig_def)
+                    finally show "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) \<noteq> (Bv (bs ! b))"
+                      by blast
+                  qed
+                  ultimately have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time' - 1) = to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time' - 1))"
+                    unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def by auto
+                  hence *: "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! b)"
+                    using \<open>to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! b)\<close> by auto
+                  have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = Some (Bv (bs ! b))"
+                    by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) sig) = Bv (bs ! b)\<close> domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                  have "to_bit b (signal_of (\<sigma> sig) \<tau> sig ?time') = (Bv (bs ! b))"
+                    using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig) \<tau> b sig", OF `to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = Some (Bv (bs ! b))`]
+                    using to_bit_signal_of'_eq by fastforce
+                  hence " ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) = Bv (bs ! b)"
+                    unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def 
+                    using \<open>t \<le> the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) - 1\<close> by auto
+                  thus "?time' \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! b) \<and>
+                                           ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig ?time' = Bv (bs ! b)"    
+                    using * `?time' \<le> t + dly` by auto  
+                next
+                  have "t \<le> ?time' - 1" 
+                  proof (rule ccontr)
+                    assume "\<not> t \<le> ?time' - 1" hence "?time' - 1 < t"
+                      by auto
+                    hence "?time' \<le> t" by auto
+                    hence "\<tau> ?time' sig = None"
+                      using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig \<noteq> None"
+                      using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> 
+                      by (metis domIff dom_is_keys to_trans_raw_sig_def)
+                    thus "False"
+                      using \<open>\<tau> ?time' sig = None\<close> unfolding to_trans_raw_bit_def by auto
+                  qed
+                  fix y
+                  assume "y \<le> t + dly \<and>  ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig y = Bv (bs ! b)"
+                  hence "y \<le> t + dly" and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! b)" and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y) = Bv (bs ! b)"
+                    by auto
+                  have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = Some (Bv (bs ! b))"
+                    by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) sig) = Bv (bs ! b)\<close> domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                  hence "t < ?time'"
+                    by (smt \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig) = Bv (bs ! b)\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig = Some val\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig \<noteq> None\<close> leI option.sel option.simps(4) to_trans_raw_bit_def zero_fun_def zero_option_def)
+                  have "y \<le> t \<or> t < y"
+                    by auto
+                  moreover
+                  { assume "y \<le> t"
+                    hence "y < ?time'" using `t < ?time'` by linarith }
+                  moreover
+                  { assume "t < y"
+                    hence "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) =  to_bit b (signal_of (\<sigma> sig) \<tau> sig (y - 1))"
+                      unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                    hence 0: "... \<noteq> (Bv (bs ! b))"
+                      using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! b)\<close> by auto
+                    have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig y =  to_bit b (signal_of (\<sigma> sig) \<tau> sig y)"
+                      using `t < y`  unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                    hence 1: "... = Bv (bs ! b)"
+                      using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig y = Bv (bs ! b)\<close> by auto
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some (Bv (bs ! b))"
+                    proof (rule ccontr)
+                      assume "\<not> to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some (Bv (bs ! b))"
+                      then obtain x' where "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = None \<or> to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! b))"
+                        using domIff by fastforce
+                      moreover
+                      { assume "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = None"
+                        hence "signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig y = 
+                               signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (y - 1)"
+                          by (intro signal_of_less_sig)(simp add: zero_option_def)
+                        with 0 1 have False 
+                          by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = None\<close> signal_of_less_sig to_bit_signal_of' zero_option_def) }
+                      moreover
+                      { assume "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! b))"
+                        hence "signal_of ((Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b))) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig y = x'" and "x' \<noteq> (Bv (bs ! b))"
+                          using trans_some_signal_of' by fastforce+
+                        with 1 have False 
+                          unfolding to_bit_signal_of'_eq by auto }
+                      ultimately show False
+                        by auto
+                    qed
+                    with `y \<le> t + dly` have "y \<le> ?time'"
+                      unfolding time'_eq 
+                      apply (intro Greatest_le_nat)
+                      unfolding keys_def to_trans_raw_sig_def zero_option_def by auto }
+                  ultimately show "y \<le> ?time'"
+                    by auto
+                qed
+                have "?time' \<le> a"
+                proof (rule ccontr)
+                  have len_map: "length (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) \<le> length bs - 0"
+                    by auto
+                  assume "\<not> ?time' \<le> a" hence "a \<le> ?time'" by auto
+                  hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) ?time' sig = None"
+                    using Some \<open>\<forall>t\<in>dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig). t \<le> t' \<longrightarrow> t \<le> a\<close>
+                    by (metis `?time = ?time'` \<open>?time \<le> t'\<close> \<open>\<not> ?time' \<le> a\<close> domIff to_trans_raw_sig_def)
+                  hence "?time' \<notin> fold (\<union>)
+                        (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+                        (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                             (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+                    unfolding purge_raw'_def combine_trans_bit_def Let_def
+                    using \<open>?time = ?time'\<close> \<open>t < ?time\<close> \<open>?time \<le> t + dly\<close> by auto
+                  hence "?time' \<notin> keys (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig)"
+                    using \<open>b < length bs\<close>  unfolding map_map[THEN sym] map_snd_zip_take length_map min.idem length_upt take_all[OF len_map] member_fold_union2 by auto
+                  moreover have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig (the (inf_time (\<lambda>siga n. to_trans_raw_bit (\<sigma> sig) \<tau> b sig n siga) sig (t + dly))) sig \<noteq> 0"
+                    using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> unfolding keys_def to_trans_raw_sig_def by auto
+                  ultimately show "False"
+                    using h0 h1
+                    unfolding to_trans_raw_sig_def keys_def purge_raw_def Let_def by auto
+                qed
+                have "t < a"
+                proof (rule ccontr)
+                  assume "\<not> t < a" hence "a \<le> t" by auto
+                  hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig = None"
+                    unfolding purge_raw'_def combine_trans_bit_def Let_def 
+                    using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                  with Some show False
+                    by (metis (mono_tags, lifting) inf_time_some_exists keys_def mem_Collect_eq to_trans_raw_sig_def zero_option_def)
+                qed
+                have "a \<le> t + dly"
+                  using Some  by (meson \<open>t' < t + dly\<close> inf_time_some_exists le_trans less_imp_le_nat)
+                have ainset: "a \<in> fold (\<union>)
+                        (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+                        (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                             (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+                proof (rule ccontr)
+                  assume "a \<notin> fold (\<union>)
+            (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+              (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))
+            {}"
+                  hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig = None"
+                    using `t < a` `a \<le> t + dly` unfolding purge_raw'_def combine_trans_bit_def Let_def by auto
+                  with Some show False
+                    by (metis (mono_tags, lifting) inf_time_some_exists keys_def mem_Collect_eq to_trans_raw_sig_def zero_option_def)
+                qed
+                have " purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig = 
+                        combine_trans_bit \<tau>
+                          (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                               (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))
+                        sign sig t dly a sig"
+                  unfolding purge_raw'_def by auto
+                also have "... = Some
+                         (Lv sign
+                           (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig a))
+                             (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))" (is "_ = Some (Lv sign ?list)")
+                  using ainset `t < a` `a \<le> t + dly` unfolding combine_trans_bit_def by auto
+                finally have "to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t') = Bv (?list ! b)"
+                  using \<open>signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = the (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig)\<close> by auto
+                also have "... = Bv (bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                                    (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a))"
+                  using `b < length bs`  by (simp add: val.case_eq_if)
+                finally have imp: "bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t')) = 
+                              bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                                      (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a)"
+                  by auto
+                have "a \<in> keys (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig) \<or>
+                      a \<notin> keys (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig)"
+                  by auto
+                moreover
+                { assume ainkeys2: "a \<in> keys (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig)"
+                  hence cond0: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t \<noteq> Bv (bs ! b)"
+                    using \<open>t < a\<close> \<open>a \<le> t + dly\<close> unfolding purge_raw_def to_trans_raw_sig_def keys_def Let_def override_on_def 
+                    using zero_option_def by auto
+                  moreover have cond1: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) = Bv (bs ! b)"
+                    using ainkeys2 \<open>t < a\<close> \<open>a \<le> t + dly\<close> unfolding purge_raw_def to_trans_raw_sig_def keys_def Let_def override_on_def 
+                    using zero_option_def fun_upd_eqD by fastforce
+                  ultimately have somea: "Some a = inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)"
+                    using ainkeys2 unfolding purge_raw_def
+                    by (metis Some \<open>a \<le> t + dly\<close> \<open>t < a\<close> \<open>t' < t + dly\<close> ainkeys2 domIff dom_def inf_time_some_exists keys_def le_antisym not_le purge_raw_neq_0_imp to_trans_raw_sig_def zero_option_def)
+                  hence "inf_time (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)))) sig a = Some a"
+                    apply (intro inf_time_someI)
+                    by(metis ainkeys2 dom_def keys_def zero_option_def)auto
+                  hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                                      (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a = 
+                         the (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a)"
+                    unfolding to_signal_def comp_def by auto
+                  also have "... = the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig a sig)"
+                    using cond0 cond1 somea unfolding to_trans_raw_sig_def purge_raw_def Let_def override_on_def 
+                    by (smt UnE \<open>inf_time (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b
+                    sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs !
+                    b)))) sig a = Some a\<close> greaterThanAtMost_iff greaterThanLessThan_iff
+                    inf_time_at_most leD option.sel)
+                  also have "... = Bv (bs ! b)"
+                    using cond1 somea unfolding to_signal_def comp_def  by (metis option.simps(5) to_trans_raw_sig_def)
+                  finally have " bs ! b = bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+                    using imp by auto }
+                moreover
+                { assume anotinkeys2: "a \<notin> keys (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig)"
+                  have "inf_time (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)))) sig a = Some ?time'"
+                  proof (rule inf_time_someI)
+                    have "\<exists>y. to_trans_raw_bit (\<sigma> sig) \<tau> b sig (the (inf_time (\<lambda>siga n. to_trans_raw_bit (\<sigma> sig) \<tau> b sig n siga) sig (t + dly))) sig = Some y"
+                      using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> unfolding keys_def to_trans_raw_sig_def 
+                      by (simp add: zero_option_def)
+                    thus "?time' \<in> dom (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig)"
+                      using h0 h1
+                      unfolding to_trans_raw_sig_def dom_def purge_raw_def Let_def by auto
+                  next
+                    show "?time' \<le> a" using \<open>?time' \<le> a\<close> by auto
+                  next
+                    show "\<forall>ta\<in>dom (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig).
+         ta \<le> a \<longrightarrow> ta \<le> the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))"
+                      using h0 h1 \<open>?time' \<le> a\<close>
+                      unfolding purge_raw_def Let_def to_trans_raw_sig_def dom_def  using \<open>a \<le> t + dly\<close> leI by fastforce
+                  qed
+                  hence "(signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                                 (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a) = 
+                         the (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig ?time')"
+                    using \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = Bv (bs ! b)\<close> unfolding to_signal_def comp_def by auto
+                  also have "... =  the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (?time') sig)"
+                    using h0 h1 unfolding to_trans_raw_sig_def purge_raw_def Let_def by auto
+                  also have "... = (Bv (bs ! b))"
+                    using \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = Bv (bs ! b)\<close> by auto
+                  finally have "bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                                      (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a) = bs ! b"
+                    by auto
+                  hence " bs ! b = bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+                    using imp by auto }
+                ultimately show ?thesis 
+                  by auto
+              qed
+              finally have "bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t') = 
+                            bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+                by auto }
+            moreover
+            { assume "t' < ?time"
+              hence "bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t') = bval_of ( ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t)"
+                unfolding * using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig :=
+                to_bit b \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! b)\<close> by auto
+              also have "... = bval_of (to_bit b (snd \<omega> sig t))"
+                unfolding fun_upd_def by auto
+              also have "... = bval_of (to_bit b (signal_of (\<sigma> sig) \<tau> sig t))"
+                unfolding assms(1) worldline_raw_def by auto
+              also have "... = bval_of (to_bit b (\<sigma> sig))"
+                by (metis (full_types, hide_lams) assms(2) context_invariant_def signal_of_def zero_fun_def)
+              finally have "bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t') = 
+                            bval_of (to_bit b (\<sigma> sig))"
+                by auto
+              also have "... = bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+              proof (cases "inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t'")
+                case None
+                then show ?thesis 
+                  unfolding to_signal_def comp_def by auto
+              next
+                case (Some a)
+                hence "signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = the (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig)"
+                  by (simp add: to_signal_def to_trans_raw_sig_def)
+                have "\<forall>t\<in>dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig). t \<le> t' \<longrightarrow> t \<le> a"
+                  using inf_time_someE[OF Some] by auto
+                have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time - 1)) \<noteq> Bv (bs ! b)"
+                  using `((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time - 1) \<noteq> Bv (bs ! b)` `?time \<le> t + dly` `t < ?time`
+                  unfolding assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  by presburger
+                moreover have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time)) = Bv (bs ! b)"
+                  using `((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig ?time = Bv (bs ! b)` `?time \<le> t + dly` `t < ?time`
+                  unfolding assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  by presburger
+                ultimately have "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig) ?time sig \<noteq> None"
+                  by (metis (no_types, lifting) signal_of_less_sig to_bit_signal_of' zero_option_def)
+                have h0: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t \<noteq> Bv (bs ! b)"
+                  using 1 unfolding to_bit_signal_of'_eq assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  using to_bit_signal_of'_eq by fastforce
+                have h1: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) = Bv (bs ! b)"
+                  using 1 unfolding to_bit_signal_of'_eq assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                  using to_bit_signal_of'_eq by fastforce
+                let ?time' = "the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))"
+                obtain val where "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig = Some val" 
+                    using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig \<noteq> None\<close> by auto
+                have "\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). k \<le> t + dly"
+                 by (metis (mono_tags, lifting) \<open>?time \<le> t + dly\<close> \<open>\<And>thesis. (\<And>val.
+                    to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig = Some val \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> keys_def
+                    mem_Collect_eq option.simps(3) to_trans_raw_sig_def zero_option_def)
+                hence time'_eq: "?time' = (GREATEST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig) \<and> k \<le> t + dly)"
+                  unfolding inf_time_def by auto
+                hence "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)" and "?time' \<le> t + dly"
+                  using GreatestI_ex_nat 
+                  by (metis (mono_tags, lifting) \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). k \<le> t + dly\<close> inf_time_def inf_time_ex1 inf_time_some_exists)+
+                have "the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = Bv (bs ! b)"
+                proof -
+                  have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly) = Some ?time'"
+                    by (simp add: \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). k \<le> t + dly\<close> inf_time_def)
+                  thus "the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = Bv (bs ! b)"
+                    using h1 unfolding to_signal_def comp_def 
+                    by (metis option.simps(5) to_trans_raw_sig_def)
+                qed
+                have "the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time sig) = Bv (bs ! b)"
+                proof - 
+                  have " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?time = Bv (bs ! b)"
+                    using \<open>to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time)) = Bv (bs ! b)\<close> unfolding to_bit_signal_of'_eq[THEN sym] by auto
+                  moreover have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig ?time = Some ?time"
+                  proof (intro inf_time_someI)
+                    show "?time \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                    proof -
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig \<noteq> None"
+                      by (metis (full_types) \<open>\<And>thesis. (\<And>val. to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig = Some val \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> option.simps(3))
+                    then show ?thesis
+                        by (simp add: domIff to_trans_raw_sig_def)
+                    qed
+                  qed (auto)
+                  ultimately show ?thesis
+                    unfolding to_signal_def comp_def  by (simp add: to_trans_raw_sig_def)
+                qed
+                have "?time = ?time'"
+                proof (rule Greatest_equality)
+                  have "t \<le> ?time' - 1" 
+                  proof (rule ccontr)
+                    assume "\<not> t \<le> ?time' - 1" hence "?time' - 1 < t"
+                      by auto
+                    hence "?time' \<le> t" by auto
+                    hence "\<tau> ?time' sig = None"
+                      using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig \<noteq> None"
+                      using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> 
+                      by (metis domIff dom_is_keys to_trans_raw_sig_def)
+                    thus "False"
+                      using \<open>\<tau> ?time' sig = None\<close> unfolding to_trans_raw_bit_def by auto
+                  qed
+                  moreover have "to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! b)"
+                    unfolding to_bit_signal_of'_eq[THEN sym]
+                  proof (cases "\<exists>n. t < n \<and> n < ?time' \<and> (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) n sig \<noteq> None")
+                    case False
+                    hence none: "\<And>n. t < n \<Longrightarrow> n \<le> ?time' - 1 \<Longrightarrow> (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) n sig = 0"
+                      by (auto simp add: zero_option_def)
+                    have " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) = 
+                            signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t"
+                      using signal_of_less_ind'[of "t" "?time' - 1" "to_trans_raw_bit (\<sigma> sig) \<tau> b sig" "sig", OF none] `t \<le> ?time' - 1`
+                      by auto                    
+                    also have "... \<noteq> (Bv (bs ! b))"
+                      using h0 to_bit_signal_of'_eq by force
+                    finally show " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) \<noteq> (Bv (bs ! b))"
+                      by auto
+                  next
+                    case True
+                    let ?key1 = "(GREATEST n. t < n \<and> n < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig \<noteq> None)"
+                    from True have "t < ?key1" and "?key1 < ?time'" and " to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None"
+                      using GreatestI_ex_nat[OF True]  using less_imp_le_nat by blast+
+                    have *: "\<And>n. n > ?key1 \<Longrightarrow> n < ?time' \<Longrightarrow> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig = None"
+                      using Greatest_le_nat[where P="\<lambda>x. t < x \<and> x < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig x sig \<noteq> None" and b="?time'"]
+                      by (smt \<open>t < (GREATEST n. t < n \<and> n < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig \<noteq> None)\<close> leD less_imp_le_nat less_trans)
+                    have inf_some: "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (?time' - 1) = Some ?key1"
+                    proof (rule inf_time_someI)
+                      show "?key1 \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        using `to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None`  by (simp add: domIff to_trans_raw_sig_def)
+                    next
+                      show "?key1 \<le> ?time' - 1"
+                        using `?key1 < ?time'`  by linarith
+                    next
+                      { fix ta
+                        assume "ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        assume "ta \<le> ?time' - 1"
+                        assume "?key1 < ta"
+                        hence "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ta sig = None"
+                          using *[OF `?key1 < ta`] `ta \<le> ?time' - 1` by simp
+                        hence "ta \<notin> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                          by (simp add: domIff to_trans_raw_sig_def)
+                        with `ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)` have False by auto }
+                      thus "\<forall>ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig). ta \<le> ?time' - 1 \<longrightarrow> ta \<le> ?key1"
+                        using not_le_imp_less by blast
+                    qed
+                    have non_stut: " non_stuttering (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) (to_bit b o \<sigma>) sig"
+                      using assms(5) non_stuttering_to_trans_raw_bit by force
+                    hence "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig  ?key1 sig) \<noteq> to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig"
+                    proof -
+                      have "?key1 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        using `to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None`  by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+                      moreover have "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        using \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> by blast
+                      moreover have "\<forall>k. ?key1 < k \<and> k < ?time' \<longrightarrow> k \<notin> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)"
+                        using *  by (metis (mono_tags, lifting) domIff keys_def mem_Collect_eq to_trans_raw_sig_def
+                        zero_option_def)
+                      ultimately show ?thesis    
+                        using `?key1 < ?time'` non_stut unfolding non_stuttering_def
+                        by (simp add: to_trans_raw_sig_def)
+                    qed
+                    moreover have "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig) = Some (Bv (bs ! b))"
+                      by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) sig) = Bv (bs ! b)\<close> domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                    ultimately have neq: "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig) \<noteq> Some (Bv (bs ! b))"
+                      by auto
+                    then obtain valu where "(to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig) = Some valu" and "valu \<noteq> Bv (bs ! b)"
+                      using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None\<close> by blast
+                    have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) = 
+                          the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig ?key1)"
+                      using inf_some unfolding to_signal_def comp_def
+                      by auto
+                    also have "... \<noteq> Bv (bs ! b)"
+                      using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?key1 sig \<noteq> None\<close> neq 
+                      by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. t < n \<and> n < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<and> to_trans_raw_bit (\<sigma> sig) \<tau> b sig n sig \<noteq> None) sig = Some valu\<close> option.sel to_trans_raw_sig_def)
+                    finally show "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (?time' - 1) \<noteq> (Bv (bs ! b))"
+                      by blast
+                  qed
+                  ultimately have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time' - 1) = to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time' - 1))"
+                    unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def by auto
+                  hence *: "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! b)"
+                    using \<open>to_bit b (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! b)\<close> by auto
+                  have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = Some (Bv (bs ! b))"
+                    by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) sig) = Bv (bs ! b)\<close> domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                  have "to_bit b (signal_of (\<sigma> sig) \<tau> sig ?time') = (Bv (bs ! b))"
+                    using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig) \<tau> b sig", OF `to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = Some (Bv (bs ! b))`]
+                    using to_bit_signal_of'_eq by fastforce
+                  hence " ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) = Bv (bs ! b)"
+                    unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def 
+                    using \<open>t \<le> the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) - 1\<close> by auto
+                  thus "?time' \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig ?time' = Bv (bs ! b)"    
+                    using * `?time' \<le> t + dly` by auto  
+                next
+                  have "t \<le> ?time' - 1" 
+                  proof (rule ccontr)
+                    assume "\<not> t \<le> ?time' - 1" hence "?time' - 1 < t"
+                      by auto
+                    hence "?time' \<le> t" by auto
+                    hence "\<tau> ?time' sig = None"
+                      using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig \<noteq> None"
+                      using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> 
+                      by (metis domIff dom_is_keys to_trans_raw_sig_def)
+                    thus "False"
+                      using \<open>\<tau> ?time' sig = None\<close> unfolding to_trans_raw_bit_def by auto
+                  qed
+                  fix y
+                  assume "y \<le> t + dly \<and>  ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig y = Bv (bs ! b)"
+                  hence "y \<le> t + dly" and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! b)" and "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y) = Bv (bs ! b)"
+                    by auto
+                  have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig ?time' sig = Some (Bv (bs ! b))"
+                    by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))) sig) = Bv (bs ! b)\<close> domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                  hence "t < ?time'"
+                    by (smt \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig) = Bv (bs ! b)\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig = Some val\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) sig \<noteq> None\<close> leI option.sel option.simps(4) to_trans_raw_bit_def zero_fun_def zero_option_def)
+                  have "y \<le> t \<or> t < y"
+                    by auto
+                  moreover
+                  { assume "y \<le> t"
+                    hence "y < ?time'" using `t < ?time'` by linarith }
+                  moreover
+                  { assume "t < y"
+                    hence "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) =  to_bit b (signal_of (\<sigma> sig) \<tau> sig (y - 1))"
+                      unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                    hence 0: "... \<noteq> (Bv (bs ! b))"
+                      using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! b)\<close> by auto
+                    have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig y =  to_bit b (signal_of (\<sigma> sig) \<tau> sig y)"
+                      using `t < y`  unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                    hence 1: "... = Bv (bs ! b)"
+                      using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig y = Bv (bs ! b)\<close> by auto
+                    have "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some (Bv (bs ! b))"
+                    proof (rule ccontr)
+                      assume "\<not> to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some (Bv (bs ! b))"
+                      then obtain x' where "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = None \<or> to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! b))"
+                        using domIff by fastforce
+                      moreover
+                      { assume "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = None"
+                        hence "signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig y = 
+                               signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (y - 1)"
+                          by (intro signal_of_less_sig)(simp add: zero_option_def)
+                        with 0 1 have False 
+                          by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = None\<close> signal_of_less_sig to_bit_signal_of' zero_option_def) }
+                      moreover
+                      { assume "to_trans_raw_bit (\<sigma> sig) \<tau> b sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! b))"
+                        hence "signal_of ((Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b))) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig y = x'" and "x' \<noteq> (Bv (bs ! b))"
+                          using trans_some_signal_of' by fastforce+
+                        with 1 have False 
+                          unfolding to_bit_signal_of'_eq by auto }
+                      ultimately show False
+                        by auto
+                    qed
+                    with `y \<le> t + dly` have "y \<le> ?time'"
+                      unfolding time'_eq 
+                      apply (intro Greatest_le_nat)
+                      unfolding keys_def to_trans_raw_sig_def zero_option_def by auto }
+                  ultimately show "y \<le> ?time'"
+                    by auto
+                qed
+                have "a < ?time'"
+                  using Some \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n
+                  - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) =
+                  the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))\<close>
+                  \<open>t' < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1)
+                  \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))\<close>
+                  inf_time_some_exists by fastforce
+                have "t < a"
+                proof (rule ccontr)
+                  assume "\<not> t < a" hence "a \<le> t" by auto
+                  hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig = None"
+                    unfolding purge_raw'_def combine_trans_bit_def Let_def 
+                    using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                  with Some show False
+                    by (metis (mono_tags, lifting) inf_time_some_exists keys_def mem_Collect_eq to_trans_raw_sig_def zero_option_def)
+                qed
+                have "a \<le> t + dly"
+                  using Some  by (meson \<open>t' < t + dly\<close> inf_time_some_exists le_trans less_imp_le_nat)
+                have ainset: "a \<in> fold (\<union>)
+                        (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+                        (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                             (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+                proof (rule ccontr)
+                  assume "a \<notin> fold (\<union>)
+            (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+              (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))
+            {}"
+                  hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig = None"
+                    using `t < a` `a \<le> t + dly` unfolding purge_raw'_def combine_trans_bit_def Let_def by auto
+                  with Some show False
+                    by (metis (mono_tags, lifting) inf_time_some_exists keys_def mem_Collect_eq to_trans_raw_sig_def zero_option_def)
+                qed
+                have " purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig = 
+                        combine_trans_bit \<tau>
+                          (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                               (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))
+                        sign sig t dly a sig"
+                  unfolding purge_raw'_def by auto
+                also have "... = Some
+                         (Lv sign
+                           (map (\<lambda>p. bval_of (signal_of (get_time p) (snd p) sig a))
+                             (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))))" (is "_ = Some (Lv sign ?list)")
+                  using ainset `t < a` `a \<le> t + dly` unfolding combine_trans_bit_def by auto
+                finally have "to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t') = Bv (?list ! b)"
+                  using \<open>signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = the (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig)\<close> by auto
+                also have "... = Bv (bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                                    (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a))"
+                  using `b < length bs`  by (simp add: val.case_eq_if)
+                finally have imp: "bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t')) = 
+                              bval_of (signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) 
+                                      (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a)"
+                  by auto
+                have "inf_time (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b)))) sig a = None"
+                proof (unfold inf_time_none_iff[THEN sym], rule)
+                  fix x
+                  assume "x \<in> dom (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig)"
+                  thus "a < x"
+                    using h0 h1 `a < ?time'` assms(2) 
+                    unfolding context_invariant_def dom_def to_trans_raw_sig_def purge_raw_def Let_def 
+                    by (smt Un_iff fun_upd_eqD fun_upd_triv greaterThanLessThan_iff leI le_less_trans mem_Collect_eq option.case_eq_if override_on_apply_in override_on_apply_notin to_trans_raw_bit_def zero_fun_def zero_option_def)
+                qed
+                hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) sig a = 
+                      (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b))" 
+                  unfolding to_signal_def comp_def by auto
+                moreover have "to_bit b (\<sigma> sig) = (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! b))"
+                  by (auto split: val.splits)
+                ultimately show ?thesis
+                  unfolding imp by auto 
+              qed
+              finally have "bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t') = 
+                            bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+                by auto }
+            ultimately have "bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t') = 
+                            bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+              by auto }
+          ultimately show "bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t') = 
+                            bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+            by auto 
+        qed
+        have "?zeit \<le> t' \<or> t' < ?zeit"
+          by auto
+        moreover
+        { assume "?zeit \<le> t'"
+          have "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = 
+                Lv sign (map (\<lambda>b. bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t')) [0..<length bs])"
+            unfolding worldline_inert_upd2.simps snd_conv `s' = sig` fun_upd_def using \<open>t \<le> t'\<close> \<open>?zeit \<le> t'\<close> thereis by auto
+          hence midway: "\<And>b. b < length bs \<Longrightarrow> lval_of (snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t') ! b = 
+                                       bval_of (snd (to_worldline_init_bit \<omega> sig b)[sig, t, dly := Bv (bs ! b)] sig t')"
+            by auto
+          hence midway2: "\<And>b. b < length bs \<Longrightarrow> lval_of (snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t') ! b = 
+                          bval_of (to_bit b (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+             using \<open>\<And>ba. ba < length bs \<Longrightarrow> bval_of (snd to_worldline_init_bit \<omega> sig ba[sig, t, dly :=
+             Bv (bs ! ba)] sig t') = bval_of (to_bit ba (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig
+             (\<sigma> sig) (Lv sign bs)) sig t'))\<close> by blast
+          have "inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t' \<noteq> None"
+            unfolding inf_time_none_iff[THEN sym]
+          proof (rule)
+            assume "Ball (dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig)) ((<) t')"
+            hence "\<forall>x\<in>dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig). t' < x"
+              by auto
+            have helper: "length (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n))
+                         (Bv (bs ! n)))
+                [0..<length bs]) \<le> length bs - 0"
+              by auto
+            have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index) \<or> 
+                  ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)"
+              by auto
+            moreover
+            { assume "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index)"
+              hence "zeit = t + dly"
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index) \<Longrightarrow> zeit = t + dly\<close> by blast
+              hence "?zeit = t + dly"
+                unfolding zeit_def by auto
+              with \<open>t' < t + dly\<close> \<open>?zeit \<le> t'\<close> have "False"
+                by linarith }
+            moreover
+            { assume "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)"
+              hence zeit_def': "zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> by blast
+              have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig t \<noteq> Bv (bs ! index)"
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t) \<noteq> Bv (bs ! index)\<close>
+                unfolding assms(1) worldline_raw_def snd_conv fun_upd_def to_bit_signal_of'_eq by auto
+              moreover have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (t + dly) = Bv (bs ! index)"
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)\<close>
+                unfolding assms(1) worldline_raw_def snd_conv fun_upd_def to_bit_signal_of'_eq by auto
+              let ?time' = " the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))"
+              let ?time = "(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))"
+              have "?time \<le> t + dly"
+                using \<open>(LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n)) \<le> t'\<close> \<open>t' < t + dly\<close> \<open>zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> zeit_def by linarith
+              have "t < ?time"
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)\<close> \<open>t < (LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n))\<close> zeit_def by linarith
+              have "to_bit index (signal_of (\<sigma> sig) \<tau> sig (?time - 1)) \<noteq> Bv (bs ! index)"
+                using `?w' index sig (zeit - 1) \<noteq> Bv (bs ! index)`  unfolding \<open>?w' index sig (zeit - 1) = ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig t\<close>
+                using `?time \<le> t + dly` `t < ?time` zeit_def zeit_def' unfolding assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                by (smt \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (zeit - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig zeit = Bv (bs ! index)\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index) \<Longrightarrow> False\<close> \<open>\<not> zeit - 1 < t\<close> assms(1) fun_upd_same o_apply prod.sel(2) worldline_raw_def) 
+              moreover have "to_bit index (signal_of (\<sigma> sig) \<tau> sig (?time)) = Bv (bs ! index)"
+                using  `?time \<le> t + dly` `t < ?time`
+                assms(1) comp_def fun_upd_def worldline_raw_def snd_conv 
+                by (smt \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (zeit - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig zeit = Bv (bs ! index)\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)\<close> leD less_or_eq_imp_le)
+              ultimately have "(to_trans_raw_bit (\<sigma> sig) \<tau> index sig) ?time sig \<noteq> None"
+                by (metis (no_types, lifting) signal_of_less_sig to_bit_signal_of' zero_option_def)
+              obtain val where "to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time sig = Some val" 
+                  using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time sig \<noteq> None\<close> by auto
+              have "\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig). k \<le> t + dly"
+              proof -
+                have "to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) = Some val"
+                  by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig = Some val\<close> to_trans_raw_sig_def)
+                then have "\<exists>n. to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig n \<noteq> None \<and> n \<le> t + dly"
+                  using \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) \<le> t + dly\<close> by blast
+                then show ?thesis
+                  by (simp add: keys_def zero_option_def)
+              qed
+              hence time'_eq: "?time' = (GREATEST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig) \<and> k \<le> t + dly)"
+                unfolding inf_time_def by auto
+              hence "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)" and "?time' \<le> t + dly"
+                using GreatestI_ex_nat 
+                by (metis (mono_tags, lifting) \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig). k \<le> t + dly\<close> inf_time_def inf_time_ex1 inf_time_some_exists)+
+              have "to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig = to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time sig"
+              proof (rule ccontr)
+                assume "\<not> to_trans_raw_bit (\<sigma> sig)  \<tau> index sig ?time' sig = to_trans_raw_bit (\<sigma> sig)  \<tau> index sig ?time sig"
+                hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig ?time =  val"
+                  using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig)  \<tau> index sig" "?time" "sig" "(\<lambda>x. _)(sig := val)"]
+                  using \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig :=
+                  to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ>
+                  snd \<omega> sig)) sig n = Bv (bs ! index)) sig = Some val\<close> by auto
+                then obtain val' where "to_trans_raw_bit (\<sigma> sig)  \<tau> index sig ?time' sig = Some val'"
+                proof -
+                  assume "\<And>val'. to_trans_raw_bit (\<sigma> sig)  \<tau> index sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig (t + dly))) sig = Some val' \<Longrightarrow> thesis"
+                  then show ?thesis
+                    by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig)\<close> domIff dom_def keys_def not_None_eq to_trans_raw_sig_def zero_option_def)
+                qed
+                hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig ?time' =  val'"
+                  using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig)  \<tau> index sig" "?time" "sig" "(\<lambda>x. _)(sig := val')"] time'_eq
+                  by (meson trans_some_signal_of')
+                also have "... \<noteq> val"
+                  using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd
+                  \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig
+                  := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig = Some val\<close>
+                  \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (the (inf_time (to_trans_raw_sig
+                  (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) sig = Some val'\<close>
+                  using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) sig \<noteq> to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig\<close> by auto
+                finally have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig ?time' \<noteq> 
+                              signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig ?time "
+                  using \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index))
+                  (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig
+                  := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig :=
+                  to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) = val\<close> by blast
+                have "t < ?time'"
+                  by (smt \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) sig = Some val'\<close> leI option.simps(3) option.simps(4) to_trans_raw_bit_def zero_fun_def zero_option_def)
+                have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time') = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig ?time'"
+                  using `t < ?time'` to_bit_signal_of'_eq unfolding assms(1) time'_eq worldline_raw_def snd_conv fun_upd_def  by fastforce
+                moreover have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time) = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig ?time"
+                  using `t < ?time` to_bit_signal_of'_eq unfolding assms(1) time'_eq worldline_raw_def snd_conv fun_upd_def  by fastforce
+                ultimately have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time') \<noteq> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time)"
+                  using \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) \<noteq> signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> by auto                  
+                have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig ?time' = val'"
+                  using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig)  \<tau> index sig" "?time'" "sig" "(\<lambda>x. _)(sig := val')"] \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> index sig ?time' sig = Some val'\<close>
+                  by auto
+                have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig (t + dly))) = 
+                      inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig (t + dly)"
+                  using time'_eq 
+                proof -
+                  obtain nn :: nat where
+                    f1: "nn \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig) \<and> nn \<le> t + dly"
+                      using \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig). k \<le> t + dly\<close> by blast
+                  have f2: "to_signal (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv s bs \<Rightarrow> bs ! index)) (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig (t + dly) = Bv (bs ! index)"
+                    using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (t + dly) = Bv (bs ! index)\<close> by auto
+                  have f3: "\<forall>v n a f. to_signal v f (a::'a) n = the (f a (the (inf_time f a n))) \<or> inf_time f a n = None"
+                    by (simp add: option.case_eq_if to_signal_def)
+                  have f4: "\<forall>f. f (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig (t + dly)))) = f (Some val')"
+                    by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) sig = Some val'\<close> to_trans_raw_sig_def)
+                  have "Bv (bs ! index) \<noteq> val'"
+                    using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (zeit - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig zeit = Bv (bs ! index)\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)\<close> \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) = val\<close> \<open>val' \<noteq> val\<close> by auto
+                  then have f5: "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig (t + dly) = None"
+                    using f4 f3 f2 option.sel 
+                    by (metis \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> index sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig (t + dly))) sig = Some val'\<close> to_trans_raw_sig_def)
+                  have "\<forall>n. Some (GREATEST na. na \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig) \<and> na \<le> n) = inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig)) sig n \<or> \<not> nn \<le> n"
+                  using f1 by (simp add: inf_time_def)
+                    then show ?thesis
+                  using f5 f1 by force
+                qed
+                hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig (t + dly) = 
+                      signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig ?time'"
+                  unfolding to_signal_def comp_def by auto
+                hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig)  \<tau> index sig) sig ?time' = Bv (bs ! index)"
+                  using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (t + dly) = Bv (bs ! index)\<close> by auto
+                have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time) = Bv (bs ! index)"
+                  using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (zeit - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig zeit = Bv (bs ! index)\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index)\<close> by blast
+                have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time') = Bv (bs ! index)"
+                  using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly)))\<close> \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) = Bv (bs ! index)\<close> by auto
+                show False
+                  using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) = Bv (bs ! index)\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) = Bv (bs ! index)\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) \<noteq> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> by auto
+              qed
+              have h1: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (t + dly) = Bv (bs ! index)"
+                using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (t + dly) = Bv (bs ! index)\<close> by blast
+              have "the (to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig) = Bv (bs ! index)"
+              proof -
+                have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly) = Some ?time'"
+                  by (simp add: \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig). k \<le> t + dly\<close> inf_time_def)
+                thus "the (to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig) = Bv (bs ! index)"
+                  using h1 unfolding to_signal_def comp_def  by (metis option.simps(5) to_trans_raw_sig_def)
+              qed
+              have "the (to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time sig) = Bv (bs ! index)"
+              proof- 
+                have " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig ?time = Bv (bs ! index)"
+                  using \<open>to_bit index (signal_of (\<sigma> sig) \<tau> sig (?time)) = Bv (bs ! index)\<close>
+                  unfolding to_bit_signal_of'_eq[THEN sym] by auto
+                moreover have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig ?time = Some ?time"
+                proof (intro inf_time_someI)
+                  show "?time \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)"
+                  proof -
+                    have "\<exists>v. to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig = Some v"
+                      by (metis \<open>\<And>thesis. (\<And>val. to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig = Some val \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close>)
+                    then show ?thesis
+                      by (simp add: domIff to_trans_raw_sig_def)
+                  qed
+                qed (auto)
+                ultimately show ?thesis
+                  unfolding to_signal_def comp_def 
+                  by (simp add: to_trans_raw_sig_def)
+              qed
+              have "?time = ?time'"
+              proof (rule Greatest_equality)
+                have "t \<le> ?time' - 1" 
+                proof (rule ccontr)
+                  assume "\<not> t \<le> ?time' - 1" hence "?time' - 1 < t"
+                    by auto
+                  hence "?time' \<le> t" by auto
+                  hence "\<tau> ?time' sig = None"
+                    using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                  have "to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig \<noteq> None"
+                    using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)\<close> 
+                    by (metis domIff dom_is_keys to_trans_raw_sig_def)
+                  thus "False"
+                    using \<open>\<tau> ?time' sig = None\<close> unfolding to_trans_raw_bit_def by auto
+                qed
+                moreover have "to_bit index (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! index)"
+                  unfolding to_bit_signal_of'_eq[THEN sym]
+                proof (cases "\<exists>n. t < n \<and> n < ?time' \<and> (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) n sig \<noteq> None")
+                  case False
+                  hence none: "\<And>n. t < n \<Longrightarrow> n \<le> ?time' - 1 \<Longrightarrow> (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) n sig = 0"
+                    by (auto simp add: zero_option_def)
+                  have " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (?time' - 1) = 
+                          signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig t"
+                    using signal_of_less_ind'[of "t" "?time' - 1" "to_trans_raw_bit (\<sigma> sig) \<tau> index sig" "sig", OF none] `t \<le> ?time' - 1`
+                    by auto                    
+                  also have "... \<noteq> (Bv (bs ! index))"
+                    using to_bit_signal_of'_eq 
+                    using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig t \<noteq> Bv (bs ! index)\<close> by blast
+                  finally show " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (?time' - 1) \<noteq> (Bv (bs ! index))"
+                    by auto
+                next
+                  case True
+                  let ?key1 = "(GREATEST n. t < n \<and> n < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> index sig n sig \<noteq> None)"
+                  from True have "t < ?key1" and "?key1 < ?time'" and " to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?key1 sig \<noteq> None"
+                    using GreatestI_ex_nat[OF True]  using less_imp_le_nat by blast+
+                  have *: "\<And>n. n > ?key1 \<Longrightarrow> n < ?time' \<Longrightarrow> to_trans_raw_bit (\<sigma> sig) \<tau> index sig n sig = None"
+                    using Greatest_le_nat[where P="\<lambda>x. t < x \<and> x < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> index sig x sig \<noteq> None" and b="?time'"]
+                    by (smt \<open>t < (GREATEST n. t < n \<and> n < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly)) \<and> to_trans_raw_bit (\<sigma> sig) \<tau> index sig n sig \<noteq> None)\<close> leD less_imp_le_nat less_trans)
+                  have inf_some: "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (?time' - 1) = Some ?key1"
+                  proof (rule inf_time_someI)
+                    show "?key1 \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)"
+                      using `to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?key1 sig \<noteq> None`  by (simp add: domIff to_trans_raw_sig_def)
+                  next
+                    show "?key1 \<le> ?time' - 1"
+                      using `?key1 < ?time'`  by linarith
+                  next
+                    { fix ta
+                      assume "ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)"
+                      assume "ta \<le> ?time' - 1"
+                      assume "?key1 < ta"
+                      hence "to_trans_raw_bit (\<sigma> sig) \<tau> index sig ta sig = None"
+                        using *[OF `?key1 < ta`] `ta \<le> ?time' - 1` by simp
+                      hence "ta \<notin> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)"
+                        by (simp add: domIff to_trans_raw_sig_def)
+                      with `ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)` have False by auto }
+                    thus "\<forall>ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig). ta \<le> ?time' - 1 \<longrightarrow> ta \<le> ?key1"
+                      using not_le_imp_less by blast
+                  qed
+                  have non_stut: " non_stuttering (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) (to_bit index o \<sigma>) sig"
+                    using assms(5) non_stuttering_to_trans_raw_bit by force
+                  hence "(to_trans_raw_bit (\<sigma> sig) \<tau> index sig  ?key1 sig) \<noteq> to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig"
+                  proof -
+                    have "?key1 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)"
+                      using `to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?key1 sig \<noteq> None`  by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+                    moreover have "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)"
+                      using \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)\<close> by blast
+                    moreover have "\<forall>k. ?key1 < k \<and> k < ?time' \<longrightarrow> k \<notin> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)"
+                      using *  by (metis (mono_tags, lifting) domIff keys_def mem_Collect_eq to_trans_raw_sig_def
+                      zero_option_def)
+                    ultimately show ?thesis    
+                      using `?key1 < ?time'` non_stut unfolding non_stuttering_def
+                      by (simp add: to_trans_raw_sig_def)
+                  qed
+                  moreover have "(to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig) = Some (Bv (bs ! index))"
+                    by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index
+                    sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau>
+                    index sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> index sig (the (inf_time (to_trans_raw_sig
+                    (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) sig) = Bv (bs ! index)\<close>
+                    domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                  ultimately have neq: "(to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?key1 sig) \<noteq> Some (Bv (bs ! index))"
+                    by auto
+                  then obtain valu where "(to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?key1 sig) = Some valu" and "valu \<noteq> Bv (bs ! index)"
+                    using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?key1 sig \<noteq> None\<close> by blast
+                  have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (?time' - 1) = 
+                        the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig ?key1)"
+                    using inf_some unfolding to_signal_def comp_def
+                    by auto
+                  also have "... \<noteq> Bv (bs ! index)"
+                    using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?key1 sig \<noteq> None\<close> neq 
+                    by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. t < n \<and> n < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly)) \<and> to_trans_raw_bit (\<sigma> sig) \<tau> index sig n sig \<noteq> None) sig = Some valu\<close> option.sel to_trans_raw_sig_def)
+                  finally show "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (?time' - 1) \<noteq> (Bv (bs ! index))"
+                    by blast
+                qed
+                ultimately have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time' - 1) = to_bit index (signal_of (\<sigma> sig) \<tau> sig (?time' - 1))"
+                  unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def by auto
+                hence *: "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! index)"
+                  using \<open>to_bit index (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! index)\<close> by auto
+                have "to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig = Some (Bv (bs ! index))"
+                  using \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> index sig (the (inf_time (to_trans_raw_sig
+                  (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) sig) = Bv (bs ! index)\<close>
+                  \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig :=
+                  to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit
+                  index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig \<noteq> None\<close> \<open>to_trans_raw_bit (\<sigma> sig)
+                  \<tau> index sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index
+                  sig)) sig (t + dly))) sig = to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le>
+                  t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index)
+                  \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig\<close> by
+                  force
+                have "to_bit index (signal_of (\<sigma> sig) \<tau> sig ?time') = (Bv (bs ! index))"
+                  using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig) \<tau> index sig", OF `to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig = Some (Bv (bs ! index))`]
+                  using to_bit_signal_of'_eq by fastforce
+                hence " ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) = Bv (bs ! index)"
+                  unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def 
+                  using \<open>t \<le> the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly)) - 1\<close> by auto
+                thus "?time' \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig ?time' = Bv (bs ! index)"    
+                  using * `?time' \<le> t + dly` by auto  
+              next
+                have "t \<le> ?time' - 1" 
+                proof (rule ccontr)
+                  assume "\<not> t \<le> ?time' - 1" hence "?time' - 1 < t"
+                    by auto
+                  hence "?time' \<le> t" by auto
+                  hence "\<tau> ?time' sig = None"
+                    using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                  have "to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig \<noteq> None"
+                    using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)\<close> 
+                    by (metis domIff dom_is_keys to_trans_raw_sig_def)
+                  thus "False"
+                    using \<open>\<tau> ?time' sig = None\<close> unfolding to_trans_raw_bit_def by auto
+                qed
+                fix y
+                assume "y \<le> t + dly \<and>  ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig y = Bv (bs ! index)"
+                hence "y \<le> t + dly" and "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! index)" and "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (y) = Bv (bs ! index)"
+                  by auto
+                have "to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig = Some (Bv (bs ! index))"
+                  by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> index sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) sig) = Bv (bs ! index)\<close> domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                hence "t < ?time'"
+                  by (smt \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig \<noteq> None\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) sig = to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig\<close> leI option.simps(4) to_trans_raw_bit_def zero_fun_def zero_option_def)
+                have "y \<le> t \<or> t < y"
+                  by auto
+                moreover
+                { assume "y \<le> t"
+                  hence "y < ?time'" using `t < ?time'` by linarith }
+                moreover
+                { assume "t < y"
+                  hence "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (y - 1) =  to_bit index (signal_of (\<sigma> sig) \<tau> sig (y - 1))"
+                    unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                  hence 0: "... \<noteq> (Bv (bs ! index))"
+                    using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! index)\<close> by auto
+                  have "((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig y =  to_bit index (signal_of (\<sigma> sig) \<tau> sig y)"
+                    using `t < y`  unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                  hence 1: "... = Bv (bs ! index)"
+                    using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig y = Bv (bs ! index)\<close> by auto
+                  have "to_trans_raw_bit (\<sigma> sig) \<tau> index sig y sig = Some (Bv (bs ! index))"
+                  proof (rule ccontr)
+                    assume "\<not> to_trans_raw_bit (\<sigma> sig) \<tau> index sig y sig = Some (Bv (bs ! index))"
+                    then obtain x' where "to_trans_raw_bit (\<sigma> sig) \<tau> index sig y sig = None \<or> to_trans_raw_bit (\<sigma> sig) \<tau> index sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! index))"
+                      using domIff by fastforce
+                    moreover
+                    { assume "to_trans_raw_bit (\<sigma> sig) \<tau> index sig y sig = None"
+                      hence "signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig y = 
+                             signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (y - 1)"
+                        by (intro signal_of_less_sig)(simp add: zero_option_def)
+                      with 0 1 have False 
+                        by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig y sig = None\<close> signal_of_less_sig to_bit_signal_of' zero_option_def) }
+                    moreover
+                    { assume "to_trans_raw_bit (\<sigma> sig) \<tau> index sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! index))"
+                      hence "signal_of ((Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! index))) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig y = x'" and "x' \<noteq> (Bv (bs ! index))"
+                        using trans_some_signal_of' by fastforce+
+                      with 1 have False 
+                        unfolding to_bit_signal_of'_eq by auto }
+                    ultimately show False
+                      by auto
+                  qed
+                  with `y \<le> t + dly` have "y \<le> ?time'"
+                    unfolding time'_eq 
+                    apply (intro Greatest_le_nat)
+                    unfolding keys_def to_trans_raw_sig_def zero_option_def by auto }
+                ultimately show "y \<le> ?time'"
+                  by auto  
+              qed
+              have "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (Bv (bs ! index)) zeit sig \<noteq> 0"
+              proof -
+                have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig t \<noteq> Bv (bs ! index)"
+                  using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig t \<noteq> Bv (bs ! index)\<close> by blast
+                moreover have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! index)) (to_trans_raw_bit (\<sigma> sig) \<tau> index sig) sig (t + dly) = Bv (bs ! index)"
+                  using h1 by blast
+                moreover have "to_trans_raw_bit (\<sigma> sig) \<tau> index sig ?time' sig \<noteq> None"
+                  using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd
+                  \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig
+                  := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index)) sig \<noteq> None\<close>
+                  \<open>to_trans_raw_bit (\<sigma> sig) \<tau> index sig (the (inf_time (to_trans_raw_sig
+                  (to_trans_raw_bit (\<sigma> sig) \<tau> index sig)) sig (t + dly))) sig = to_trans_raw_bit (\<sigma>
+                  sig) \<tau> index sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega>
+                  sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig))
+                  sig n = Bv (bs ! index)) sig\<close> by auto
+                ultimately show ?thesis
+                  using \<open>?time = ?time'\<close> unfolding purge_raw_def Let_def 
+                  by (smt UnE \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs !
+                  index) \<Longrightarrow> zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega>
+                  sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig))
+                  sig n = Bv (bs ! index))\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t +
+                  dly) \<noteq> Bv (bs ! index) \<Longrightarrow> False\<close> greaterThanAtMost_iff greaterThanLessThan_iff
+                  order_less_irrefl override_on_apply_notin zero_option_def)
+              qed
+              hence "\<exists>x\<in>{0..<length bs}. zeit \<in> keys (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> x sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! x)) (Bv (bs ! x))) sig)"
+                apply (intro bexI[where x="index"])
+                unfolding to_trans_raw_sig_def keys_def apply blast
+                using \<open>index \<in> set [0..<length bs]\<close> set_upt by blast
+              hence "zeit \<in> fold (\<union>) (map keys (map (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+                unfolding member_fold_union2 by auto
+              hence "zeit \<in> fold (\<union>) (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}" 
+                unfolding map_map[THEN sym] map_snd_zip_take length_map min.idem length_upt take_all[OF helper] by auto
+              hence "combine_trans_bit \<tau> (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])) sign sig t dly zeit sig \<noteq> None"
+                unfolding combine_trans_bit_def 
+                using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow>
+                zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n
+                - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs !
+                index))\<close> \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) \<noteq> Bv (bs ! index)
+                \<Longrightarrow> False\<close> \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig
+                (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv
+                (bs ! index)) \<le> t + dly\<close> \<open>t < (LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length
+                bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd
+                to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n))\<close> zeit_def by
+                fastforce
+              hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) zeit sig \<noteq> None"
+                unfolding purge_raw'_def by auto
+              hence False
+                by (metis (full_types) \<open>(LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n)) \<le> t'\<close> \<open>\<forall>x\<in>dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig). t' < x\<close> domIff not_le to_trans_raw_sig_def zeit_def) }
+            ultimately show False
+              by auto
+          qed
+          have "(\<exists>list. signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = Lv sign list \<and> length list = length bs)"
+          proof (cases "inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t'")
+            case None         
+            then show ?thesis 
+              using \<open>inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t' \<noteq> None\<close> by auto
+          next
+            case (Some a)
+            hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> None"
+              by (metis domIff dom_def inf_time_some_exists keys_def to_trans_raw_sig_def zero_option_def)
+            have "a \<le> t + dly"
+              by (meson Some \<open>t' < t + dly\<close> inf_time_at_most le_less_trans less_imp_le_nat)
+            have "t < a"
+              using assms(2) \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> None\<close> 
+              unfolding context_invariant_def purge_raw'_def 
+              by (metis \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> None\<close> leI purge_raw_before_now_unchanged' zero_fun_def zero_option_def)
+            then obtain list where "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig = Some (Lv sign list) \<and> length list = length bs"
+              using \<open>a \<le> t + dly\<close> \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> None\<close> unfolding purge_raw'_def 
+              combine_trans_bit_def   by (smt leD length_map length_zip map_nth min.idem val.simps(6))
+            then show ?thesis 
+              using Some unfolding to_signal_def comp_def to_trans_raw_sig_def by auto
+          qed
+          then obtain list where "(signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = Lv sign list \<and> length list = length bs)"
+            by auto
+          have " 
+                lval_of (snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t') = 
+                lval_of (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t')"  
+          proof (intro nth_equalityI)
+            have "length (lval_of (snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t')) = length bs"
+              using \<open>snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = Lv sign (map (\<lambda>b.
+              bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t'))
+              [0..<length bs])\<close> by auto                              
+            also have "... = length (lval_of (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+            proof (cases "inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t'")
+              case None
+              hence "signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = (\<sigma> sig)"
+                unfolding to_signal_def comp_def by auto
+              then show ?thesis 
+                using None \<open>inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t' \<noteq> None\<close> by blast
+            next
+              case (Some a)
+              hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> None"
+                by (metis domIff dom_def inf_time_some_exists keys_def to_trans_raw_sig_def zero_option_def)
+              have "a \<le> t + dly"
+                by (meson Some \<open>t' < t + dly\<close> inf_time_at_most le_less_trans less_imp_le_nat)
+              have "t < a"
+                using assms(2) \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> None\<close> 
+                unfolding context_invariant_def purge_raw'_def 
+                by (metis \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> None\<close> leI purge_raw_before_now_unchanged' zero_fun_def zero_option_def)
+              then obtain list where "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig = Some (Lv sign list) \<and> length list = length bs"
+                using \<open>a \<le> t + dly\<close> \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) a sig \<noteq> None\<close> unfolding purge_raw'_def 
+                combine_trans_bit_def   by (smt leD length_map length_zip map_nth min.idem val.simps(6))
+              then show ?thesis 
+                using Some  by (simp add: to_signal_def to_trans_raw_sig_def)
+            qed
+            finally show "length (lval_of (snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t')) = length (lval_of (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+              by auto
+          next
+            fix i
+            assume " i < length (lval_of (snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t'))"
+            hence "i < length bs"
+              using \<open>snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = Lv sign (map (\<lambda>b.
+              bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t'))
+              [0..<length bs])\<close> by auto                 
+            have "lval_of (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t') ! i = list ! i"
+              using \<open>inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t' \<noteq> None\<close> \<open>signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = Lv sign list \<and> length list = length bs \<close> by auto
+            also have "... = bval_of (to_bit i (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+              using \<open>i < length bs\<close> 
+              using \<open>inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t' \<noteq> None\<close> \<open>signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = Lv sign list \<and> length list = length bs \<close> by auto
+            finally have "lval_of (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t') ! i = 
+                          bval_of (to_bit i (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'))"
+              by auto
+            thus "lval_of (snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t') ! i = lval_of (signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t') ! i"
+              using midway2 \<open>i < length bs\<close>  by blast
+          qed
+          hence " snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'"
+            using \<open>signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = Lv sign list \<and> length list = length bs\<close> \<open>snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = Lv sign (map (\<lambda>b. bval_of (snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig t')) [0..<length bs])\<close> 
+            by auto }
+        moreover
+        { assume "t' < ?zeit"
+          hence "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' =  snd \<omega> sig t"
+            unfolding worldline_inert_upd2.simps snd_conv \<open>s' = sig\<close> Let_def fun_upd_def
+            using thereis  by (simp add: \<open>t \<le> t'\<close> leD)
+          also have "... = signal_of (\<sigma> sig) \<tau> sig t"
+            unfolding assms(1) worldline_raw_def snd_conv by auto
+          also have "... = \<sigma> sig"
+            by (metis \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> signal_of_def zero_fun_def)
+          finally have "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = \<sigma> sig"
+            by auto
+          have "inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t' = None"
+            unfolding inf_time_none_iff[THEN sym]
+          proof 
+            { fix x 
+              assume "x \<le> t'"
+              assume "x \<in> dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig)"
+              hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) x sig \<noteq> None"
+                unfolding to_trans_raw_sig_def dom_def  by auto
+              hence comb: "combine_trans_bit \<tau>
+                      (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                           (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))
+                      sign sig t dly x sig \<noteq> None"
+                unfolding purge_raw'_def by auto
+              have help_len: "length (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) \<le> length bs - 0"
+                by auto
+              have "\<forall>xa\<in>{0..<length bs}. x \<notin> keys (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (Bv (bs ! xa))) sig)"
+                unfolding keys_def to_trans_raw_sig_def
+              proof 
+                fix xa
+                assume "xa \<in> {0..<length bs}"
+                have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig t = Bv (bs ! xa) \<or> 
+                      signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (t + dly) \<noteq> Bv (bs ! xa) \<or> 
+                      signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig t \<noteq> Bv (bs ! xa) \<and> 
+                      signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (t + dly) = Bv (bs ! xa)"
+                  by auto
+                moreover
+                { assume "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig t = Bv (bs ! xa) \<or> 
+                      signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (t + dly) \<noteq> Bv (bs ! xa)"
+                  hence "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (Bv (bs ! xa)) x sig = 0"
+                    unfolding purge_raw_def Let_def zero_option_def 
+                    apply (cases "x \<le> t")
+                    apply (metis \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) x sig \<noteq> None\<close> purge_raw_before_now_unchanged' zero_fun_def zero_option_def)
+                    using \<open>t' < t + dly\<close> \<open>x \<le> t'\<close> by auto }
+                moreover
+                { assume "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig t \<noteq> Bv (bs ! xa) \<and> 
+                          signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (t + dly) = Bv (bs ! xa)"
+                  hence "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (Bv (bs ! xa)) x sig = 
+                         override_on (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) (\<lambda>n. (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig n)(sig := None))
+                           ({t<..<the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))} 
+                          \<union> {the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))<..t + dly}) x sig"
+                    unfolding purge_raw_def Let_def zero_option_def by auto
+                  also have "... = None"
+                  proof (cases "x \<le> t")
+                    case True
+                    thus ?thesis
+                      by (metis \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) x sig \<noteq> None\<close> purge_raw_before_now_unchanged' zero_fun_def zero_option_def)
+                  next
+                    case False
+                    have "x < ?zeit"
+                      using \<open>t' < ?zeit\<close> \<open>x \<le> t'\<close> dual_order.strict_trans2 by blast
+                    also have "... \<le> the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))"
+                    proof -
+                      have "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! xa)" and "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! xa)"
+                        using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig t \<noteq> Bv (bs ! xa) \<and> 
+                          signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (t + dly) = Bv (bs ! xa)\<close>
+                        unfolding assms(1) worldline_raw_def snd_conv fun_upd_def to_bit_signal_of'_eq by auto
+                      have *: "\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)"
+                      proof (rule ccontr)
+                        assume "\<not> (\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))"
+                        hence imp: "\<And>n. t < n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<Longrightarrow> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! xa)"
+                          by auto
+                        { fix n 
+                          assume "t \<le> n" and "n \<le> t + dly"
+                          hence "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! xa)"
+                            using \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! xa)\<close> imp
+                          proof (induction "n - t" arbitrary: t dly)
+                            case 0 hence "n = t" by auto
+                            then show ?case 
+                              using 0 by auto
+                          next
+                            case (Suc x)
+                            hence 0: "x = n - Suc t"
+                              by auto
+                            have 2: "n \<le> Suc t + (dly - 1) "
+                              using Suc by auto
+                            hence 1: "Suc t \<le> n "
+                              using Suc by linarith
+                            hence "Suc t \<le> t + dly"
+                              using Suc by linarith
+                            hence 3: "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (Suc t) \<noteq> Bv (bs ! xa)"
+                              using Suc(5-6) by auto
+                            have 4: "\<And>n. Suc t < n \<Longrightarrow> n \<le> Suc t + (dly - 1) \<Longrightarrow> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<Longrightarrow> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! xa)"
+                              using Suc(6) by auto
+                            have "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! xa)"
+                              using  Suc(1)[OF 0 1 2 3 4] by auto
+                            thus ?case
+                              by auto
+                          qed }
+                        hence "\<And>n. t \<le> n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! xa)"
+                          by auto
+                        thus False
+                          using \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! xa)\<close> le_add1 by blast
+                      qed
+                      let ?time_again ="GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)"    
+                      have "t < ?time_again"
+                        using * 
+                      proof -
+                        have f1: "\<forall>p n na. (n::nat) \<le> Greatest p \<or> (\<exists>n. \<not> n \<le> na \<and> p n) \<or> \<not> p n"
+                          by (metis (lifting) Greatest_le_nat)
+                        obtain nn :: nat where
+                          f2: "Bv (bs ! xa) = ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig nn \<and> Bv (bs ! xa) \<noteq> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (nn - 1) \<and> nn \<le> t + dly \<and> t < nn"
+                          by (metis (no_types) "*")
+                        then have "nn \<le> (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))"
+                          using f1 by force
+                        then show ?thesis
+                          using f2 by (meson less_le_trans)
+                      qed
+                      hence "?time_again - 1 < ?time_again"
+                        by auto
+                      have "?time_again \<le> t + dly" and "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time_again - 1) \<noteq> Bv (bs ! xa)" and "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig ?time_again = Bv (bs ! xa)"
+                        using GreatestI_ex_nat *  apply (metis (mono_tags, lifting))
+                        using GreatestI_ex_nat *  apply (metis (mono_tags, lifting))
+                        using GreatestI_ex_nat *  by smt
+                      have "?w' xa sig (?time_again - 1) = ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig t"
+                        using \<open>t < ?time_again\<close> \<open>?time_again - 1 < ?time_again\<close> 
+                        unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+                        by (smt One_nat_def Suc_leI \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! xa)\<close> gr_implies_not0 le_add_diff_inverse not_less_iff_gr_or_eq plus_1_eq_Suc zero_less_diff)
+                      moreover have "?w' xa sig (?time_again) = Bv (bs ! xa)"
+                        unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv 
+                        using False \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))\<close> 
+                        using \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! xa)\<close> by auto
+                      ultimately have "?w' xa sig (?time_again - 1) \<noteq> ?w' xa sig ?time_again"
+                        using \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! xa)\<close> by auto
+                      hence "?zeit \<le> ?time_again"
+                      proof -
+                        have "t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) \<and> (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) \<le> t + dly \<and> (\<exists>n. n \<in> set [0..<length bs] \<and> snd to_worldline_init_bit \<omega> sig n[sig, t, dly := Bv (bs ! n)] sig ((GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) - 1) \<noteq> snd to_worldline_init_bit \<omega> sig n[sig, t, dly := Bv (bs ! n)] sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)))"
+                          using \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) \<le> t + dly\<close> \<open>xa \<in> {0..<length bs}\<close> \<open>snd to_worldline_init_bit \<omega> sig xa[sig, t, dly := Bv (bs ! xa)] sig ((GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) - 1) \<noteq> snd to_worldline_init_bit \<omega> sig xa[sig, t, dly := Bv (bs ! xa)] sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))\<close> \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))\<close> 
+                          using set_upt by blast
+                        then show ?thesis
+                          by (simp add: Bex_def_raw Least_le)
+                      qed
+                      let ?time' = " the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))"
+                      have "?time_again \<le> t + dly"
+                        using \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) \<le> t + dly\<close> by blast
+                      have "t < ?time_again"
+                        using \<open>((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! index) \<Longrightarrow> zeit = (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! index) \<and> ((snd \<omega>)(sig := to_bit index \<circ> snd \<omega> sig)) sig n = Bv (bs ! index))\<close> 
+                            \<open>t < (LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n))\<close> zeit_def 
+                        using \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))\<close> by linarith
+                      have "to_bit xa (signal_of (\<sigma> sig) \<tau> sig (?time_again - 1)) \<noteq> Bv (bs ! xa)"
+                        by (smt One_nat_def Suc_leI Suc_pred \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig ((GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) - 1) \<noteq> Bv (bs ! xa)\<close> \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) - 1 < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))\<close> \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))\<close> assms(1) fun_upd_same leD leI le_zero_eq o_apply prod.sel(2) worldline_raw_def)
+                      moreover have "to_bit xa (signal_of (\<sigma> sig) \<tau> sig (?time_again)) = Bv (bs ! xa)"
+                        using  `?time_again \<le> t + dly` `t < ?time_again`
+                        assms(1) comp_def fun_upd_def worldline_raw_def snd_conv
+                        by (smt \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) = Bv (bs ! xa)\<close> order.asym)
+                      ultimately have "(to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) ?time_again sig \<noteq> None"
+                        by (metis (no_types, lifting) signal_of_less_sig to_bit_signal_of' zero_option_def)
+                      obtain val where "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time_again sig = Some val" 
+                          using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time_again sig \<noteq> None\<close> by auto
+                      have "\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig). k \<le> t + dly"
+                      proof -
+                        have "to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) = Some val"
+                          by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) sig = Some val\<close> to_trans_raw_sig_def)
+                        then have "\<exists>n. to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig n \<noteq> None \<and> n \<le> t + dly"
+                          using \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) \<le> t + dly\<close> by blast
+                        then show ?thesis
+                          by (simp add: keys_def zero_option_def)
+                      qed
+                      hence time'_eq: "?time' = (GREATEST k. k \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig) \<and> k \<le> t + dly)"
+                        unfolding inf_time_def by auto
+                      hence "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)" and "?time' \<le> t + dly"
+                        using GreatestI_ex_nat 
+                        by (metis (mono_tags, lifting) \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig). k \<le> t + dly\<close> inf_time_def inf_time_ex1 inf_time_some_exists)+
+                      have "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig = to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time_again sig"
+                      proof (rule ccontr)
+                        assume "\<not> to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig ?time' sig = to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig ?time_again sig"
+                        hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig ?time_again =  val"
+                          using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig" "?time_again" "sig" "(\<lambda>x. _)(sig := val)"]
+                          using \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig :=
+                          to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ>
+                          snd \<omega> sig)) sig n = Bv (bs ! xa)) sig = Some val\<close> by auto
+                        then obtain val' where "to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig ?time' sig = Some val'"
+                        proof -
+                          assume "\<And>val'. to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig)) sig (t + dly))) sig = Some val' \<Longrightarrow> thesis"
+                          then show ?thesis
+                            by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig)\<close> domIff dom_def keys_def not_None_eq to_trans_raw_sig_def zero_option_def)
+                        qed
+                        hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig ?time' =  val'"
+                          using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig" "?time_again" "sig" "(\<lambda>x. _)(sig := val')"] time'_eq
+                          by (meson trans_some_signal_of')
+                        also have "... \<noteq> val"
+                          using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. n \<le> t + dly \<and> ((snd
+                          \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig
+                          := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) sig = Some val\<close>
+                          \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (the (inf_time (to_trans_raw_sig
+                          (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) sig = Some val'\<close>
+                          using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) sig \<noteq> to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) sig\<close> by auto
+                        finally have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig ?time' \<noteq> 
+                                      signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig ?time_again "
+                          using \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa))
+                          (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig
+                          := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig :=
+                          to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) = val\<close> by blast
+                        have "t < ?time'"
+                          by (smt \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) sig = Some val'\<close> leI option.simps(3) option.simps(4) to_trans_raw_bit_def zero_fun_def zero_option_def)
+                        have "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time') = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig ?time'"
+                          using `t < ?time'` to_bit_signal_of'_eq unfolding assms(1) time'_eq worldline_raw_def snd_conv fun_upd_def  by fastforce
+                        moreover have "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time_again) = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig ?time_again"
+                          using `t < ?time_again` to_bit_signal_of'_eq unfolding assms(1) time'_eq worldline_raw_def snd_conv fun_upd_def  by fastforce
+                        ultimately have "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time') \<noteq> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time_again)"
+                          using \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) \<noteq> signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))\<close> by auto                  
+                        have "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig ?time' = val'"
+                          using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig" "?time'" "sig" "(\<lambda>x. _)(sig := val')"] \<open>to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig ?time' sig = Some val'\<close>
+                          by auto
+                        have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig)) sig (t + dly))) = 
+                              inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig)) sig (t + dly)"
+                          using time'_eq 
+                        proof -
+                          have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly) \<noteq> None"
+                            by (metis (no_types) \<open>\<And>thesis. (\<And>val'. to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) sig = Some val' \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly)) \<le> t + dly\<close> inf_time_noneE2 option.simps(3) to_trans_raw_sig_def zero_option_def)
+                          then show ?thesis
+                            by (metis (no_types) \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)\<close> dom_def inf_time_someI keys_def option.exhaust_sel order_refl zero_option_def)
+                        qed
+                        hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig (t + dly) = 
+                              signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig ?time'"
+                          unfolding to_signal_def comp_def by auto
+                        hence "signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig)  \<tau> xa sig) sig ?time' = Bv (bs ! xa)"
+                          using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig t \<noteq> Bv (bs ! xa) \<and> signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (t + dly) = Bv (bs ! xa)\<close> by auto
+                        have "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time_again) = Bv (bs ! xa)"
+                          using \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) = Bv (bs ! xa)\<close> by blast
+                        have "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time') = Bv (bs ! xa)"
+                          using \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) = signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly)))\<close> \<open>signal_of (Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) = Bv (bs ! xa)\<close> by auto
+                        show False
+                          using \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) = Bv (bs ! xa)\<close> \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) = Bv (bs ! xa)\<close> \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) \<noteq> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))\<close> by auto
+                      qed
+                      have h1: "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (t + dly) = Bv (bs ! xa)"
+                        using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig t \<noteq> Bv (bs ! xa) \<and> signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (t + dly) = Bv (bs ! xa)\<close> by blast
+                      have "the (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig) = Bv (bs ! xa)"
+                      proof -
+                        have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly) = Some ?time'"
+                          by (simp add: \<open>\<exists>k\<in>keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig). k \<le> t + dly\<close> inf_time_def)
+                        thus "the (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig) = Bv (bs ! xa)"
+                          using h1 unfolding to_signal_def comp_def  by (metis option.simps(5) to_trans_raw_sig_def)
+                      qed
+                      have "the (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time_again sig) = Bv (bs ! xa)"
+                      proof- 
+                        have " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig ?time_again = Bv (bs ! xa)"
+                          using \<open>to_bit xa (signal_of (\<sigma> sig) \<tau> sig (?time_again)) = Bv (bs ! xa)\<close>
+                          unfolding to_bit_signal_of'_eq[THEN sym] by auto
+                        moreover have "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig ?time_again = Some ?time_again"
+                        proof (intro inf_time_someI)
+                          show "?time_again \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)"
+                          proof -
+                            have "\<exists>v. to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) sig = Some v"
+                              by (metis \<open>\<And>thesis. (\<And>val. to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) sig = Some val \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close>)
+                            then show ?thesis
+                              by (simp add: domIff to_trans_raw_sig_def)
+                          qed
+                        qed (auto)
+                        ultimately show ?thesis
+                          unfolding to_signal_def comp_def 
+                          by (simp add: to_trans_raw_sig_def)
+                      qed
+                      have "?time_again = ?time'"
+                      proof (rule Greatest_equality)
+                        have "t \<le> ?time' - 1" 
+                        proof (rule ccontr)
+                          assume "\<not> t \<le> ?time' - 1" hence "?time' - 1 < t"
+                            by auto
+                          hence "?time' \<le> t" by auto
+                          hence "\<tau> ?time' sig = None"
+                            using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                          have "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig \<noteq> None"
+                            using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)\<close> 
+                            by (metis domIff dom_is_keys to_trans_raw_sig_def)
+                          thus "False"
+                            using \<open>\<tau> ?time' sig = None\<close> unfolding to_trans_raw_bit_def by auto
+                        qed
+                        moreover have "to_bit xa (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! xa)"
+                          unfolding to_bit_signal_of'_eq[THEN sym]
+                        proof (cases "\<exists>n. t < n \<and> n < ?time' \<and> (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) n sig \<noteq> None")
+                          case False
+                          hence none: "\<And>n. t < n \<Longrightarrow> n \<le> ?time' - 1 \<Longrightarrow> (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) n sig = 0"
+                            by (auto simp add: zero_option_def)
+                          have " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (?time' - 1) = 
+                                  signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig t"
+                            using signal_of_less_ind'[of "t" "?time' - 1" "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig" "sig", OF none] `t \<le> ?time' - 1`
+                            by auto                    
+                          also have "... \<noteq> (Bv (bs ! xa))"
+                            using to_bit_signal_of'_eq 
+                            using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig t \<noteq> Bv (bs ! xa) \<and> signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (t + dly) = Bv (bs ! xa)\<close> by blast
+                          finally show " signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (?time' - 1) \<noteq> (Bv (bs ! xa))"
+                            by auto
+                        next
+                          case True
+                          let ?key1 = "(GREATEST n. t < n \<and> n < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> xa sig n sig \<noteq> None)"
+                          from True have "t < ?key1" and "?key1 < ?time'" and " to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?key1 sig \<noteq> None"
+                            using GreatestI_ex_nat[OF True]  using less_imp_le_nat by blast+
+                          have *: "\<And>n. n > ?key1 \<Longrightarrow> n < ?time' \<Longrightarrow> to_trans_raw_bit (\<sigma> sig) \<tau> xa sig n sig = None"
+                            using Greatest_le_nat[where P="\<lambda>x. t < x \<and> x < ?time' \<and> to_trans_raw_bit (\<sigma> sig) \<tau> xa sig x sig \<noteq> None" and b="?time'"]
+                            by (smt \<open>t < (GREATEST n. t < n \<and> n < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly)) \<and> to_trans_raw_bit (\<sigma> sig) \<tau> xa sig n sig \<noteq> None)\<close> leD less_imp_le_nat less_trans)
+                          have inf_some: "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (?time' - 1) = Some ?key1"
+                          proof (rule inf_time_someI)
+                            show "?key1 \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)"
+                              using `to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?key1 sig \<noteq> None`  by (simp add: domIff to_trans_raw_sig_def)
+                          next
+                            show "?key1 \<le> ?time' - 1"
+                              using `?key1 < ?time'`  by linarith
+                          next
+                            { fix ta
+                              assume "ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)"
+                              assume "ta \<le> ?time' - 1"
+                              assume "?key1 < ta"
+                              hence "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ta sig = None"
+                                using *[OF `?key1 < ta`] `ta \<le> ?time' - 1` by simp
+                              hence "ta \<notin> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)"
+                                by (simp add: domIff to_trans_raw_sig_def)
+                              with `ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)` have False by auto }
+                            thus "\<forall>ta \<in> dom (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig). ta \<le> ?time' - 1 \<longrightarrow> ta \<le> ?key1"
+                              using not_le_imp_less by blast
+                          qed
+                          have non_stut: " non_stuttering (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) (to_bit xa o \<sigma>) sig"
+                            using assms(5) non_stuttering_to_trans_raw_bit by force
+                          hence "(to_trans_raw_bit (\<sigma> sig) \<tau> xa sig  ?key1 sig) \<noteq> to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig"
+                          proof -
+                            have "?key1 \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)"
+                              using `to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?key1 sig \<noteq> None`  by (simp add: keys_def to_trans_raw_sig_def zero_option_def)
+                            moreover have "?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)"
+                              using \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)\<close> by blast
+                            moreover have "\<forall>k. ?key1 < k \<and> k < ?time' \<longrightarrow> k \<notin> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)"
+                              using *  by (metis (mono_tags, lifting) domIff keys_def mem_Collect_eq to_trans_raw_sig_def
+                              zero_option_def)
+                            ultimately show ?thesis    
+                              using `?key1 < ?time'` non_stut unfolding non_stuttering_def
+                              by (simp add: to_trans_raw_sig_def)
+                          qed
+                          moreover have "(to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig) = Some (Bv (bs ! xa))"
+                            by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa
+                            sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau>
+                            xa sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (the (inf_time (to_trans_raw_sig
+                            (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) sig) = Bv (bs ! xa)\<close>
+                            domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                          ultimately have neq: "(to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?key1 sig) \<noteq> Some (Bv (bs ! xa))"
+                            by auto
+                          then obtain valu where "(to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?key1 sig) = Some valu" and "valu \<noteq> Bv (bs ! xa)"
+                            using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?key1 sig \<noteq> None\<close> by blast
+                          have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (?time' - 1) = 
+                                the (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig ?key1)"
+                            using inf_some unfolding to_signal_def comp_def
+                            by auto
+                          also have "... \<noteq> Bv (bs ! xa)"
+                            using \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?key1 sig \<noteq> None\<close> neq 
+                            by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. t < n \<and> n < the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly)) \<and> to_trans_raw_bit (\<sigma> sig) \<tau> xa sig n sig \<noteq> None) sig = Some valu\<close> option.sel to_trans_raw_sig_def)
+                          finally show "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (?time' - 1) \<noteq> (Bv (bs ! xa))"
+                            by blast
+                        qed
+                        ultimately have "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time' - 1) = to_bit xa (signal_of (\<sigma> sig) \<tau> sig (?time' - 1))"
+                          unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def by auto
+                        hence *: "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! xa)"
+                          using \<open>to_bit xa (signal_of (\<sigma> sig) \<tau> sig (?time' - 1)) \<noteq> Bv (bs ! xa)\<close> by auto
+                        have "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig = Some (Bv (bs ! xa))"
+                          using \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (the (inf_time (to_trans_raw_sig
+                          (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) sig) = Bv (bs ! xa)\<close>
+                          \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig :=
+                          to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit
+                          xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) sig \<noteq> None\<close> \<open>to_trans_raw_bit (\<sigma> sig)
+                          \<tau> xa sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa
+                          sig)) sig (t + dly))) sig = to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. n \<le>
+                          t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa)
+                          \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) sig\<close> by
+                          force
+                        have "to_bit xa (signal_of (\<sigma> sig) \<tau> sig ?time') = (Bv (bs ! xa))"
+                          using trans_some_signal_of'[of "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig", OF `to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig = Some (Bv (bs ! xa))`]
+                          using to_bit_signal_of'_eq by fastforce
+                        hence " ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) = Bv (bs ! xa)"
+                          unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def 
+                          using \<open>t \<le> the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly)) - 1\<close> by auto
+                        thus "?time' \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (?time' - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig ?time' = Bv (bs ! xa)"    
+                          using * `?time' \<le> t + dly` by auto  
+                      next
+                        have "t \<le> ?time' - 1" 
+                        proof (rule ccontr)
+                          assume "\<not> t \<le> ?time' - 1" hence "?time' - 1 < t"
+                            by auto
+                          hence "?time' \<le> t" by auto
+                          hence "\<tau> ?time' sig = None"
+                            using assms(2) unfolding context_invariant_def by (auto simp add: zero_fun_def zero_option_def)
+                          have "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig \<noteq> None"
+                            using \<open>?time' \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)\<close> 
+                            by (metis domIff dom_is_keys to_trans_raw_sig_def)
+                          thus "False"
+                            using \<open>\<tau> ?time' sig = None\<close> unfolding to_trans_raw_bit_def by auto
+                        qed
+                        fix y
+                        assume "y \<le> t + dly \<and>  ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig y = Bv (bs ! xa)"
+                        hence "y \<le> t + dly" and "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! xa)" and "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (y) = Bv (bs ! xa)"
+                          by auto
+                        have "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig ?time' sig = Some (Bv (bs ! xa))"
+                          by (metis \<open>the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly)) \<in> keys (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig)\<close> \<open>the (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) sig) = Bv (bs ! xa)\<close> domIff dom_def keys_def option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+                        hence "t < ?time'"
+                          by (smt \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) sig \<noteq> None\<close> \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig)) sig (t + dly))) sig = to_trans_raw_bit (\<sigma> sig) \<tau> xa sig (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa)) sig\<close> leI option.simps(4) to_trans_raw_bit_def zero_fun_def zero_option_def)
+                        have "y \<le> t \<or> t < y"
+                          by auto
+                        moreover
+                        { assume "y \<le> t"
+                          hence "y < ?time'" using `t < ?time'` by linarith }
+                        moreover
+                        { assume "t < y"
+                          hence "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (y - 1) =  to_bit xa (signal_of (\<sigma> sig) \<tau> sig (y - 1))"
+                            unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                          hence 0: "... \<noteq> (Bv (bs ! xa))"
+                            using \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (y - 1) \<noteq> Bv (bs ! xa)\<close> by auto
+                          have "((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig y =  to_bit xa (signal_of (\<sigma> sig) \<tau> sig y)"
+                            using `t < y`  unfolding assms(1) worldline_raw_def snd_conv fun_upd_def comp_def  by auto
+                          hence 1: "... = Bv (bs ! xa)"
+                            using \<open>((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig y = Bv (bs ! xa)\<close> by auto
+                          have "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig y sig = Some (Bv (bs ! xa))"
+                          proof (rule ccontr)
+                            assume "\<not> to_trans_raw_bit (\<sigma> sig) \<tau> xa sig y sig = Some (Bv (bs ! xa))"
+                            then obtain x' where "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig y sig = None \<or> to_trans_raw_bit (\<sigma> sig) \<tau> xa sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! xa))"
+                              using domIff by fastforce
+                            moreover
+                            { assume "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig y sig = None"
+                              hence "signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig y = 
+                                     signal_of (\<sigma> sig) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig (y - 1)"
+                                by (intro signal_of_less_sig)(simp add: zero_option_def)
+                              with 0 1 have False 
+                                by (metis \<open>to_trans_raw_bit (\<sigma> sig) \<tau> xa sig y sig = None\<close> signal_of_less_sig to_bit_signal_of' zero_option_def) }
+                            moreover
+                            { assume "to_trans_raw_bit (\<sigma> sig) \<tau> xa sig y sig = Some x' \<and> x' \<noteq> (Bv (bs ! xa))"
+                              hence "signal_of ((Bv (case \<sigma> sig of Bv b' \<Rightarrow> b' | Lv sign bs \<Rightarrow> bs ! xa))) (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) sig y = x'" and "x' \<noteq> (Bv (bs ! xa))"
+                                using trans_some_signal_of' by fastforce+
+                              with 1 have False 
+                                unfolding to_bit_signal_of'_eq by auto }
+                            ultimately show False
+                              by auto
+                          qed
+                          with `y \<le> t + dly` have "y \<le> ?time'"
+                            unfolding time'_eq 
+                            apply (intro Greatest_le_nat)
+                            unfolding keys_def to_trans_raw_sig_def zero_option_def by auto }
+                        ultimately show "y \<le> ?time'"
+                          by auto  
+                      qed
+                      thus ?thesis    
+                        using \<open>(LEAST n. t < n \<and> n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig (n - 1) \<noteq> snd to_worldline_init_bit \<omega> sig b[sig, t, dly := Bv (bs ! b)] sig n)) \<le> (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! xa) \<and> ((snd \<omega>)(sig := to_bit xa \<circ> snd \<omega> sig)) sig n = Bv (bs ! xa))\<close> by linarith
+                    qed
+                    finally show ?thesis
+                      by (simp add: False not_le_imp_less)
+                  qed
+                  finally have "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (Bv (bs ! xa)) x sig = 0"
+                    by (auto simp add: zero_option_def) }
+                ultimately have "purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (Bv (bs ! xa)) x sig = 0"
+                  by auto
+                thus "x \<notin> {k. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (Bv (bs ! xa)) k sig \<noteq> 0}"
+                  by auto
+              qed
+              hence "x \<notin> fold (\<union>) (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd) (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs]) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+                unfolding member_fold_union2 map_map[THEN sym] map_snd_zip_take length_map min.idem length_upt
+                take_all[OF help_len] by auto                  
+              with comb have "False"
+                unfolding combine_trans_bit_def 
+                by (metis \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>t' < t + dly\<close> \<open>x \<le> t'\<close> diff_diff_cancel less_imp_diff_less less_not_refl nat_diff_split zero_fun_def zero_less_diff zero_option_def) }
+            thus " \<And>x. x \<in> dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig) \<Longrightarrow> t' < x"
+              using leI by blast
+          qed
+          hence "signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = \<sigma> sig"
+            unfolding to_signal_def comp_def by auto
+          hence "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'"
+            using \<open>snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = \<sigma> sig\<close> by auto }
+        ultimately have "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'"
+          by blast }
+      moreover
+      { assume thereisnt: "\<not> (\<exists>n>t. n \<le> t + dly \<and> (\<exists>b\<in>set [0..<length bs]. ?w' b sig (n - 1) \<noteq> ?w' b sig n))"
+        hence "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = snd \<omega> sig t"
+          unfolding worldline_inert_upd2.simps snd_conv using \<open>t' < t + dly\<close> 
+          using \<open>s' = sig\<close> \<open>t \<le> t'\<close> by auto
+        also have "... = signal_of (\<sigma> sig) \<tau> sig t"
+          unfolding assms(1) worldline_raw_def snd_conv by auto
+        also have "... = \<sigma> sig"
+          by (metis \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> signal_of_def zero_fun_def)
+        finally have "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = \<sigma> sig"
+          by auto
+        have "inf_time (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs))) sig t' = None"
+          unfolding inf_time_none_iff[THEN sym]
+        proof 
+          { fix x 
+            assume "\<not> t' < x" hence "x \<le> t'" by auto
+            hence "x < t + dly"
+              using \<open>t' < t + dly\<close> le_less_trans by blast
+            assume "x \<in> dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig)"
+            hence "purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) x sig \<noteq> None"
+              unfolding dom_def to_trans_raw_sig_def by auto
+            hence *: "combine_trans_bit \<tau>
+                    (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                         (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])) sign sig t dly x sig \<noteq> None"
+              unfolding purge_raw'_def by auto
+            have **: "length (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]) \<le> length bs - 0"
+              by auto
+              
+            have "x < t \<or> t \<le> x"
+              by auto
+            moreover
+            { assume "x < t"
+              hence "False"
+                using * unfolding combine_trans_bit_def 
+                by (simp add: \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> zero_fun_def zero_option_def) }
+            moreover
+            { assume "t \<le> x"
+              hence "x \<in> fold (\<union>)
+              (map (keys \<circ> (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) \<circ> snd)
+                (zip (map (\<lambda>n. Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) [0..<length bs])
+                  (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs])))
+              {}"
+                using * unfolding combine_trans_bit_def 
+                by (metis (full_types) \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>x < t + dly\<close> dual_order.asym zero_fun_def zero_option_def)
+              also have "... = fold (\<union>) (map keys (map (\<lambda>\<tau>. to_trans_raw_sig \<tau> sig) (map (\<lambda>n. purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> n sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! n)) (Bv (bs ! n))) [0..<length bs]))) {}"
+                unfolding map_map[THEN sym] map_snd_zip_take length_map length_upt min.idem take_all[OF **]
+                by auto
+              finally have "\<exists>xa\<in>{0..<length bs}. 
+                x \<in> keys (to_trans_raw_sig (purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> xa sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! xa)) (Bv (bs ! xa))) sig)"
+                unfolding member_fold_union2 by auto
+              then obtain b where pnone: "(purge_raw (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) t dly sig (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (Bv (bs ! b))) x sig \<noteq> None" and "b < length bs"
+                unfolding to_trans_raw_sig_def keys_def zero_option_def  using atLeastLessThan_iff by blast
+              have "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t = Bv (bs ! b) 
+                  \<or> signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) \<noteq> Bv (bs ! b)
+                  \<or> signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t \<noteq>  Bv (bs ! b) \<and> 
+                    signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) = Bv (bs ! b)"
+                by auto
+              moreover
+              { assume "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t = Bv (bs ! b) 
+                  \<or> signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) \<noteq> Bv (bs ! b)"
+                hence "False"
+                  using pnone unfolding purge_raw_def Let_def
+                  by (metis (no_types, lifting) \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) x sig \<noteq> None\<close> \<open>x < t + dly\<close> less_or_eq_imp_le linorder_neqE_nat pnone purge_raw_before_now_unchanged' purge_raw_neq_0_imp zero_fun_def zero_option_def) }
+              moreover
+              { assume "signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t \<noteq>  Bv (bs ! b) \<and> 
+                        signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) = Bv (bs ! b)"
+                hence "inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly) = Some x"
+                  using pnone unfolding purge_raw_def Let_def 
+                  by (metis \<open>\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0\<close> \<open>purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs) x sig \<noteq> None\<close> \<open>x < t + dly\<close> not_le_imp_less pnone purge_raw_before_now_unchanged' purge_raw_neq_0_imp zero_fun_def zero_option_def)
+                let ?time' = " the (inf_time (to_trans_raw_sig (to_trans_raw_bit (\<sigma> sig) \<tau> b sig)) sig (t + dly))"
+                let ?time = "(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))"
+                have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! b)"
+                  using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t \<noteq> Bv (bs ! b) \<and> signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) = Bv (bs ! b)\<close> \<open>snd \<omega> sig t = signal_of (\<sigma> sig) \<tau> sig t\<close> to_bit_signal_of'_eq by fastforce
+                have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! b)"
+                  using \<open>signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig t \<noteq> Bv (bs ! b) \<and> signal_of (Bv (case \<sigma> sig of Bv b \<Rightarrow> b | Lv sign bs \<Rightarrow> bs ! b)) (to_trans_raw_bit (\<sigma> sig) \<tau> b sig) sig (t + dly) = Bv (bs ! b)\<close>  
+                  unfolding to_bit_signal_of'_eq fun_upd_def  assms(1) worldline_raw_def snd_conv by auto
+                have *: "\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)"
+                proof (rule ccontr)
+                  assume "\<not> (\<exists>n. t < n \<and> n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))"
+                  hence imp: "\<And>n. t < n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<Longrightarrow> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! b)"
+                    by auto
+                  { fix n 
+                    assume "t \<le> n" and "n \<le> t + dly"
+                    hence "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! b)"
+                      using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! b)\<close> imp
+                    proof (induction "n - t" arbitrary: t dly)
+                      case 0 hence "n = t" by auto
+                      then show ?case 
+                        using 0 by auto
+                    next
+                      case (Suc x)
+                      hence 0: "x = n - Suc t"
+                        by auto
+                      have 2: "n \<le> Suc t + (dly - 1) "
+                        using Suc by auto
+                      hence 1: "Suc t \<le> n "
+                        using Suc by linarith
+                      hence "Suc t \<le> t + dly"
+                        using Suc by linarith
+                      hence 3: "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (Suc t) \<noteq> Bv (bs ! b)"
+                        using Suc(5-6) by auto
+                      have 4: "\<And>n. Suc t < n \<Longrightarrow> n \<le> Suc t + (dly - 1) \<Longrightarrow> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<Longrightarrow> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! b)"
+                        using Suc(6) by auto
+                      have "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! b)"
+                        using  Suc(1)[OF 0 1 2 3 4] by auto
+                      thus ?case
+                        by auto
+                    qed }
+                  hence "\<And>n. t \<le> n \<Longrightarrow> n \<le> t + dly \<Longrightarrow> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n \<noteq> Bv (bs ! b)"
+                    by auto
+                  thus False
+                    using \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! b)\<close> le_add1 by blast
+                qed
+                have "t < ?time"
+                proof -
+                  have f1: "\<forall>p n na. (n::nat) \<le> Greatest p \<or> (\<exists>n. \<not> n \<le> na \<and> p n) \<or> \<not> p n"
+                    by (metis (lifting) Greatest_le_nat)
+                  obtain nn :: nat where
+                    f2: "Bv (bs ! b) = ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig nn \<and> Bv (bs ! b) \<noteq> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (nn - 1) \<and> nn \<le> t + dly \<and> t < nn"
+                    by (metis (lifting) "*")
+                  then have "nn \<le> (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))"
+                    using f1 by fastforce
+                  then show ?thesis
+                    using f2 order.strict_trans2 by blast
+                qed
+                have "?time \<le> t + dly"
+                  by (metis (mono_tags, lifting) "*" GreatestI_ex_nat fun_upd_same)
+                hence "((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (?time - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig ?time = Bv (bs ! b)"
+                  by (smt "*" GreatestI_nat)
+                hence "?w' b sig (?time - 1) \<noteq> ?w' b sig (?time)"
+                  unfolding to_worldline_init_bit_def worldline_inert_upd_def snd_conv
+                  by (smt \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (t + dly) = Bv (bs ! b)\<close> \<open>((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig t \<noteq> Bv (bs ! b)\<close> diff_le_self order.strict_iff_order)
+                with thereisnt have False
+                  using \<open>(GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b)) \<le> t + dly\<close> \<open>b < length bs\<close> \<open>t < (GREATEST n. n \<le> t + dly \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig (n - 1) \<noteq> Bv (bs ! b) \<and> ((snd \<omega>)(sig := to_bit b \<circ> snd \<omega> sig)) sig n = Bv (bs ! b))\<close> by auto }
+              ultimately have False
+                by auto }
+            ultimately have False
+              by auto }
+          thus "\<And>x. x \<in> dom (to_trans_raw_sig (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig) \<Longrightarrow> t' < x"
+            by auto
+        qed
+        hence "signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t' = \<sigma> sig"
+          unfolding to_signal_def comp_def by auto
+        hence "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'"
+          using \<open>snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = \<sigma> sig\<close> by auto }
+      ultimately have "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = signal_of (\<sigma> sig) (purge_raw' \<tau> t dly sig (\<sigma> sig) (Lv sign bs)) sig t'"
+        by blast }
+    ultimately have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t'"
+      by (smt \<tau>'_def inr_post_raw'_def not_le signal_of_trans_post2 snd_conv worldline_raw_def) }
+  moreover
+  { assume "s' \<noteq> sig \<or> t' < t"
+    moreover
+    { assume "t' < t"
+      hence 0: " snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' =  signal_of (def s') \<theta> s' t'"
+        unfolding worldline_raw_def by auto
+      have "t' < t + dly"
+        using `t' < t` by auto
+      have "snd (worldline_raw t \<sigma> \<theta> def \<tau>) s' t' = snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t'"
+        using `t' < t`  by (simp add: worldline_raw_def)
+      hence "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t'"
+        using `t' < t`  unfolding assms(1) worldline_inert_upd2.simps snd_conv worldline_inert_upd_def fun_upd_def
+        by auto }
+    moreover
+    { assume "s' \<noteq> sig"
+      hence "snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' = snd (worldline_raw t \<sigma> \<theta> def \<tau>) s' t'"
+        unfolding worldline_inert_upd2.simps snd_conv fun_upd_def assms(1) by auto
+      also have "... = snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t'"
+      proof -
+        have "\<And>n. (to_trans_raw_sig \<tau> s') n = (to_trans_raw_sig \<tau>' s') n"
+          using `s' \<noteq> sig` unfolding \<tau>'_def inr_post_raw'_def
+          by (metis purge_raw_does_not_affect_other_sig' to_trans_raw_sig_def trans_post_raw_diff_sig)
+        hence "signal_of (\<sigma> s') \<tau> s' t' = signal_of (\<sigma> s') \<tau>'  s' t'"
+          by (meson signal_of_equal_when_trans_sig_equal_upto)
+        thus ?thesis
+          unfolding worldline_raw_def by auto
+      qed
+      finally have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' "
+        by auto }
+    ultimately have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t'"
+      by auto }
+  ultimately show "snd (worldline_raw t \<sigma> \<theta> def \<tau>') s' t' = snd (worldline_inert_upd2 \<omega> sig t dly (Lv sign bs)) s' t' "
+    by blast
+qed (simp add: assms(1) worldline_inert_upd_def worldline_raw_def)
+
+lemma lift_inr_post_worldline_upd_comb:
+  assumes "\<omega> = worldline_raw t \<sigma> \<theta> def \<tau>"
+  assumes "context_invariant t \<sigma> \<gamma> \<theta> def \<tau>"
+  assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+  assumes "0 < dly"
+  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
+  assumes "All (non_stuttering (to_trans_raw_sig \<theta>) def)"
+  assumes "beval_world_raw \<omega> t exp v"
+  shows "worldline_raw t \<sigma> \<theta> def \<tau>' = worldline_inert_upd2 \<omega> sig t dly v"
+  using lift_inr_post_worldline_upd2 lift_inr_post_worldline_upd
+  by (metis assms(1) assms(2) assms(3) assms(4) assms(5) assms(6) assms(7) val.exhaust)
 
 lemma Bassign_inert_sound:
   assumes "0 < dly"
   shows "\<turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q} \<Longrightarrow> \<Turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q}"
 proof -
   assume "\<turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q}"
-  hence imp: "\<forall>w. P w \<longrightarrow> (\<exists>x. beval_world_raw w t exp x \<and> Q w[sig, t, dly := x])"
+  hence imp: "\<forall>w. P w \<longrightarrow> (\<exists>x. beval_world_raw w t exp x \<and> Q (worldline_inert_upd2 w sig t dly x))"
     by (auto dest!: Bassign_inertE)
   { fix \<sigma> :: "'a state"
     fix \<tau> \<tau>' \<theta> :: "'a trans_raw"
@@ -3209,15 +7444,17 @@ proof -
     assume ex: "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <Bassign_inert sig exp dly, \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
     obtain x where "beval_world_raw w t exp x"
       using \<open>P w\<close> imp by metis
-    have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') = snd (w[sig, t, dly := x])"
-      using lift_inr_post_worldline_upd[OF `w = worldline_raw t \<sigma> \<theta> def \<tau>` c ex assms] \<open>All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)\<close>
+    have "snd (worldline_raw t \<sigma> \<theta> def \<tau>') = snd (worldline_inert_upd2 w sig t dly x)"
+      using lift_inr_post_worldline_upd_comb[OF `w = worldline_raw t \<sigma> \<theta> def \<tau>` c ex assms] \<open>All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)\<close>
       \<open>beval_world_raw w t exp x\<close> \<open>All (non_stuttering (to_trans_raw_sig \<theta>) def)\<close> by auto
-    with imp and `P w` have "Q(w[sig, t, dly := x])"
+    with imp and `P w` have "Q(worldline_inert_upd2 w sig t dly x)"
       using \<open>beval_world_raw w t exp x\<close> beval_world_raw_deterministic by metis
     assume "w' = worldline_raw t \<sigma> \<theta> def \<tau>'"
     hence "Q w'"
-      using `Q(w[sig, t, dly := x])` `snd (worldline_raw t \<sigma> \<theta> def \<tau>') = snd (w[sig, t, dly:= x])`
-      by (simp add: \<open>w = worldline_raw t \<sigma> \<theta> def \<tau>\<close> worldline_inert_upd_def worldline_raw_def) }
+      using `Q(worldline_inert_upd2 w sig t dly x)` `snd (worldline_raw t \<sigma> \<theta> def \<tau>') = snd (worldline_inert_upd2 w sig t dly x)`
+      by (metis (full_types) \<open>All (non_stuttering (to_trans_raw_sig \<tau>) \<sigma>)\<close> \<open>All (non_stuttering
+      (to_trans_raw_sig \<theta>) def)\<close> \<open>beval_world_raw w t exp x\<close> \<open>w = worldline_raw t \<sigma> \<theta> def \<tau>\<close> assms c
+      ex lift_inr_post_worldline_upd_comb) }
   thus " \<Turnstile>\<^sub>t {P} Bassign_inert sig exp dly {Q}"
     unfolding seq_hoare_valid_def  by meson
 qed

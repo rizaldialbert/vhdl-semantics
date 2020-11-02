@@ -32,9 +32,9 @@ lemma potential_tyenv:
 proof (rule seq_wt_cases(4)[OF assms])
   assume "bexp_wt \<Gamma> (Bindex IN 3) (\<Gamma> OUT)"
   then obtain ki len where "bexp_wt \<Gamma> (Bsig IN) (Lty ki len) \<and> 3 < len \<and> \<Gamma> OUT = Bty"
-    by (meson bexp_wt_cases(10))
+    by (meson bexp_wt_cases_slice(3))
   hence "\<Gamma> IN = Lty ki len" and "\<Gamma> OUT = Bty" and "3 < len"
-    by (metis bexp_wt_cases(9))+
+    by (metis bexp_wt_cases_slice(2))+
   thus ?thesis
     by blast
 qed
