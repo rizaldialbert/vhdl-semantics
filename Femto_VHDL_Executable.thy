@@ -1459,7 +1459,7 @@ qed
 
 lemma functional_simulate_fin_sound:
   assumes "simulate_ss maxtime def cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (lookup \<tau>', t', \<sigma>', \<gamma>', lookup \<theta>')"
-  assumes "\<forall>n. (min maxtime t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
+  assumes "\<forall>n. (min maxtime t) < n \<longrightarrow> lookup \<theta> n = 0"
   assumes "\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0"
   assumes "functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> = beh"
   assumes "maxtime = t'"
@@ -1489,7 +1489,7 @@ qed
 
 lemma functional_simulate_eq_simulate_fin_ind:
   assumes "simulate_ss maxtime def cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (lookup \<tau>', t', \<sigma>', \<gamma>', lookup \<theta>')"
-  assumes "\<forall>n. (min maxtime t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
+  assumes "\<forall>n. (min maxtime t) < n \<longrightarrow> lookup \<theta> n = 0"
   assumes "\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0"
   assumes "maxtime = t'"
   shows "simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> beh \<longleftrightarrow> (functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> = beh)"
@@ -1497,7 +1497,7 @@ lemma functional_simulate_eq_simulate_fin_ind:
 
 lemma functional_simulate_eq_b_simulate_fin:
   assumes "simulate_ss maxtime def cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (lookup \<tau>', t', \<sigma>', \<gamma>', lookup \<theta>')"
-  assumes "\<forall>n. (min maxtime t) \<le> n \<longrightarrow> lookup \<theta> n = 0"
+  assumes "\<forall>n. (min maxtime t) < n \<longrightarrow> lookup \<theta> n = 0"
   assumes "\<forall>n. n < t \<longrightarrow> lookup \<tau> n = 0"
   assumes "maxtime = t'"
   shows "simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> beh \<longleftrightarrow> (functional_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> = beh)"
@@ -1547,21 +1547,20 @@ proof -
   have "0 < t \<or> t = 0" by auto
   moreover
   { assume "0 < t"
-    have "\<theta> = Femto_VHDL_raw.add_to_beh def 0 0 t"
-      using assms(2) by (auto simp add: Let_def)
+    have "\<theta> = 0(0 := Some \<circ> def)"
+      using assms(2) unfolding update_config_raw.simps by auto
     also have "... = 0(0:=Some o def)"
       unfolding Femto_VHDL_raw.add_to_beh_def using `0 < t` by auto
-    finally have *: "\<forall>n\<ge>(min maxtime t). \<theta> n = 0"
-      using `0 < t` `0 < maxtime` by (auto simp add: zero_fun_def zero_option_def)
+    have *: "\<forall>n>(min maxtime t). \<theta> n = 0"
+      using `0 < t` `0 < maxtime` 
+      by (simp add: calculation zero_fun_def) 
     hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<theta>', \<tau>')"
       using small_step_implies_big_step[OF assms(3)] look' \<open>maxtime = t'\<close> by auto }
   moreover
   { assume "t = 0"
-    have "\<theta> = Femto_VHDL_raw.add_to_beh def 0 0 t"
+    have "\<theta> = 0(0 := Some \<circ> def)"
       using assms(2) by (auto simp add: Let_def)
-    also have "... = 0"
-      unfolding Femto_VHDL_raw.add_to_beh_def using `t = 0` by auto
-    finally have *: "\<forall>n\<ge>(min maxtime t). \<theta> n = 0"
+    hence *: "\<forall>n>(min maxtime t). \<theta> n = 0"
       by (auto simp add: zero_fun_def zero_option_def)
     hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<theta>', \<tau>')"
       using small_step_implies_big_step[OF assms(3)] look' \<open>maxtime = t'\<close> by auto }
@@ -1571,7 +1570,7 @@ proof -
     using b_simulate.intros[OF assms(1)] assms(2) by (auto simp add: Let_def)
   have "simulate maxtime def cs ctrans (t', \<sigma>', Abs_poly_mapping \<theta>', Abs_poly_mapping \<tau>')"
   proof -
-    have "\<theta> = Femto_VHDL_raw.add_to_beh def 0 0 t"
+    have "\<theta> = 0(0:=Some o def)"
       using assms(2) by (auto simp add: Let_def)
     hence "finite {x. \<theta> x \<noteq> 0}"
       unfolding sym[OF eventually_cofinite] Femto_VHDL_raw.add_to_beh_def

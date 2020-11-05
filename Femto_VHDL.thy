@@ -1096,7 +1096,7 @@ inductive simulate_fin_ind :: "nat \<Rightarrow> nat \<Rightarrow> 'signal  stat
              (next_time t \<tau>')
                 (next_state t \<tau>' \<sigma>)
                     (next_event t \<tau>' \<sigma>)
-                        (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) def cs (rem_curr_trans (next_time t \<tau>') \<tau>') res
+                        (Poly_Mapping.update t (Some o \<sigma>) \<theta>) def cs (rem_curr_trans (next_time t \<tau>') \<tau>') res
    \<Longrightarrow> simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> res"
 
   \<comment> \<open>Business as usual: not quiesced yet and there is still time --- case 2\<close>
@@ -1109,7 +1109,7 @@ inductive simulate_fin_ind :: "nat \<Rightarrow> nat \<Rightarrow> 'signal  stat
   \<comment> \<open>The simulation has quiesced and there is still time\<close>
 | "    (t < maxtime)
    \<Longrightarrow> (quiet \<tau> \<gamma>)
-   \<Longrightarrow> simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (maxtime, \<sigma>, Poly_Mapping.update t (Some o \<sigma>) \<theta>, 0)"
+   \<Longrightarrow> simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (maxtime, \<sigma>, \<theta>, 0)"
 
   \<comment> \<open>Time is up\<close>
 | "  t = maxtime
@@ -1163,21 +1163,20 @@ proof
       note fin_hist = `finite {x. \<theta> x \<noteq> 0}`
 
       \<comment> \<open>obtaining inductive hypothesis\<close>
-      have "finite {x. Femto_VHDL_raw.add_to_beh \<sigma> \<theta> t (Femto_VHDL_raw.next_time t \<tau>') x \<noteq> 0}"
-        using add_to_beh_almost_all_zero[OF fin_hist] by auto
+      have "finite {x. (\<theta>(t:=Some o \<sigma>)) x \<noteq> 0}"
+        using add_to_beh_almost_all_zero[OF fin_hist] 
+      proof -
+        show ?thesis
+          by (metis "1.prems"(3) eventually_cofinite upd_eventually_cofinite)
+      qed
       moreover have "finite {x. \<tau>' x \<noteq> 0}"
         using b_conc_exec_almost_all_zero[OF `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` fin_trans fin_hist]
         by auto
       moreover hence "finite {x. (\<tau>'(Femto_VHDL_raw.next_time t \<tau>' := 0)) x \<noteq> 0}"
         using rem_next_time_almost_all_zero by metis
-      ultimately have IH: "simulate_fin_ind maxtime (Femto_VHDL_raw.next_time t \<tau>')
-                                                    (Femto_VHDL_raw.next_state t \<tau>' \<sigma>)
-                                                    (Femto_VHDL_raw.next_event t \<tau>' \<sigma>)
-                           (Abs_poly_mapping (Femto_VHDL_raw.add_to_beh \<sigma> \<theta> t (Femto_VHDL_raw.next_time t \<tau>')))
-                                                     def cs
-                           (Abs_poly_mapping (\<tau>'(Femto_VHDL_raw.next_time t \<tau>' := 0)))
-              (get_time res, get_state res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
-        using 1(6)[OF fin_res1 fin_res2] by metis 
+      ultimately have IH: "simulate_fin_ind maxtime (Femto_VHDL_raw.next_time t \<tau>') (Femto_VHDL_raw.next_state t \<tau>' \<sigma>) (Femto_VHDL_raw.next_event t \<tau>' \<sigma>) (Abs_poly_mapping (\<theta>(t := Some \<circ> \<sigma>))) def cs
+     (Abs_poly_mapping (\<tau>'(Femto_VHDL_raw.next_time t \<tau>' := 0))) (get_time res, get_state res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
+        using 1(6)[OF fin_res1 fin_res2] by blast 
 
       \<comment> \<open>continuing the proof\<close>
       have nt: "Femto_VHDL_raw.next_time t \<tau>' = next_time t q\<tau>'" and
@@ -1195,13 +1194,14 @@ proof
         using `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` qt_def
         by (metis \<open>lookup (Abs_poly_mapping \<tau>) = \<tau>\<close> \<open>lookup (Abs_poly_mapping \<theta>) = \<theta>\<close> b_conc_exec_deterministic conc_exec.rep_eq)+
       have sim: "simulate_fin_ind maxtime (next_time t q\<tau>') (next_state t q\<tau>' \<sigma>) (next_event t q\<tau>' \<sigma>)
-                (add_to_beh \<sigma> ?\<theta> t (next_time t q\<tau>'))  def cs  (rem_curr_trans (next_time t q\<tau>') q\<tau>')
+                (Abs_poly_mapping (\<theta>(t := Some \<circ> \<sigma>)))   def cs  (rem_curr_trans (next_time t q\<tau>') q\<tau>')
               (get_time res, get_state res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
-        using IH by (metis lookup_inverse nt ns ne nb nt ntr)
+        using IH ntr unfolding nt ns ne by simp
       show ?case
-        using simulate_fin_ind.intros(1)[OF `t < maxtime` `\<not> quiet ?\<tau> \<gamma>` _ _ sim] qt_def 
+        using simulate_fin_ind.intros(1)[OF `t < maxtime` `\<not> quiet ?\<tau> \<gamma>` _ _] sim qt_def 
         \<open>Femto_VHDL_raw.next_time t \<tau>' \<le> maxtime\<close>
-        unfolding conc_exec_eq_conc_exec_ind  using nt by linarith
+        unfolding conc_exec_eq_conc_exec_ind  using nt 
+        by (smt Femto_VHDL_raw.add_to_beh_def add_to_beh.rep_eq lookup_inverse nb update.rep_eq)
     next
       case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
       hence "\<not> quiet (Abs_poly_mapping \<tau>) \<gamma>"
@@ -1258,15 +1258,12 @@ proof
       hence "Abs_poly_mapping (\<theta>(t := Some \<circ> \<sigma>)) = Poly_Mapping.update t (Some \<circ> \<sigma>) (Abs_poly_mapping \<theta>)"
         by (metis lookup_inverse)
       thus ?case
-        using simulate_fin_ind.intros(3)[OF 3(1) *]
+        using simulate_fin_ind.intros(3)[OF 3(1) *] 
       proof -
-        have "lookup (Abs_poly_mapping (0::nat \<Rightarrow> 'a \<Rightarrow> val option)) = 0"
-          using "3.prems"(2) by force
+        have "Abs_poly_mapping (0::nat \<Rightarrow> 'a \<Rightarrow> val option) = empty_trans"
+          by (simp add: poly_mapping_eqI zero_fun_def)
         then show ?thesis
-          by (metis (no_types) \<open>Abs_poly_mapping (\<theta>(t := Some \<circ> \<sigma>)) = Poly_Mapping.update t (Some \<circ>
-          \<sigma>) (Abs_poly_mapping \<theta>)\<close> \<open>\<And>def cs \<theta> \<sigma>. simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs
-          (Abs_poly_mapping \<tau>) (maxtime, \<sigma>, Poly_Mapping.update t (Some \<circ> \<sigma>) \<theta>, empty_trans)\<close>
-          comp_apply fst_conv lookup_zero poly_mapping_eqI snd_conv zero_fun_def)
+          by (simp add: \<open>\<And>def cs \<theta> \<sigma>. simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs (Abs_poly_mapping \<tau>) (maxtime, \<sigma>, \<theta>, empty_trans)\<close>)
       qed
     next
       case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
@@ -1316,7 +1313,7 @@ inductive simulate_ind :: "nat \<Rightarrow> 'a state \<Rightarrow> 'a conc_stmt
    \<Longrightarrow>  next_time  0 \<tau>' = t'
    \<Longrightarrow>  next_state 0 \<tau>' def = \<sigma>'
    \<Longrightarrow>  next_event 0 \<tau>' def = \<gamma>'
-   \<Longrightarrow>  add_to_beh def 0 0 t' = beh'
+   \<Longrightarrow>  Poly_Mapping.update 0 (Some o def) 0 = beh'
    \<Longrightarrow>  simulate_fin_ind maxtime t' \<sigma>' \<gamma>' beh' def cs (rem_curr_trans t' \<tau>') res
    \<Longrightarrow>  simulate_ind  maxtime def cs \<tau> res"
 
@@ -1371,11 +1368,11 @@ proof
         lookup_Abs_poly_mapping[OF fin_next_trans] by auto
 
       \<comment> \<open>obtaining the 5th premise in the proof rule of @{term "simulate_ind"}\<close>
-      have "lookup (add_to_beh def 0 0 t') = beh'" (is "?lhs0 = ?rhs0")
-        using 1(5) by (transfer', auto simp add: zero_fun_def)
+      have "lookup (Poly_Mapping.update 0 (Some o def) 0) = beh'" (is "?lhs0 = ?rhs0")
+        using 1(5)  by (transfer', auto simp add: zero_fun_def)
       hence "Abs_poly_mapping ?lhs0 = Abs_poly_mapping ?rhs0"
         by auto
-      hence prem5: "add_to_beh def 0 0 t' = Abs_poly_mapping beh'"
+      hence prem5: "Poly_Mapping.update 0 (Some o def) 0 = Abs_poly_mapping beh'"
         unfolding lookup_inverse by auto
 
       \<comment> \<open>obtaining the 6th premise in the proof rule of @{term "simulate_ind"}\<close>
@@ -1419,7 +1416,7 @@ next
       using 1(3) by transfer'
     have prem4: "Femto_VHDL_raw.next_event 0 (lookup \<tau>') def = \<gamma>'"
       using 1(4) by transfer'
-    have prem5: "Femto_VHDL_raw.add_to_beh def 0 0 t'  = (lookup beh')"
+    have prem5: "0(0:=Some o def)  = (lookup beh')"
       using 1(5) by (transfer', auto simp add: zero_fun_def)
     have prem6: "maxtime, t', \<sigma>', \<gamma>', (lookup beh'), def \<turnstile> <cs, (lookup \<tau>')(t' := 0)> \<leadsto> (get_time res, get_state res, lookup (get_beh res), lookup (get_trans res))"
       using 1(6) unfolding sym[OF simulate_fin_eq_simulate_fin_ind] rem_curr_trans_def
@@ -1447,13 +1444,13 @@ proof -
   assume "\<forall>\<^sub>\<infinity>x. \<tau>' x = 0"
   obtain t' \<sigma>' \<gamma>' \<theta>' where "update_config_raw config \<tau>' = (t', \<sigma>', \<gamma>', \<theta>')" and
     "t' = Femto_VHDL_raw.next_time t \<tau>'" and "\<sigma>' = Femto_VHDL_raw.next_state t \<tau>' \<sigma>" and
-    "\<gamma>' = Femto_VHDL_raw.next_event t \<tau>' \<sigma>" and "\<theta>' = Femto_VHDL_raw.add_to_beh \<sigma> \<theta> t t'"
+    "\<gamma>' = Femto_VHDL_raw.next_event t \<tau>' \<sigma>" and "\<theta>' = \<theta>(t:=Some o \<sigma>)"
     using `config = (t, \<sigma>, \<gamma>, \<theta>)`  by (metis update_config_raw.simps)
   have "\<forall>\<^sub>\<infinity>x. Femto_VHDL_raw.add_to_beh \<sigma> \<theta> t t' x = 0"
     unfolding Femto_VHDL_raw.add_to_beh_def  using `\<forall>\<^sub>\<infinity>x. \<theta> x = 0`
     by (metis (mono_tags) upd_eventually_cofinite)
   thus "pred_prod top (pred_prod top (pred_prod top (\<lambda>f. \<forall>\<^sub>\<infinity>x. f x = 0))) (update_config_raw config \<tau>')"
-    by (simp add: \<open>\<theta>' = Femto_VHDL_raw.add_to_beh \<sigma> \<theta> t t'\<close> \<open>update_config_raw config \<tau>' = (t', \<sigma>', \<gamma>', \<theta>')\<close>)
+    by (metis \<open>\<forall>\<^sub>\<infinity>x. \<theta> x = 0\<close> \<open>\<theta>' = \<theta>(t := Some \<circ> \<sigma>)\<close> \<open>update_config_raw config \<tau>' = (t', \<sigma>', \<gamma>', \<theta>')\<close> pred_prod_inject top1I upd_eventually_cofinite)
 qed
 
 lift_definition simulate_fin_ss :: "nat \<Rightarrow> 'signal state \<Rightarrow> 'signal conc_stmt \<Rightarrow>
