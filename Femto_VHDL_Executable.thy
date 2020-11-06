@@ -1471,16 +1471,16 @@ proof -
     by auto
   obtain \<tau>' \<sigma>' \<gamma>' \<theta>' where ss: "simulate_ss maxtime def cs (lookup \<tau>, t, \<sigma>, \<gamma>, lookup \<theta>) (\<tau>', t', \<sigma>', \<gamma>', \<theta>')"
     using assms(1) by auto
-  have **: "b_simulate_fin maxtime t \<sigma> \<gamma> (lookup \<theta>) def cs (lookup \<tau>)  (t', \<sigma>', \<theta>', \<tau>')"
+  have **: "b_simulate_fin maxtime t \<sigma> \<gamma> (lookup \<theta>) def cs (lookup \<tau>)  (t', \<sigma>', \<gamma>', \<theta>', \<tau>')"
     using small_step_implies_big_step[OF ss assms(2) assms(3)] \<open>maxtime = t'\<close> by auto 
   have fin: "finite {x. \<theta>' x \<noteq> 0}"
     using b_simulate_fin_almost_all_zero[OF **] by auto
   have fin2: "finite {x. \<tau>' x \<noteq> 0}"
     using b_simulate_fin_almost_all_zero2[OF **]  by simp
-  have ***: "simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (t', \<sigma>', Abs_poly_mapping \<theta>', Abs_poly_mapping \<tau>')"
+  have ***: "simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (t', \<sigma>', \<gamma>', Abs_poly_mapping \<theta>', Abs_poly_mapping \<tau>')"
     using ** lookup_Abs_poly_mapping[OF fin] lookup_Abs_poly_mapping[OF fin2]
     unfolding simulate_fin.rep_eq  by simp
-  hence "\<And>beh. simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> beh \<Longrightarrow> beh = (t', \<sigma>', Abs_poly_mapping \<theta>', Abs_poly_mapping \<tau>')"
+  hence "\<And>beh. simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> beh \<Longrightarrow> beh = (t', \<sigma>', \<gamma>', Abs_poly_mapping \<theta>', Abs_poly_mapping \<tau>')"
     using simulate_fin_deterministic by blast
   with * show "simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> beh"
     using theI[where P="simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau>"] ***
@@ -1554,7 +1554,7 @@ proof -
     have *: "\<forall>n>(min maxtime t). \<theta> n = 0"
       using `0 < t` `0 < maxtime` 
       by (simp add: calculation zero_fun_def) 
-    hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<theta>', \<tau>')"
+    hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<gamma>', \<theta>', \<tau>')"
       using small_step_implies_big_step[OF assms(3)] look' \<open>maxtime = t'\<close> by auto }
   moreover
   { assume "t = 0"
@@ -1562,13 +1562,13 @@ proof -
       using assms(2) by (auto simp add: Let_def)
     hence *: "\<forall>n>(min maxtime t). \<theta> n = 0"
       by (auto simp add: zero_fun_def zero_option_def)
-    hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<theta>', \<tau>')"
+    hence **: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<gamma>', \<theta>', \<tau>')"
       using small_step_implies_big_step[OF assms(3)] look' \<open>maxtime = t'\<close> by auto }
-  ultimately have bsf: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<theta>', \<tau>')"
+  ultimately have bsf: "b_simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs (\<tau>(t:=0)) (t', \<sigma>', \<gamma>', \<theta>', \<tau>')"
     by auto
-  hence bs: "b_simulate maxtime def cs (lookup ctrans) (t', \<sigma>', \<theta>', \<tau>')"
+  hence bs: "b_simulate maxtime def cs (lookup ctrans) (t', \<sigma>', \<gamma>', \<theta>', \<tau>')"
     using b_simulate.intros[OF assms(1)] assms(2) by (auto simp add: Let_def)
-  have "simulate maxtime def cs ctrans (t', \<sigma>', Abs_poly_mapping \<theta>', Abs_poly_mapping \<tau>')"
+  have "simulate maxtime def cs ctrans (t', \<sigma>', \<gamma>', Abs_poly_mapping \<theta>', Abs_poly_mapping \<tau>')"
   proof -
     have "\<theta> = 0(0:=Some o def)"
       using assms(2) by (auto simp add: Let_def)
@@ -1595,7 +1595,7 @@ proof -
     ultimately show ?thesis
       unfolding simulate.rep_eq using bs lookup_Abs_poly_mapping by simp
   qed
-  hence "simulate_ind maxtime def cs ctrans (t', \<sigma>', Abs_poly_mapping \<theta>', Abs_poly_mapping \<tau>')"
+  hence "simulate_ind maxtime def cs ctrans (t', \<sigma>', \<gamma>', Abs_poly_mapping \<theta>', Abs_poly_mapping \<tau>')"
     using simulate_eq_simulate_ind by blast
   thus "simulate_ind maxtime def cs ctrans beh"
     unfolding the_beh[THEN sym]  using assms(4) functional_simulate_complete the_beh

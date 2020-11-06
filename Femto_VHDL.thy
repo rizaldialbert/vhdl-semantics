@@ -1079,11 +1079,11 @@ lemma [code]:
   by (transfer', auto simp add: Femto_VHDL_raw.add_to_beh_def)
 
 lift_definition simulate_fin ::  "nat \<Rightarrow> nat \<Rightarrow> 'a  state \<Rightarrow> 'a event \<Rightarrow> 'a transaction \<Rightarrow> 'a state \<Rightarrow>
-                                            'a conc_stmt \<Rightarrow> 'a transaction \<Rightarrow> nat \<times> 'a state \<times> 'a transaction \<times> 'a transaction \<Rightarrow> bool"
+                                            'a conc_stmt \<Rightarrow> 'a transaction \<Rightarrow> nat \<times> 'a state \<times> 'a event \<times>'a transaction \<times> 'a transaction \<Rightarrow> bool"
   is b_simulate_fin .
 
 inductive simulate_fin_ind :: "nat \<Rightarrow> nat \<Rightarrow> 'signal  state \<Rightarrow> 'signal event \<Rightarrow> 'signal transaction \<Rightarrow> 'signal state \<Rightarrow>
-                            'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> nat \<times> 'signal state \<times> 'signal transaction \<times> 'signal transaction \<Rightarrow> bool"
+                            'signal conc_stmt \<Rightarrow> 'signal transaction \<Rightarrow> nat \<times> 'signal state \<times> 'signal event \<times> 'signal transaction \<times> 'signal transaction \<Rightarrow> bool"
   where
 
   \<comment> \<open>Business as usual: not quiesced yet and there is still time\<close>
@@ -1104,16 +1104,16 @@ inductive simulate_fin_ind :: "nat \<Rightarrow> nat \<Rightarrow> 'signal  stat
    \<Longrightarrow> (\<not> quiet \<tau> \<gamma>)
    \<Longrightarrow> (conc_exec_ind t \<sigma> \<gamma> \<theta> def cs \<tau> \<tau>')
    \<Longrightarrow> (maxtime < next_time t \<tau>')
-   \<Longrightarrow> simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (maxtime, \<sigma>, Poly_Mapping.update t (Some o \<sigma>) \<theta>, \<tau>')"
+   \<Longrightarrow> simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (maxtime, \<sigma>, {}, Poly_Mapping.update t (Some o \<sigma>) \<theta>, \<tau>')"
 
   \<comment> \<open>The simulation has quiesced and there is still time\<close>
 | "    (t < maxtime)
    \<Longrightarrow> (quiet \<tau> \<gamma>)
-   \<Longrightarrow> simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (maxtime, \<sigma>, \<theta>, 0)"
+   \<Longrightarrow> simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (maxtime, \<sigma>, \<gamma>, \<theta>, 0)"
 
   \<comment> \<open>Time is up\<close>
 | "  t = maxtime
-   \<Longrightarrow> simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (maxtime, \<sigma>, \<theta>, \<tau>)"
+   \<Longrightarrow> simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> (maxtime, \<sigma>, \<gamma>, \<theta>, \<tau>)"
 
 thm b_simulate_fin_deterministic
 
@@ -1131,20 +1131,22 @@ lemma simulate_fin_eq_simulate_fin_ind:
 proof
   assume "simulate_fin maxtime t \<sigma> \<gamma> \<theta> def cs \<tau> res"
   hence "simulate_fin_ind maxtime t \<sigma> \<gamma> (Abs_poly_mapping (lookup \<theta>)) def cs (Abs_poly_mapping (lookup \<tau>))
-         (get_time res, get_state res, (Abs_poly_mapping (lookup (get_beh res))), (Abs_poly_mapping (lookup (get_trans res))))"
+         (get_time res, get_state res, get_event res, (Abs_poly_mapping (lookup (get_beh res))), (Abs_poly_mapping (lookup (get_trans res))))"
   proof  transfer
     fix maxtime t :: nat
     fix \<sigma> :: "'a state "
     fix \<gamma> def cs
     fix \<tau> \<theta> :: "'a trans_raw"
-    fix res :: "nat \<times> 'a state \<times> 'a trans_raw \<times> 'a trans_raw"
+    fix res :: "nat \<times> 'a state \<times> 'a event \<times>'a trans_raw \<times> 'a trans_raw"
     assume fin_trans: "finite {x. \<tau> x \<noteq> 0}"
     assume fin_hist:  "finite {x. \<theta> x \<noteq> 0}"
-    assume fin_res: "pred_prod top (pred_prod (pred_fun top top) (pred_prod (\<lambda>f. finite {x. f x \<noteq> 0}) (\<lambda>f. finite {x. f x \<noteq> 0}))) res"
+    assume fin_res: "pred_prod top
+        (pred_prod (pred_fun top top) (pred_prod (\<lambda>A. Ball A top) (pred_prod (\<lambda>f. finite {x. f x \<noteq> 0}) (\<lambda>f. finite {x. f x \<noteq> 0}))))
+        res"
     hence fin_res1: "finite {x. get_beh res x \<noteq> 0}" and fin_res2: "finite {x. get_trans res x \<noteq> 0}"
-      by (metis (no_types, lifting) Collect_cong comp_eq_dest_lhs pred_prod_beta)+
+      by (simp add: pred_prod_beta)+
     assume "maxtime, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
-    thus "simulate_fin_ind maxtime t \<sigma> \<gamma> (Abs_poly_mapping \<theta>) def cs (Abs_poly_mapping \<tau>) (get_time res, get_state res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
+    thus "simulate_fin_ind maxtime t \<sigma> \<gamma> (Abs_poly_mapping \<theta>) def cs (Abs_poly_mapping \<tau>) (get_time res, get_state res, get_event res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
       using fin_res1 fin_res2 fin_hist fin_trans
     proof (induction rule:b_simulate_fin.induct)
       case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
@@ -1174,8 +1176,9 @@ proof
         by auto
       moreover hence "finite {x. (\<tau>'(Femto_VHDL_raw.next_time t \<tau>' := 0)) x \<noteq> 0}"
         using rem_next_time_almost_all_zero by metis
-      ultimately have IH: "simulate_fin_ind maxtime (Femto_VHDL_raw.next_time t \<tau>') (Femto_VHDL_raw.next_state t \<tau>' \<sigma>) (Femto_VHDL_raw.next_event t \<tau>' \<sigma>) (Abs_poly_mapping (\<theta>(t := Some \<circ> \<sigma>))) def cs
-     (Abs_poly_mapping (\<tau>'(Femto_VHDL_raw.next_time t \<tau>' := 0))) (get_time res, get_state res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
+      ultimately have IH: "simulate_fin_ind maxtime (Femto_VHDL_raw.next_time t \<tau>') (Femto_VHDL_raw.next_state t \<tau>' \<sigma>) (Femto_VHDL_raw.next_event t \<tau>' \<sigma>)
+ (Abs_poly_mapping (\<theta>(t := Some \<circ> \<sigma>))) def cs (Abs_poly_mapping (\<tau>'(Femto_VHDL_raw.next_time t \<tau>' := 0)))
+ (get_time res, get_state res, get_beh' res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
         using 1(6)[OF fin_res1 fin_res2] by blast 
 
       \<comment> \<open>continuing the proof\<close>
@@ -1195,7 +1198,7 @@ proof
         by (metis \<open>lookup (Abs_poly_mapping \<tau>) = \<tau>\<close> \<open>lookup (Abs_poly_mapping \<theta>) = \<theta>\<close> b_conc_exec_deterministic conc_exec.rep_eq)+
       have sim: "simulate_fin_ind maxtime (next_time t q\<tau>') (next_state t q\<tau>' \<sigma>) (next_event t q\<tau>' \<sigma>)
                 (Abs_poly_mapping (\<theta>(t := Some \<circ> \<sigma>)))   def cs  (rem_curr_trans (next_time t q\<tau>') q\<tau>')
-              (get_time res, get_state res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
+              (get_time res, get_state res, get_event res,  Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
         using IH ntr unfolding nt ns ne by simp
       show ?case
         using simulate_fin_ind.intros(1)[OF `t < maxtime` `\<not> quiet ?\<tau> \<gamma>` _ _] sim qt_def 
@@ -1263,7 +1266,7 @@ proof
         have "Abs_poly_mapping (0::nat \<Rightarrow> 'a \<Rightarrow> val option) = empty_trans"
           by (simp add: poly_mapping_eqI zero_fun_def)
         then show ?thesis
-          by (simp add: \<open>\<And>def cs \<theta> \<sigma>. simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs (Abs_poly_mapping \<tau>) (maxtime, \<sigma>, \<theta>, empty_trans)\<close>)
+          using \<open>\<And>def cs \<theta> \<sigma>. simulate_fin_ind maxtime t \<sigma> \<gamma> \<theta> def cs (Abs_poly_mapping \<tau>) (maxtime, \<sigma>, \<gamma>, \<theta>, empty_trans)\<close> by auto
       qed
     next
       case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
@@ -1305,10 +1308,10 @@ lemma simulate_fin_ind_deterministic:
   using assms unfolding sym[OF simulate_fin_eq_simulate_fin_ind]
   by (auto simp add: simulate_fin_deterministic)
 
-lift_definition simulate :: "nat \<Rightarrow> 'a state \<Rightarrow> 'a conc_stmt \<Rightarrow> 'a transaction \<Rightarrow> nat \<times> 'a state \<times> 'a transaction \<times> 'a transaction \<Rightarrow> bool"
+lift_definition simulate :: "nat \<Rightarrow> 'a state \<Rightarrow> 'a conc_stmt \<Rightarrow> 'a transaction \<Rightarrow> nat \<times> 'a state \<times> 'a event \<times> 'a transaction \<times> 'a transaction \<Rightarrow> bool"
   is b_simulate .
 
-inductive simulate_ind :: "nat \<Rightarrow> 'a state \<Rightarrow> 'a conc_stmt \<Rightarrow> 'a transaction \<Rightarrow>  nat \<times> 'a state \<times> 'a transaction \<times> 'a transaction \<Rightarrow> bool" where
+inductive simulate_ind :: "nat \<Rightarrow> 'a state \<Rightarrow> 'a conc_stmt \<Rightarrow> 'a transaction \<Rightarrow>  nat \<times> 'a state \<times> 'a event \<times> 'a transaction \<times> 'a transaction \<Rightarrow> bool" where
   "     init'_ind 0 def {} 0 def cs \<tau> \<tau>'
    \<Longrightarrow>  next_time  0 \<tau>' = t'
    \<Longrightarrow>  next_state 0 \<tau>' def = \<sigma>'
@@ -1322,20 +1325,22 @@ lemma simulate_eq_simulate_ind:
 proof
   assume "simulate maxtime def cs \<tau> res"
   hence "simulate_ind maxtime def cs (Abs_poly_mapping (lookup \<tau>))
-         (get_time res, get_state res, (Abs_poly_mapping (lookup (get_beh res))), (Abs_poly_mapping (lookup (get_trans res))))"
+         (get_time res, get_state res, get_event res, (Abs_poly_mapping (lookup (get_beh res))), (Abs_poly_mapping (lookup (get_trans res))))"
   proof transfer
     fix maxtime :: nat
     fix def
     fix \<tau> :: "'a trans_raw"
-    fix res :: "nat \<times> 'a state \<times> 'a trans_raw \<times> 'a trans_raw"
+    fix res :: "nat \<times> 'a state \<times> 'a event \<times>'a trans_raw \<times> 'a trans_raw"
     fix cs :: "'a conc_stmt"
     assume fin_trans: "finite {x. \<tau> x \<noteq> 0}"
-    assume fin_hist: "pred_prod top (pred_prod (pred_fun top top) (pred_prod (\<lambda>f. finite {x. f x \<noteq> 0}) (\<lambda>f. finite {x. f x \<noteq> 0}))) res"
+    assume fin_hist: "pred_prod top
+        (pred_prod (pred_fun top top) (pred_prod (\<lambda>A. Ball A top) (pred_prod (\<lambda>f. finite {x. f x \<noteq> 0}) (\<lambda>f. finite {x. f x \<noteq> 0}))))
+        res "
     hence fin_hist1: "finite {x. get_beh res x \<noteq> 0}" and fin_hist2: "finite {x. get_trans res x \<noteq> 0}"
       by (simp add: pred_prod_beta)+
     assume "b_simulate maxtime def cs \<tau> res"
     thus "simulate_ind maxtime def cs (Abs_poly_mapping \<tau>)
-          (get_time res, get_state res, (Abs_poly_mapping (get_beh res)), Abs_poly_mapping (get_trans res))"
+          (get_time res, get_state res, get_event res, (Abs_poly_mapping (get_beh res)), Abs_poly_mapping (get_trans res))"
       using fin_trans fin_hist1 fin_hist2
     proof (induction rule: b_simulate.induct)
       case (1 def cs \<tau> \<tau>' t' \<sigma>' \<gamma>' beh' maxtime res)
@@ -1377,9 +1382,9 @@ proof
 
       \<comment> \<open>obtaining the 6th premise in the proof rule of @{term "simulate_ind"}\<close>
       let ?beh' = "Abs_poly_mapping beh'"
-      let ?res  = "(get_time res, get_state res, (Abs_poly_mapping (get_beh res)), Abs_poly_mapping (get_trans res))"
+      let ?res  = "(get_time res, get_state res, get_event res, (Abs_poly_mapping (get_beh res)), Abs_poly_mapping (get_trans res))"
       let ?\<tau>'   = "Abs_poly_mapping \<tau>'"
-      have lookup_res: "(get_time res, get_state res, lookup (Abs_poly_mapping (get_beh res)), lookup (Abs_poly_mapping (get_trans res))) = res"
+      have lookup_res: "(get_time res, get_state res, get_event res, lookup (Abs_poly_mapping (get_beh res)), lookup (Abs_poly_mapping (get_trans res))) = res"
         using lookup_Abs_poly_mapping[OF fin_hist1] lookup_Abs_poly_mapping[OF fin_hist2]
         by auto
       have "finite {x. beh' x \<noteq> 0}"
@@ -1395,7 +1400,7 @@ proof
       hence prem6: "simulate_fin_ind maxtime t' \<sigma>' \<gamma>' ?beh' def cs (rem_curr_trans t' ?\<tau>') ?res"
         using simulate_fin_eq_simulate_fin_ind by metis
       show "simulate_ind maxtime def cs (Abs_poly_mapping \<tau>)
-        (get_time res, get_state res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
+        (get_time res, get_state res, get_event res, Abs_poly_mapping (get_beh res), Abs_poly_mapping (get_trans res))"
         using prem1 prem2 prem3 prem4 prem5 prem6
         unfolding init'_eq_init'_ind by (auto intro!:simulate_ind.intros)
     qed
@@ -1418,14 +1423,16 @@ next
       using 1(4) by transfer'
     have prem5: "0(0:=Some o def)  = (lookup beh')"
       using 1(5) by (transfer', auto simp add: zero_fun_def)
-    have prem6: "maxtime, t', \<sigma>', \<gamma>', (lookup beh'), def \<turnstile> <cs, (lookup \<tau>')(t' := 0)> \<leadsto> (get_time res, get_state res, lookup (get_beh res), lookup (get_trans res))"
+    have prem6: "maxtime, t', \<sigma>', \<gamma>', (lookup beh'), def \<turnstile> <cs, (lookup \<tau>')(t' := 0)> \<leadsto> (get_time res, get_state res, get_event res, lookup (get_beh res), lookup (get_trans res))"
       using 1(6) unfolding sym[OF simulate_fin_eq_simulate_fin_ind] rem_curr_trans_def
       by (transfer', auto)
-    have helper: "map_prod id (map_prod id (map_prod lookup lookup)) res = (get_time res, get_state res, lookup (get_beh res), lookup (get_trans res))"
-      by (metis (no_types, hide_lams) apsnd_conv apsnd_def comp_apply fst_map_prod prod.exhaust_sel snd_map_prod)
+    have res_def: "res = (get_time res, get_state res, get_event res, get_beh res, get_trans res)"
+      by auto
+    hence helper: "(map_prod id (map_prod id (map_prod id (map_prod lookup lookup)))) (get_time res, get_state res, get_event res, get_beh res, get_trans res) = (get_time res, get_state res, get_event res, lookup (get_beh res), lookup (get_trans res))"
+      unfolding  Product_Type.map_prod_simp by auto
     show ?case
-      using prem1 prem2 prem3 prem4 prem5 prem6 unfolding helper
-      by(auto intro!: b_simulate.intros)
+      using prem1 prem2 prem3 prem4 prem5 prem6 res_def helper
+      by (metis b_simulate.intros)
   qed
 qed
 
