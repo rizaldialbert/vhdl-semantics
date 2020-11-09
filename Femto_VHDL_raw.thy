@@ -7058,7 +7058,7 @@ proof (rule ccontr)
 qed
 
 definition add_to_beh2 :: "'signal state \<Rightarrow> 'signal trans_raw \<Rightarrow> nat \<Rightarrow> 'signal state \<Rightarrow> 'signal trans_raw" where
-  "add_to_beh2 \<sigma> \<theta> st def = (let m = (\<lambda>s. if signal_of (def s) \<theta> s st = \<sigma> s then None else Some (\<sigma> s)) in \<theta>( st := m))"
+  "add_to_beh2 \<sigma> \<theta> st def = (let m = (\<lambda>s. if signal_of (def s) \<theta> s st = \<sigma> s then \<theta> st s else Some (\<sigma> s)) in \<theta>(st := m))"
 
 lemma add_to_beh2_almost_all_zero:
   assumes "finite {x. \<theta> x \<noteq> 0}"
@@ -8313,8 +8313,8 @@ lemma add_to_beh2_mono:
   unfolding add_to_beh2_def Let_def
 proof (rule)+
   fix s k 
-  define m1 where "m1 = (\<lambda>s. if signal_of (def s) \<theta> s t = \<sigma> s then None else Some (\<sigma> s))"
-  define m2 where "m2 = (\<lambda>s. if signal_of (def s) \<theta>2 s t = \<sigma> s then None else Some (\<sigma> s))"
+  define m1 where "m1 = (\<lambda>s. if signal_of (def s) \<theta> s t = \<sigma> s then \<theta> t s else Some (\<sigma> s))"
+  define m2 where "m2 = (\<lambda>s. if signal_of (def s) \<theta>2 s t = \<sigma> s then \<theta>2 t s else Some (\<sigma> s))"
   assume "k \<le> next_time t \<tau>'"
   hence "k \<le> t \<or> t < k"
     by linarith
@@ -8331,7 +8331,7 @@ proof (rule)+
       { assume "m1 s = None"
         hence "signal_of (def s) (\<theta>(t:=m1)) s k = signal_of (def s) (\<theta>(t:=m1)) s (k - 1)"
           using signal_of_less_sig  by (metis True fun_upd_same zero_option_def)
-        have "m2 s = None"
+        have "m2 s = \<theta>2 t s"
           using \<open>m1 s = None\<close> m1_def m2_def 
           using True \<open>signal_of (def s) \<theta> s k = signal_of (def s) \<theta>2 s k\<close> by auto
         have "0 < k \<or> k = 0"
@@ -8347,7 +8347,8 @@ proof (rule)+
             using \<open>0 < k\<close> unfolding True 
             by (smt One_nat_def Suc_pred add.right_neutral add_Suc_right fun_upd_other leD le_refl less_add_one signal_of_equal_when_trans_equal_upto)
           also have "... = signal_of (def s) (\<theta>2(t:=m2)) s k"
-            using signal_of_less_sig   by (metis True \<open>m2 s = None\<close> fun_upd_same zero_option_def)
+            using signal_of_less_sig   
+            by (smt True \<open>k \<le> t\<close> \<open>m1 s = None\<close> \<open>signal_of (def s) \<theta> s (k - 1) = signal_of (def s) \<theta>2 s (k - 1)\<close> \<open>signal_of (def s) \<theta> s k = signal_of (def s) \<theta>2 s k\<close> \<open>signal_of (def s) \<theta>2 s (k - 1) = signal_of (def s) (\<theta>2(t := m2)) s (k - 1)\<close> comp_apply fun_upd_other fun_upd_same m1_def m2_def to_signal_equal_when_trans_equal_upto2 zero_option_def)
           finally have " signal_of (def s) (\<theta>(t := m1)) s k = signal_of (def s) (\<theta>2(t := m2)) s k"
             using \<open>signal_of (def s) (\<theta>(t := m1)) s k = signal_of (def s) (\<theta>(t := m1)) s (k - 1)\<close> by auto }
         moreover
@@ -8356,25 +8357,33 @@ proof (rule)+
             unfolding True using `m1 s = None` 
             by (metis fun_upd_same signal_of_zero zero_option_def)
           also have "... = signal_of (def s) (\<theta>2(t:=m2)) s k"
-            unfolding True using `m2 s = None` 
-            by (metis True \<open>k = 0\<close> fun_upd_same signal_of_zero zero_option_def)
+            unfolding True using `m2 s = \<theta>2 t s` 
+            by (smt True \<open>k = 0\<close> \<open>m1 s = None\<close> \<open>signal_of (def s) \<theta> s k = signal_of (def s) \<theta>2 s k\<close>
+            comp_apply fun_upd_same le_zero_eq m1_def m2_def signal_of_zero
+            to_signal_equal_when_trans_equal_upto2 zero_option_def)
           finally have " signal_of (def s) (\<theta>(t := m1)) s k = signal_of (def s) (\<theta>2(t := m2)) s k"
             by auto }
         ultimately have " signal_of (def s) (\<theta>(t := m1)) s k = signal_of (def s) (\<theta>2(t := m2)) s k"
           by auto }
       moreover
       { assume "m1 s = Some val"
-        hence "m2 s = Some val"
-          unfolding m1_def m2_def  using True \<open>signal_of (def s) \<theta> s k = signal_of (def s) \<theta>2 s k\<close> by auto
+        hence "m2 s = Some val \<or> m2 s = None"
+          unfolding m1_def m2_def  using True \<open>signal_of (def s) \<theta> s k = signal_of (def s) \<theta>2 s k\<close> 
+        proof -
+          assume a1: "(if signal_of (def s) \<theta> s t = \<sigma> s then \<theta> t s else Some (\<sigma> s)) = Some val"
+          have "\<forall>v a va n f. signal_of va f (a::'a) n = v \<or> f n a \<noteq> Some v"
+            by (metis (no_types) not_le order_refl signal_of_intro to_trans_raw_sig_def)
+          then show "(if signal_of (def s) \<theta>2 s t = \<sigma> s then \<theta>2 t s else Some (\<sigma> s)) = Some val \<or> (if signal_of (def s) \<theta>2 s t = \<sigma> s then \<theta>2 t s else Some (\<sigma> s)) = None"
+            using a1 by (metis option.exhaust)
+        qed
         have " signal_of (def s) (\<theta>(t := m1)) s k = the (m1 s)"
           unfolding True 
           by (metis (mono_tags, hide_lams) \<open>m1 s = Some val\<close> fun_upd_same nat_less_le
               not_less_iff_gr_or_eq option.sel order_refl signal_of_val_eq to_trans_raw_sig_def)
         also have "... = signal_of (def s)(\<theta>2(t:=m2)) s k"
           unfolding True 
-          by (metis True \<open>m1 s = None \<Longrightarrow> signal_of (def s) (\<theta>(t := m1)) s k = signal_of (def s)
-          (\<theta>2(t := m2)) s k\<close> \<open>m1 s = Some val\<close> \<open>m2 s = Some val\<close> calculation fun_upd_same m1_def
-          trans_some_signal_of')
+          by (smt True \<open>k \<le> next_time t \<tau>'\<close> calculation comp_apply fun_upd_other fun_upd_same m1_def
+          m2_def to_signal_equal_when_trans_equal_upto2 trans_some_signal_of')
         finally have "signal_of (def s) (\<theta>(t := m1)) s k = signal_of (def s)(\<theta>2(t:=m2)) s k"
           by auto }
       ultimately show ?thesis 
@@ -8411,7 +8420,7 @@ proof (rule)+
         hence " signal_of (def s) (\<theta>(t:=m1)) s t = def s"
           by (metis \<open>t = 0\<close> fun_upd_same signal_of_zero zero_option_def)
         also have "... = signal_of (def s) (\<theta>2(t:=m2)) s t"
-          by (metis (full_types) assms \<open>m1 s = None\<close> \<open>t = 0\<close> fun_upd_same le0 m1_def m2_def signal_of_zero zero_option_def)
+          by (metis (full_types) \<open>m1 s = None\<close> \<open>t = 0\<close> assms(1) fun_upd_same le0 m1_def m2_def not_Some_eq option.distinct(1) signal_of_zero trans_some_signal_of' zero_option_def)
         also have "... = signal_of (def s) (\<theta>2(t:=m2)) s k"
           using `\<forall>n>t. \<theta>2 n = 0` 
           by (metis \<open>0 < k\<close> \<open>t = 0\<close> fun_upd_other less_imp_le_nat less_imp_not_eq2 signal_of_less_ind)
@@ -8422,7 +8431,8 @@ proof (rule)+
         hence " signal_of (def s) (\<theta>(t:=m1)) s t = val"
           by (metis (mono_tags) \<open>t = 0\<close> fun_upd_same le_zero_eq not_less0 signal_of_intro to_trans_raw_sig_def)
         also have "... = signal_of (def s) (\<theta>2(t:=m2)) s t"
-          by (metis assms \<open>m1 s = Some val\<close> \<open>t = 0\<close> fun_upd_same le0 m1_def m2_def option.distinct(1) option.sel trans_some_signal_of')
+          by (smt \<open>t = 0\<close> calculation fun_upd_other fun_upd_same less_imp_le_nat m1_def m2_def
+          o_apply rel_simps(68) to_signal_equal_when_trans_equal_upto2 trans_some_signal_of')
         also have "... = signal_of (def s) (\<theta>2(t:=m2)) s k"
           using `\<forall>n>t. \<theta>2 n = 0` 
           by (metis \<open>0 < k\<close> \<open>t = 0\<close> fun_upd_other less_not_refl less_or_eq_imp_le signal_of_less_ind)
@@ -8449,7 +8459,7 @@ proof (rule)+
           by (metis (mono_tags, lifting) diff_less fun_upd_other leD o_apply order.refl rel_simps(68) to_signal_equal_when_trans_equal_upto)
         also have "... = signal_of (def s) (\<theta>2(t:=m2)) s t"
           using signal_of_less_sig 
-          by (metis assms \<open>m1 s = None\<close> fun_upd_same m1_def m2_def order_refl zero_option_def)
+          by (smt \<open>m1 s = None\<close> assms(1) comp_def diff_le_self fun_upd_def less_or_eq_imp_le m1_def m2_def to_signal_equal_when_trans_equal_upto2 zero_option_def)
         also have "... = signal_of (def s) (\<theta>2(t:=m2)) s k"
           by (metis assms \<open>t < k\<close> dual_order.strict_implies_not_eq dual_order.strict_implies_order fun_upd_other signal_of_less_ind)
         finally have " signal_of (def s) (\<theta>(t := m1)) s k = signal_of (def s) (\<theta>2(t := m2)) s k"
@@ -8459,7 +8469,7 @@ proof (rule)+
         hence "signal_of (def s) (\<theta>(t:=m1)) s t = val"
           by (metis (mono_tags, hide_lams) fun_upd_same not_le order_refl signal_of_intro to_trans_raw_sig_def)
         also have "... = signal_of (def s) (\<theta>2(t:=m2)) s t"
-          by (metis assms \<open>m1 s = Some val\<close> fun_upd_same m1_def m2_def option.distinct(1) option.sel order_refl trans_some_signal_of')
+          by (smt \<open>t < k\<close> calculation comp_def fun_upd_def less_imp_le_nat m1_def m2_def to_signal_equal_when_trans_equal_upto2 trans_some_signal_of')
         also have "... = signal_of (def s) (\<theta>2(t:=m2)) s k"
           by (metis assms \<open>t < k\<close> fun_upd_other less_imp_le less_irrefl_nat signal_of_less_ind)
         finally have " signal_of (def s) (\<theta>(t := m1)) s k = signal_of (def s) (\<theta>2(t := m2)) s k"

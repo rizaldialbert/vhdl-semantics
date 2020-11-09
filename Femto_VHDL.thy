@@ -1084,7 +1084,7 @@ lift_definition add_to_beh2 ::
   using upd_eventually_cofinite by fastforce
 
 lemma [code]:
-  "add_to_beh2 \<sigma> \<theta> t def = (let m = (\<lambda>s. if signal_of2 (def s) \<theta> s t = \<sigma> s then None else Some (\<sigma> s)) in Poly_Mapping.update t m \<theta>)"
+  "add_to_beh2 \<sigma> \<theta> t def = (let m = (\<lambda>s. if signal_of2 (def s) \<theta> s t = \<sigma> s then lookup \<theta> t s else Some (\<sigma> s)) in Poly_Mapping.update t m \<theta>)"
   apply transfer' unfolding Femto_VHDL_raw.add_to_beh2_def by auto
 
 lift_definition simulate_fin ::  "nat \<Rightarrow> nat \<Rightarrow> 'a  state \<Rightarrow> 'a event \<Rightarrow> 'a transaction \<Rightarrow> 'a state \<Rightarrow>
