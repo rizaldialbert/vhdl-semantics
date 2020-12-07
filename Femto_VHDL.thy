@@ -484,7 +484,7 @@ lift_definition trans_post ::
 
 lemma [code]:
   "trans_post s val def \<tau> t dly =
-  (if post_necessary (dly - 1) \<tau> t s val def then post s val \<tau> (t + dly) else preempt s \<tau> (t + dly))"
+  (if post_necessary dly \<tau> t s val def then post s val \<tau> (t + dly) else preempt s \<tau> (t + dly))"
   by (transfer', auto simp add: trans_post_raw_def)
 
 lift_definition purge :: "'signal transaction \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'signal \<Rightarrow> val \<Rightarrow> val \<Rightarrow> 'signal transaction" is

@@ -1348,68 +1348,6 @@ lemma derivative_is_history2:
 
 text \<open>Several lemmas about preserving non_stuttering property.\<close>
 
-lemma b_conc_exec_preserves_non_stuttering:
-  assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
-  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> s"
-  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
-  assumes "nonneg_delay_conc cs"
-  assumes "conc_stmt_wf cs"
-  shows "non_stuttering (to_trans_raw_sig \<tau>') \<sigma> s"
-  using assms
-proof (induction cs arbitrary: \<tau> \<tau>')
-  case (Bpar cs1 cs2)
-  hence "nonneg_delay_conc cs1" and "conc_stmt_wf cs1" and "nonneg_delay_conc cs2" and "conc_stmt_wf cs2"
-    by auto
-  obtain \<tau>1 where \<tau>1_def: "b_conc_exec t \<sigma> \<gamma> \<theta> def cs1 \<tau> \<tau>1"
-    using Bpar.prems(1) by blast
-  hence "non_stuttering (to_trans_raw_sig \<tau>1) \<sigma> s"
-    using Bpar(1)[OF _ Bpar(4-5)]  `nonneg_delay_conc cs1` `conc_stmt_wf cs1` by metis
-  obtain \<tau>2 where \<tau>2_def: "b_conc_exec t \<sigma> \<gamma> \<theta> def cs2 \<tau> \<tau>2"
-    using Bpar.prems(1) by blast
-  hence "non_stuttering (to_trans_raw_sig \<tau>2) \<sigma> s"
-    using Bpar(2)[OF _ Bpar(4-5)] `nonneg_delay_conc cs2` `conc_stmt_wf cs2`
-    by auto
-  have \<tau>'_def: "\<tau>' = clean_zip_raw \<tau> (\<tau>1, set (signals_from cs1)) (\<tau>2, set (signals_from cs2))"
-    using Bpar  \<tau>1_def \<tau>2_def  by (metis obtain_clean_zip)
-  have "s \<in> set (signals_from cs1) \<or> s \<in> set (signals_from cs2) \<or> s \<notin> set (signals_from cs1) \<and> s \<notin> set (signals_from cs2)"
-    by auto
-  moreover
-  { assume "s \<in> set (signals_from cs1)"
-    hence "\<And>n. \<tau>' n s = \<tau>1 n s"
-      using \<tau>'_def unfolding clean_zip_raw_def Let_def by auto
-    hence " (to_trans_raw_sig \<tau>' s) = (to_trans_raw_sig \<tau>1 s)"
-      by (auto simp add: to_trans_raw_sig_def)
-    hence ?case
-      using `non_stuttering (to_trans_raw_sig \<tau>1) \<sigma> s` unfolding non_stuttering_def Let_def
-      by auto }
-  moreover
-  { assume "s \<in> set (signals_from cs2)"
-    hence "s \<notin> set (signals_from cs1)"
-      using `conc_stmt_wf (cs1 || cs2)` unfolding conc_stmt_wf_def by auto
-    hence "\<And>n. \<tau>' n s = \<tau>2 n s"
-      using \<tau>'_def `s \<in> set (signals_from cs2)` unfolding clean_zip_raw_def Let_def
-      by auto
-    hence " (to_trans_raw_sig \<tau>' s) = (to_trans_raw_sig \<tau>2 s)"
-      by transfer' (auto simp add: to_trans_raw_sig_def)
-    hence ?case
-      using `non_stuttering (to_trans_raw_sig \<tau>2) \<sigma> s` unfolding non_stuttering_def Let_def
-      by auto }
-  moreover
-  { assume "s \<notin> set (signals_from cs1) \<and> s \<notin> set (signals_from cs2)"
-    hence "\<And>n. \<tau>' n s = \<tau> n s"
-      unfolding \<tau>'_def clean_zip_raw_def Let_def by auto
-    hence " (to_trans_raw_sig \<tau>' s) = (to_trans_raw_sig \<tau> s)"
-      by (auto simp add: to_trans_raw_sig_def)
-    hence ?case
-      using `non_stuttering (to_trans_raw_sig \<tau>) \<sigma> s` unfolding non_stuttering_def Let_def
-      by auto }
-  ultimately show ?case by auto
-next
-  case (Bsingle x1 x2)
-  then show ?case
-    using b_seq_exec_preserves_non_stuttering by force
-qed
-
 lemma init'_preserves_non_stuttering:
   assumes "init' t \<sigma> \<gamma> \<theta> def cs \<tau> \<tau>'"
   assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> s"

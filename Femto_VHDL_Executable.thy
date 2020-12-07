@@ -850,9 +850,8 @@ lemma purge'_code[code]:
 value [code] "lookup (purge' (0 :: sig transaction) 1 1 C (Bv False) (Bv True)) 1 C"
 
 lemma [code]:
-  "post_necessary dly (Pm_fmap xs) t sig v def = (signal_of2 def (Pm_fmap xs) sig (t + dly) \<noteq> v)"
+  "post_necessary dly (Pm_fmap xs) t sig v def = (if 0 < t + dly then signal_of2 def (Pm_fmap xs) sig (t + dly - 1) \<noteq> v else def \<noteq> v)"
   by transfer' auto
-
 
 lemma [code]:
   "post sig v (Pm_fmap xs) t =
@@ -884,7 +883,7 @@ lemma [code]:
                                                 chopped2 = fmmap_keys (\<lambda>t'. if t + dly \<le> t' then map_drop sig else id);
                                                 updated  = fmupd (t + dly) (current(sig \<mapsto> v)) xs
                                               in
-                                                if signal_of2 def (Pm_fmap xs) sig (t + (dly - 1)) \<noteq> v then Pm_fmap (chopped1 updated) else Pm_fmap (chopped2 xs))"
+                                                if if 0 < t + dly then signal_of2 def (Pm_fmap xs) sig (t + dly - 1) \<noteq> v else def \<noteq> v then Pm_fmap (chopped1 updated) else Pm_fmap (chopped2 xs))"
   by (transfer', unfold Let_def  trans_post_raw_def preempt_raw_def
                         post_raw_def)
      (rule ext, auto simp add: fmlookup_default_def zero_map map_drop_def map_filter_def

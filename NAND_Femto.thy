@@ -19,24 +19,25 @@ lemma trans_post_empty_trans_upd:
 proof transfer'
   fix sig :: "'a"
   fix v def t dly
-  have "post_necessary_raw (dly-1) (\<lambda>k. 0) t sig v def \<or> \<not> post_necessary_raw (dly-1) (\<lambda>k. 0) t sig v def"
+  have "post_necessary_raw (dly) (\<lambda>k. 0) t sig v def \<or> \<not> post_necessary_raw (dly) (\<lambda>k. 0) t sig v def"
     by auto
   moreover
-  { assume nec: "post_necessary_raw (dly-1) (\<lambda>k. 0) t sig v def"
+  { assume nec: "post_necessary_raw (dly) (\<lambda>k. 0) t sig v def"
     hence "v \<noteq> def"
       by (metis post_necessary_raw_correctness zero_fun_def zero_option_def)
-    hence "(if post_necessary_raw (dly-1) (\<lambda>k. 0) t sig v def then post_raw sig v (\<lambda>k. 0) (t + dly) else preempt_raw sig (\<lambda>k. 0) (t + dly)) =
+    hence "(if post_necessary_raw (dly) (\<lambda>k. 0) t sig v def then post_raw sig v (\<lambda>k. 0) (t + dly) else preempt_raw sig (\<lambda>k. 0) (t + dly)) =
       (if v \<noteq> def then (\<lambda>k. 0)(t + dly := [sig \<mapsto> v]) else (\<lambda>k. 0))"
       using nec unfolding trans_post_raw_def post_raw_def preempt_raw_def zero_upd zero_map fun_upd_def
       by auto }
   moreover
-  { assume not_nec: "\<not> post_necessary_raw (dly-1) (\<lambda>k. 0) t sig v def"
+  { assume not_nec: "\<not> post_necessary_raw (dly) (\<lambda>k. 0) t sig v def"
     hence "v = def"
-      by (meson signal_of_def zero_fun_def)
-    hence "(if post_necessary_raw (dly-1) (\<lambda>k. 0) t sig v def then post_raw sig v (\<lambda>k. 0) (t + dly) else preempt_raw sig (\<lambda>k. 0) (t + dly)) =
+      unfolding post_necessary_raw_correctness 
+      by (metis option.distinct(1) zero_fun_def zero_option_def)
+    hence "(if post_necessary_raw (dly) (\<lambda>k. 0) t sig v def then post_raw sig v (\<lambda>k. 0) (t + dly) else preempt_raw sig (\<lambda>k. 0) (t + dly)) =
       (if v \<noteq> def then (\<lambda>k. 0)(t + dly := [sig \<mapsto> v]) else (\<lambda>k. 0))"
       using not_nec by (auto simp add: preempt_raw_def zero_fun_def zero_option_def) }
-  ultimately have " (if post_necessary_raw (dly-1) (\<lambda>k. 0) t sig v def then post_raw sig v (\<lambda>k. 0) (t + dly) else preempt_raw sig (\<lambda>k. 0) (t + dly)) =
+  ultimately have " (if post_necessary_raw (dly) (\<lambda>k. 0) t sig v def then post_raw sig v (\<lambda>k. 0) (t + dly) else preempt_raw sig (\<lambda>k. 0) (t + dly)) =
        (if v \<noteq> def then (\<lambda>k. 0)(t + dly := [sig \<mapsto> v]) else (\<lambda>k. 0))" by auto
   thus "trans_post_raw sig v def (\<lambda>k. 0) t dly = (if v \<noteq> def then (\<lambda>k. 0)(t + dly := [sig \<mapsto> v]) else (\<lambda>k. 0)) "
     unfolding trans_post_raw_def by auto
@@ -75,7 +76,7 @@ hide_fact  Femto_VHDL.next_time_def Femto_VHDL.next_state_def Femto_VHDL.next_ev
 
 theorem
   assumes "10, 0, (\<lambda>x. Bv False), {A}, 0, (\<lambda>x. Bv False) \<turnstile> <nand, 0> \<leadsto> beh"
-  shows "(get_beh beh) 1 C = Some (Bv True)"
+  shows "signal_of (Bv False) (get_beh beh) C (1::nat)  = (Bv True)"
   using assms
 proof (cases)
   case (1 \<tau>')
@@ -86,7 +87,7 @@ proof (cases)
     have "signal_of (Bv False) ?\<tau> C 0 = (Bv False)"
       by (metis (no_types, lifting) greaterThanAtMost_iff less_irrefl_nat override_on_def
       signal_of_zero zero_fun_def)
-    hence "post_necessary_raw (Suc 0 - 1) (override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}) 0 C (Bv True) (Bv False)"
+    hence "post_necessary_raw (Suc 0) (override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}) 0 C (Bv True) (Bv False)"
       by auto
     hence "trans_post_raw C (Bv True) (Bv False) ?\<tau> 0 (Suc 0) = post_raw C (Bv True) ?\<tau> (Suc 0)"
       unfolding trans_post_raw_def by auto
@@ -170,46 +171,107 @@ proof (cases)
     with `next_event 0 \<tau>' (\<lambda>x. Bv False) \<subseteq> {C}` show ?thesis
       by auto
   qed
-  have nb: "add_to_beh (\<lambda>x. Bv False) 0 0 1 =
-       0(0 := (Some o (\<lambda>x. Bv False)))" (is "_ = ?beh'")
-    unfolding add_to_beh_def by auto
+  have  add_to_beh2: "Femto_VHDL_raw.add_to_beh2 ((\<lambda>x. Bv False)(C := Bv True)) 0 1 (\<lambda>x. Bv False) =
+       Femto_VHDL_raw.add_to_beh2 ((\<lambda>x. Bv False)(C := Bv True)) 0 1 (\<lambda>x. Bv False)" (is "_ = ?beh'")
+    unfolding Femto_VHDL_raw.add_to_beh2_def fun_upd_def Let_def by auto
+(*   proof (rule, rule)
+    fix x :: nat
+    fix s :: sig
+    have "x = 1 \<or> x \<noteq> 1" by auto
+    moreover
+    { assume " x = 1"
+      hence cont: "(if x = 1 then \<lambda>s. if signal_of (Bv False) 0 s 1 = (if s = C then Bv True else Bv False) then 0 (1::nat) s else Some (if s = C then Bv True else Bv False) else 0 x) s = 
+             (if signal_of (Bv False) 0 s 1 = (if s = C then Bv True else Bv False) then 0 (1::nat) s else Some (if s = C then Bv True else Bv False))"
+        by auto
+      have "s = C \<or> s \<noteq> C"
+        by auto
+      moreover
+      { assume "s = C"
+        hence "(if signal_of (Bv False) 0 s 1 = (if s = C then Bv True else Bv False) then None else Some (if s = C then Bv True else Bv False)) = 
+                Some (if s = C then Bv True else Bv False)"
+          by (metis signal_of_empty val.inject(1))
+        also have "... = (if x = 1 then \<lambda>x. if x = C then Some (Bv True) else None else 0 x) s"
+          unfolding `x = 1` `s = C` by auto
+        finally have "(if x = 1 then \<lambda>s. if signal_of (Bv False) 0 s 1 = (if s = C then Bv True else Bv False) then 0 (1::nat) s else Some (if s = C then Bv True else Bv False) else 0 x) s =
+                     (if x = 1 then \<lambda>x. if x = C then Some (Bv True) else 0 (1::nat) s else 0 x) s"
+          using cont by auto }
+      moreover
+      { assume " s \<noteq> C"
+        hence "(if x = 1 then \<lambda>s. if signal_of (Bv False) 0 s 1 = (if s = C then Bv True else Bv False) then 0 (1::nat) s else Some (if s = C then Bv True else Bv False) else 0 x) s =
+                     (if x = 1 then \<lambda>x. if x = C then Some (Bv True) else 0 (1::nat) s else 0 x) s"
+          unfolding `x = 1` 
+          using signal_of_empty by force }
+      ultimately have "(if x = 1 then \<lambda>s. if signal_of (Bv False) 0 s 1 = (if s = C then Bv True else Bv False) then 0 (1::nat) s else Some (if s = C then Bv True else Bv False) else 0 x) s =
+                       (if x = 1 then \<lambda>x. if x = C then Some (Bv True) else 0 (1::nat) s else 0 x) s"
+        by blast }
+    moreover
+    { assume "x \<noteq> 1"
+      hence "(if x = 1 then \<lambda>s. if signal_of (Bv False) 0 s 1 = (if s = C then Bv True else Bv False) then 0 (1::nat) s else Some (if s = C then Bv True else Bv False) else 0 x) s =
+             (if x = 1 then \<lambda>x. if x = C then Some (Bv True) else 0 (1::nat) s else 0 x) s"
+        by auto }
+    ultimately show "(if x = 1 then \<lambda>s. if signal_of (Bv False) 0 s 1 = (if s = C then Bv True else Bv False) then 0 (1::nat) s else Some (if s = C then Bv True else Bv False) else 0 x) s =
+                       (if x = 1 then \<lambda>x. if x = C then Some (Bv True) else 0 (1::nat) s else 0 x) s"
+      by auto
+  qed *)
+  have "\<And>s. signal_of (Bv False) 0 s 0 = Bv False"
+    by (meson signal_of_empty)
+  hence nb:"Femto_VHDL_raw.add_to_beh2 (\<lambda>x. Bv False) 0 0 (\<lambda>x. Bv False) = 0"
+    unfolding Femto_VHDL_raw.add_to_beh2_def fun_upd_def zero_option_def zero_fun_def Let_def
+    by fastforce
   define beh2 :: "(nat \<Rightarrow> sig \<Rightarrow> val option)" where "beh2 = ?beh'"
-  hence snd_cyc: "10, 1, (\<lambda>x. Bv False) (C := Bv True), {C} , beh2, (\<lambda>x. Bv False) \<turnstile> <nand , (\<tau>'(1:=0))> \<leadsto> beh"
+  hence snd_cyc: "10, 1, (\<lambda>x. Bv False) (C := Bv True), {C} , 0, (\<lambda>x. Bv False) \<turnstile> <nand , (\<tau>'(1:=0))> \<leadsto> beh"
     using 1 nt ns ne nb by metis
-  thus "get_beh beh 1 C = Some (Bv True)"
+  have " \<not> quiet (\<tau>'(1 := 0)) {C}"
+    unfolding \<tau>'_def fun_upd_def quiet_def by auto
+  then obtain \<tau>'' where ex2: "1 , (\<lambda>x. Bv False)(C := Bv True) , {C} , 0, \<lambda>x. Bv False  \<turnstile> <nand , \<tau>'(1 := 0)> \<longrightarrow>\<^sub>c \<tau>''"
+    using bau[OF snd_cyc] \<open>\<not> quiet (\<tau>'(1 := 0)) {C}\<close> by fastforce
+  have "\<tau>'(1:=0) = \<tau>''"
+    using conc_cases(1)[OF ex2[unfolded nand_def]] by auto
+  hence "next_time 1 \<tau>'' \<le> 10"
+    unfolding \<tau>'_def next_time_def  by (simp add: fun_upd_idem zero_fun_def)
+  hence thd_cyc: "10, next_time 1 \<tau>'' , next_state 1 \<tau>'' ((\<lambda>x. Bv False)(C := Bv True)) , next_event 1 \<tau>'' ((\<lambda>x. Bv False)(C := Bv True)) , beh2 , \<lambda>x. Bv False \<turnstile> <nand , \<tau>''(next_time 1 \<tau>'' := 0)> \<leadsto> beh"
+    using  bau[OF snd_cyc] using beh2_def add_to_beh2
+    by (metis \<open>\<not> quiet (\<tau>'(1 := 0)) {C}\<close> add_to_beh2 case_bau ex2 one_less_numeral_iff semiring_norm(76) snd_cyc)
+  have "next_time 1 \<tau>'' = 2"
+    using \<open>\<tau>'(1:=0) = \<tau>''\<close> unfolding \<tau>'_def next_time_def 
+    by (metis fun_upd_idem_iff fun_upd_upd nat_1_add_1 zero_fun_def)
+  hence "next_state 1 \<tau>'' ((\<lambda>x. Bv False)(C := Bv True)) = ((\<lambda>x. Bv False)(C := Bv True))"
+    using \<open>\<tau>'(1:=0) = \<tau>''\<close> unfolding next_state_def Let_def 
+    by (smt \<tau>'_def dom_eq_singleton_conv fun_upd_idem_iff fun_upd_upd next_state_def next_time_at_least2 next_time_def not_less_Least ns nt override_on_emptyset override_on_insert' zero_fun_def zero_less_one)
+  have "next_event 1 \<tau>'' ((\<lambda>x. Bv False)(C := Bv True)) = {}"
+    using \<open>\<tau>'(1:=0) = \<tau>''\<close> `next_time 1 \<tau>'' = 2` unfolding next_event_def Let_def \<tau>'_def
+    by (smt Collect_empty_eq domIff fun_upd_other numeral_eq_one_iff semiring_norm(85) zero_fun_def zero_option_def)
+  hence "10, 2, ((\<lambda>x. Bv False)(C := Bv True)), {}, beh2, \<lambda>x. Bv False \<turnstile> <nand , \<tau>''(next_time 1 \<tau>'' := 0)> \<leadsto> beh "
+    using thd_cyc 
+    using \<open>next_state 1 \<tau>'' ((\<lambda>x. Bv False)(C := Bv True)) = (\<lambda>x. Bv False)(C := Bv True)\<close> \<open>next_time 1 \<tau>'' = 2\<close> by auto
+  thus "signal_of (Bv False) (get_beh beh) C 1 = Bv True"
   proof (cases)
-    case (1 \<tau>'')
-    have t''_def: "\<tau>'' = 0"
-      unfolding nand_def
-      using 1(3) unfolding nand_def by (auto simp add: \<tau>'_def zero_fun_def)
-    have nt2: "next_time 1 0 = 2"
-      by auto
-    moreover have "next_state 1 \<tau>'' ((\<lambda>x. Bv False)(C := Bv True)) = (\<lambda>x. Bv False) (C := Bv True)"
-      unfolding next_state_def Let_def t''_def nt2 zero_fun_def zero_option_def
-      by auto
-    moreover have "next_event 1 \<tau>'' ((\<lambda>x. Bv False)(C := Bv True)) = {}"
-      unfolding next_event_def Let_def t''_def nt2
-      by (auto simp add: zero_fun_def zero_option_def)
-    moreover have "add_to_beh ((\<lambda>x. Bv False)(C := Bv True)) beh2 1 (next_time 1 \<tau>'') =
-                   beh2(1 := (Some o (\<lambda>x. Bv False)(C := Bv True)))"
-      unfolding add_to_beh_def t''_def nt2 by simp
-    moreover have "(0(1 := [C \<mapsto> Bv True]))(1:=0) = 0"
-      unfolding zero_fun_def zero_option_def by auto
-    ultimately have "(10, 2, (\<lambda>x. Bv False) (C := Bv True), {}, beh2(1 :=(Some o (\<lambda>x. Bv False)(C := Bv True))), (\<lambda>x. Bv False) \<turnstile> <nand, (\<tau>''(2:=0))> \<leadsto> beh)"
-      using 1(5) using t''_def by metis
-    then show ?thesis
-    proof (cases)
-      case (1 \<tau>')
-      then show ?thesis unfolding quiet_def t''_def zero_fun_def zero_option_def
-        by (simp add: fun_upd_idem)
-    next
-      case 2
-      then show ?thesis unfolding quiet_def t''_def
-        by (transfer, auto)
-    qed auto
+    case (1 \<tau>x)
+    thus ?thesis
+      by (metis \<open>\<tau>'(1 := 0) = \<tau>''\<close> \<tau>'_def fun_upd_idem fun_upd_upd quiet_def zero_fun_def)
   next
-    case 2
-    then show ?thesis by (auto simp add:quiet_def)
+    case (2 \<tau>x)
+    then show ?thesis
+      unfolding `beh2 = ?beh'` 
+      by (metis \<open>\<tau>'(1 := 0) = \<tau>''\<close> \<tau>'_def fun_upd_idem fun_upd_upd quiet_def zero_fun_def)
+  next
+    case 3
+    hence "get_beh beh = Femto_VHDL_raw.add_to_beh2 ((\<lambda>x. Bv False)(C := Bv True)) 0 (1::nat) (\<lambda>x. Bv False)"
+      by (simp add: beh2_def)
+    hence "signal_of (Bv False) (get_beh beh) C (1::nat) = signal_of (Bv False) (Femto_VHDL_raw.add_to_beh2 ((\<lambda>x. Bv False)(C := Bv True)) 0 (1::nat) (\<lambda>x. Bv False)) C (1::nat)"
+      by auto
+    also have "... = Bv True"
+      unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def 
+    proof -
+      have f1: "Bv False = signal_of (Bv False) 0 C 1"
+        by (metis signal_of_empty)
+      have "\<forall>f n s fa v. f n (s::sig) \<noteq> Some (fa s) \<or> signal_of v f s n = fa s"
+        by (meson trans_some_signal_of')
+      then show "signal_of (Bv False) (\<lambda>n. if n = 1 then \<lambda>s. if signal_of (Bv False) 0 s 1 = (if s = C then Bv True else Bv False) then 0 (1::nat) s else Some (if s = C then Bv True else Bv False) else 0 n) C 1 = Bv True"
+        using f1 val.inject(1) by presburger
+    qed
+    finally show ?thesis
+      by auto
   qed auto
 next
   case (2 \<tau>')
@@ -220,7 +282,7 @@ next
     have "signal_of (Bv False) ?\<tau> C 0 = (Bv False)"
       by (metis (no_types, lifting) greaterThanAtMost_iff less_irrefl_nat override_on_def
       signal_of_zero zero_fun_def)
-    hence "post_necessary_raw (Suc 0 - 1) (override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}) 0 C (Bv True) (Bv False)"
+    hence "post_necessary_raw (Suc 0) (override_on 0 (\<lambda>n. (0 n)(C := None)) {0<..Suc 0}) 0 C (Bv True) (Bv False)"
       by auto
     hence "trans_post_raw C (Bv True) (Bv False) ?\<tau> 0 (Suc 0) = post_raw C (Bv True) ?\<tau> (Suc 0)"
       unfolding trans_post_raw_def by auto
@@ -297,8 +359,8 @@ definition  "test2 = functional_simulate_fin 2 0 (\<lambda>x. Bv False) {A, B, C
 
 value [code] "to_transaction_sig (get_beh test2) C"
 
-definition nand3 :: "sig conc_stmt" where
-  "nand3 = process {A, B} : Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1"
+definition nand4 :: "sig conc_stmt" where
+  "nand4 = process {A, B} : Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0"
 
 \<comment> \<open>Specific lemmas about @{term "nand"} and @{term "nand3"}\<close>
 
@@ -308,12 +370,6 @@ lemma nand_does_not_modify_AB:
   using b_seq_exec_modifies_local assms unfolding nand_def
   by (metis conc_stmt.sel(4) empty_set list.simps(15) signals_in.simps(3) singletonD)
 
-lemma nand3_does_not_modify_AB:
-  assumes "b_seq_exec t \<sigma> \<gamma> \<theta> def (get_seq nand3) \<tau> \<tau>'"
-  shows "\<And>i. i \<ge> t \<Longrightarrow> s \<noteq> C \<Longrightarrow> \<tau> i s =  \<tau>' i s"
-  using b_seq_exec_modifies_local assms unfolding nand3_def
-  by (metis conc_stmt.sel(4) empty_set list.simps(15) signals_in.simps(2) singletonD)
-
 lemma nand_does_not_modify_AB':
   assumes "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
   assumes "b_seq_exec t \<sigma> \<gamma> \<theta> def (get_seq nand) \<tau> \<tau>'"
@@ -321,1219 +377,4472 @@ lemma nand_does_not_modify_AB':
   using assms unfolding nand_def
   by (metis assms(2) b_seq_exec_preserve_trans_removal nand_does_not_modify_AB not_le)
 
-lemma nand3_does_not_modify_AB':
-  assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
-  assumes "b_seq_exec t \<sigma> \<gamma> \<theta> def (get_seq nand3) \<tau> \<tau>'"
-  shows "\<And>i. s \<noteq> C \<Longrightarrow> \<tau> i s = \<tau>' i s"
-  using assms unfolding nand3_def
-  by (metis assms(2) b_seq_exec_preserve_trans_removal nand3_does_not_modify_AB not_le)
-
 lemma maxtime_maxtime_bigstep:
   assumes "maxtime, maxtime, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <nand3, \<tau>> \<leadsto> beh"
   shows "get_beh beh = \<theta>"
 proof -
-  have "(maxtime, \<sigma>, \<theta>, \<tau>) = beh"
+  have "(maxtime, \<sigma>, \<gamma>, \<theta>, \<tau>) = beh"
     using assms bau by blast
   then show ?thesis
     by force
 qed 
 
-lemma t_strictly_increasing:
-  assumes "t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <nand3, \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
-  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
-  assumes "\<tau>' \<noteq> 0"
-  shows "t < next_time t \<tau>'"
-proof (cases "A \<in> \<gamma> \<or> B \<in> \<gamma>")
-  case True
-  then obtain x where "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x"
-    by (metis assms(1) conc_cases(1) disjnt_insert1 nand3_def seq_cases_trans)
-  hence \<tau>'_def: "\<tau>' = trans_post_raw C x (\<sigma> C) \<tau> t 1"
-    using assms unfolding nand3_def
-    by (meson True b_seq_exec.intros(5) b_seq_exec_deterministic conc_cases(1) disjnt_insert1)
-  hence " \<tau>' t = 0"
-    using assms(2) by (auto simp add: trans_post_raw_def post_raw_def preempt_raw_def)
-  have "t \<le> next_time t \<tau>'"
-    using next_time_at_least assms b_conc_exec_preserve_trans_removal
-    by (metis dual_order.strict_implies_order)
-  show "t < next_time t \<tau>'"
-  proof (rule ccontr)
-    assume "\<not> t < next_time t \<tau>'"
-    hence "t = next_time t \<tau>'"
-      using `t \<le> next_time t \<tau>'` by auto
-    hence least: "(LEAST n. dom (\<tau>' n) \<noteq> {}) = t"
-      using `\<tau>' \<noteq> 0` unfolding next_time_def  by presburger
-    have "\<exists>n. \<tau>' n \<noteq> 0"
-      using `\<tau>' \<noteq> 0` by (metis (full_types) next_time_def lessI next_time_at_least
-      not_le)
-    hence 0: "\<exists>n. dom (\<tau>' n) \<noteq> {}"
-    proof -
-      { assume "dom (0::sig \<Rightarrow> val option) \<noteq> {}"
-        then have ?thesis
-          by (metis \<open>\<tau>' t = 0\<close>) }
-      then show ?thesis
-        using \<open>\<exists>n. \<tau>' n \<noteq> 0\<close> by force
-    qed
-    have "dom (\<tau>' t) \<noteq> {}"
-      using LeastI_ex[OF 0] unfolding least by auto
-    with `\<tau>' t = 0` show "False"
-      by (metis dom_eq_empty_conv zero_map)
-  qed
-next
-  case False
-  hence \<tau>'_def: "\<tau>' = \<tau>"
-    using assms unfolding nand3_def by auto
-  have "\<tau>' t = 0"
-    unfolding \<tau>'_def using assms(2) by auto
-  have "next_time t \<tau>' = (LEAST n. dom (\<tau>' n) \<noteq> {})"
-    using assms(3) unfolding next_time_def by auto
-  also have " (LEAST n. dom (\<tau>' n) \<noteq> {}) \<noteq> t"
-  proof (rule ccontr)
-    have asm: "\<exists>x. dom (\<tau>' x) \<noteq> {}"
-      using `\<tau>' \<noteq> 0`
-    proof -
-      have "\<exists>n. next_time n \<tau>' < n"
-        by (metis next_time_def assms(3) lessI)
-      then have "\<exists>n. \<tau>' n \<noteq> 0"
-        by (meson next_time_at_least not_le)
-      moreover
-      { assume "\<exists>s n. \<tau>' n s \<noteq> None"
-        then have ?thesis
-          by (metis (no_types) dom_empty dom_eq_singleton_conv dom_fun_upd fun_upd_idem_iff
-          option.distinct(1)) }
-      ultimately show ?thesis
-        using \<open>\<tau>' t = 0\<close> by fastforce
-    qed
-    assume "\<not> (LEAST n. dom (\<tau>' n) \<noteq> {}) \<noteq> t"
-    hence "dom (\<tau>' t) \<noteq> {}"
-      using LeastI_ex[where P="\<lambda>x. dom (\<tau>' x) \<noteq> {}"] asm by auto
-    hence "\<tau>' t \<noteq> 0"
-      by (metis dom_eq_empty_conv zero_map)
-    with `\<tau>' t = 0` show "False" by auto
-  qed
-  finally have "next_time t \<tau>' \<noteq> t"
+lemma signal_of_add_to_beh2:
+  assumes "t < split"
+  assumes "\<forall>n > t. \<theta> n s = 0"
+  shows "signal_of (def s) (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s split = \<sigma> s"
+proof (cases "inf_time (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def)) s split")
+  case None
+  hence "Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s = None"
+    by (metis assms dual_order.strict_implies_order inf_time_noneE2 to_trans_raw_sig_def zero_option_def)
+  hence " signal_of (def s) \<theta> s t = \<sigma> s"
+    unfolding Femto_VHDL_raw.add_to_beh2_def fun_upd_def Let_def 
+    by (smt option.simps(3))
+  have inf_none2: "inf_time (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def)) s t = None"
+    using None assms by (meson inf_time_none_iff order.strict_trans)
+  hence cont: "inf_time (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def)) s t = inf_time (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def)) s (t - 1)"
+    by (meson inf_time_less inf_time_noneE2 less_or_eq_imp_le)
+  have "0 < t \<or> t = 0"
     by auto
-  have *: "\<And>n. n < t \<Longrightarrow> \<tau>' n = 0"
-    using b_conc_exec_preserve_trans_removal[OF assms(1-2)] by auto
-  have "t \<le> next_time t \<tau>'"
-    using next_time_at_least[OF *, of "t"] by auto
-  with `next_time t \<tau>' \<noteq> t` show ?thesis by auto
-qed
-
-lemma beh_res2:
-  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> beh"
-  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
-  assumes "t < maxtime" and "cs = nand3"
-  assumes "\<And>n. t \<le> n \<Longrightarrow> \<theta> n = 0"
-  shows   "\<And>n. n \<le> t \<Longrightarrow> (\<theta>(t:= Some o \<sigma>)) n = get_beh beh n"
-  using assms
-proof (induction rule:b_simulate_fin.induct)
-  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
-  have *: "\<And>n. n < t \<Longrightarrow>  \<tau>' n = 0"
-    using b_conc_exec_preserve_trans_removal[OF 1(3) 1(8)] by auto
-  have "t \<le> next_time t \<tau>'"
-    using next_time_at_least[OF *, of "t"] by auto
-  have "\<tau>' = 0 \<or> \<tau>' \<noteq> 0" by auto
   moreover
-  { assume "\<tau>' = 0"
-    hence "next_time t \<tau>' = t + 1"
-      unfolding next_time_def by auto
-    moreover have " next_state t \<tau>' \<sigma> = \<sigma>"
-      unfolding next_state_def Let_def
-      `next_time t \<tau>' = t + 1` `\<tau>' = 0` override_on_def
-      by (auto simp add: zero_fun_def zero_option_def)
-    moreover hence "next_event t \<tau>' \<sigma> = {}"
-      unfolding next_event_def next_state_def Let_def `next_time t \<tau>' = t + 1` `\<tau>' = 0`
-      by (auto simp add: zero_fun_def zero_option_def)
-    moreover hence "add_to_beh \<sigma> \<theta> t (next_time t \<tau>') = \<theta>(t := (Some o \<sigma>))"
-      unfolding `next_time t \<tau>' = t + 1` add_to_beh_def by auto
-    ultimately have ul: " maxtime, t + 1, \<sigma>, {}, \<theta>(t :=(Some o \<sigma>)), def \<turnstile> <cs, (\<tau>'(t + 1 := 0))> \<leadsto> res"
-      using 1(5) by auto
-    have "t + 1 < maxtime \<or> maxtime = t + 1"
-      using "1.hyps"(4) \<open>next_time t \<tau>' = t + 1\<close> by linarith
+  { assume "0 < t"
+    hence "inf_time (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def)) s (t - 1) = inf_time (to_trans_raw_sig \<theta>) s (t - 1)"
+      unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def 
+      by (smt diff_less inf_time_equal_when_same_trans_upto leD order_refl zero_less_one)
+    hence "inf_time (to_trans_raw_sig \<theta>) s (t - 1) = None"
+      using None cont  using inf_none2 by auto
+    hence " (def s  = \<sigma> s \<and> \<theta> t s = None)"
+      using \<open>signal_of (def s) \<theta> s t = \<sigma> s\<close> 
+      by (smt Femto_VHDL_raw.add_to_beh2_def \<open>Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s = None\<close>
+      comp_apply fun_upd_same option.simps(4) signal_of_less_sig to_signal_def zero_option_def)
+    moreover have "inf_time (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def)) s t = None"
+      using inf_none2 by blast
+    ultimately have " signal_of (def s) (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s split = \<sigma> s"
+      by (simp add: None to_signal_def) }
+  moreover
+  { assume "t = 0"
+    have "signal_of (def s) (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s split = \<sigma> s"
+      by (smt Femto_VHDL_raw.add_to_beh2_def None \<open>Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s = None\<close>
+      \<open>signal_of (def s) \<theta> s t = \<sigma> s\<close> \<open>t = 0\<close> comp_apply fun_upd_same inf_none2 signal_of_zero
+      to_signal_def zero_option_def) }
+  ultimately show "signal_of (def s) (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s split = \<sigma> s"
+    by auto
+next
+  case (Some a)
+  have "a \<le> t"
+  proof (rule ccontr)
+    assume "\<not> a \<le> t" hence "t < a" by auto
+    hence "(\<theta> a s) \<noteq> None"
+      using Some 
+    proof -
+      have "\<forall>f fa n fb na. Femto_VHDL_raw.add_to_beh2 (f::'a \<Rightarrow> val) fb na fa n = fb n \<or> na = n"
+        by (simp add: Femto_VHDL_raw.add_to_beh2_def)
+      then show ?thesis
+        by (metis Femto_VHDL_raw.keys_def \<open>\<not> a \<le> t\<close> \<open>inf_time (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def)) s split = Some a\<close> domIff dom_def inf_time_some_exists le_refl to_trans_raw_sig_def zero_option_def)
+    qed
+    thus False
+      using assms `t < a`  by (simp add: zero_option_def)
+  qed
+  hence "a < t \<or> a = t"
+    by auto
+  moreover
+  { assume " a = t"
+    hence "Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s \<noteq> None"
+      using inf_time_some_exists[OF Some]  unfolding Femto_VHDL_raw.keys_def to_trans_raw_sig_def
+      by (simp add: zero_option_def)
+    have "signal_of (def s) \<theta> s t = \<sigma> s \<or> signal_of (def s) \<theta> s t \<noteq> \<sigma> s"
+      by auto
     moreover
-    { assume "t + 1 < maxtime"
-      have "get_beh res = (\<theta>(t := Some o \<sigma>))(t + 1 := Some \<circ> \<sigma>)"
-        using case_quiesce[OF `t + 1 < maxtime` _ ul] unfolding `\<tau>' = 0` quiet_def
-        by (simp add: fun_upd_idem zero_fun_def)
-      hence ?case
-        using `n \<le> t` fun_upd_def by auto }
+    { assume "signal_of (def s) \<theta> s t \<noteq> \<sigma> s"
+      hence "Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s = Some (\<sigma> s) "
+        unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def by auto
+      hence ?thesis
+        using Some `a = t` 
+        by (metis comp_apply some_inf_time' to_signal_def trans_some_signal_of') }
     moreover
-    { assume "maxtime = t + 1"
-      hence "get_beh res = \<theta> (t := Some o \<sigma>)"
-        using ul "1.prems"(4) maxtime_maxtime_bigstep by blast
-      hence ?case  by metis }
-    ultimately have ?case
+    { assume "signal_of (def s) \<theta> s t = \<sigma> s"
+      hence "Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s = \<theta> t s "
+        unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def by auto
+      with \<open>Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s \<noteq> None\<close> have "\<theta> t s = Some (\<sigma> s)"
+        using \<open>signal_of (def s) \<theta> s t = \<sigma> s\<close> 
+        by (metis le_refl nat_less_le signal_of_val_eq to_trans_raw_sig_def)
+      hence ?thesis
+        using Some `a = t` 
+        by (simp add: \<open>Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s = \<theta> t s\<close> to_signal_def to_trans_raw_sig_def) }
+    ultimately have ?thesis
       by auto }
   moreover
-  { assume "\<tau>' \<noteq> 0"
-    hence "t < next_time t \<tau>'"
-      using t_strictly_increasing[OF _ 1(8) `\<tau>' \<noteq> 0`] 1(3) unfolding `cs = nand3` by auto
-    hence ind1: "n \<le> next_time t \<tau>'"
-      using `n \<le> t` by auto
-    have ind2: "(\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>  (\<tau>'(next_time t \<tau>' := 0)) n = 0) "
-      by (simp add: nat_less_le next_time_at_least2)
-    have "next_time t \<tau>' < maxtime \<or> maxtime = next_time t \<tau>'"
-      using "1.hyps"(4) nat_less_le by blast
-    moreover
-    { assume ind3: "next_time t \<tau>' < maxtime"
-      have h2: "\<And>n. next_time t \<tau>' \<le> n \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n = 0"
-        unfolding add_to_beh_def using "1.prems"(5) \<open>t \<le> next_time t \<tau>'\<close> by auto
-      have " ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))(next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n = get_beh res n"
-        using 1(6)[OF ind1 ind2 ind3 `cs = nand3` h2] by blast
-      hence ?case
-        using `n \<le> t` `t < next_time t \<tau>'` unfolding add_to_beh_def
-        by (metis (full_types) fun_upd_apply le_antisym less_irrefl_nat less_or_eq_imp_le) }
-    moreover
-    { assume "maxtime = next_time t \<tau>'"
-      have "t < next_time t \<tau>'"
-        using `t < maxtime` `maxtime = next_time t \<tau>'` by auto
-      have ?case
-        using borderline_big_step[OF 1(5) 1(3) order.strict_implies_order[OF `t < maxtime`] `maxtime = next_time t \<tau>'` 1(11) _ ind1]
-        `t < next_time t \<tau>'` unfolding add_to_beh_def  using nat_less_le
-        by presburger }
-    ultimately have ?case by auto }
-  ultimately show ?case by blast
+  { assume " a < t"
+    with Some \<open>t < split\<close> have fnone: "Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s = None"
+      using inf_time_someE[OF Some] 
+      by (metis (full_types) domIff nat_less_le not_le to_trans_raw_sig_def)  
+    hence "signal_of (def s) \<theta> s t = \<sigma> s"
+      unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def 
+      by (smt option.distinct(1))
+    have "Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s = \<theta> t s"
+      using fnone unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def
+      using \<open>signal_of (def s) \<theta> s t = \<sigma> s\<close> by auto
+    have "\<And>n. a < n \<Longrightarrow> n \<le> t \<Longrightarrow> \<theta> n s = 0"
+    proof (rule ccontr)
+      fix n 
+      assume "a < n" and "n \<le> t" and "\<theta> n s \<noteq> 0"
+      hence "\<theta> n s \<noteq> None"
+        by (simp add: zero_option_def)
+      hence "Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def n s \<noteq> None"
+        by (metis (no_types, lifting) Femto_VHDL_raw.add_to_beh2_def \<open>Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def t s = \<theta> t s\<close> fun_upd_other)
+      have a_def: "a = (GREATEST l. l \<in> Femto_VHDL_raw.keys (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s) \<and> l \<le> split)"
+        using inf_time_when_exist[OF Some] by auto
+      have "\<exists>l. l \<in> Femto_VHDL_raw.keys (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s) \<and> l \<le> split"
+        by (meson Some inf_time_some_exists)
+      have "n \<in> Femto_VHDL_raw.keys (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s)"
+        using \<open>Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def n s \<noteq> None\<close> unfolding to_trans_raw_sig_def Femto_VHDL_raw.keys_def zero_option_def by auto
+      hence "n \<le> a"
+        using a_def 
+        by (smt Femto_VHDL_raw.keys_def Some \<open>n \<le> t\<close> assms(1) domIff inf_time_someE le_less_trans mem_Collect_eq nat_less_le zero_option_def)
+      with `a < n` show False
+        by auto
+    qed
+    have Some2: "inf_time (to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def)) s a = Some a"
+    proof -
+      have "0 \<noteq> to_trans_raw_sig (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s a"
+        using Femto_VHDL_raw.keys_def Some inf_time_some_exists by fastforce
+      then have "\<exists>v. Some v = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def a s"
+        by (metis (no_types) option.exhaust_sel to_trans_raw_sig_def zero_option_def)
+      then have "\<exists>f. Some (f s) = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def a s"
+        by meson
+      then show ?thesis
+        by (metis some_inf_time')
+    qed
+    have " signal_of (def s) (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s split =  signal_of (def s) (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s a"
+      unfolding to_signal_def comp_def Some Some2 by auto
+    also have "... = signal_of (def s) \<theta> s a"
+      apply (rule signal_of_equal_when_trans_equal_upto[where maxtime="a"])
+      using `a < t` unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def by auto
+    also have "... = signal_of (def s) \<theta> s t"
+      apply (rule signal_of_less_ind'[THEN sym])
+      using \<open>\<And>n. a < n \<Longrightarrow> n \<le> t \<Longrightarrow> \<theta> n s = 0\<close> \<open>a \<le> t\<close> by auto
+    finally have ?thesis
+      using \<open>signal_of (def s) \<theta> s t = \<sigma> s\<close> by auto }
+  ultimately show ?thesis 
+    by auto
+qed
+
+lemma signal_of_add_to_beh2':
+  assumes "t \<le> split"
+  assumes "\<forall>n > t. \<theta> n s = 0"
+  shows "signal_of (def s) (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) s split = \<sigma> s"
+proof (cases "t < split")
+  case True
+  then show ?thesis 
+    using signal_of_add_to_beh2  by (metis assms(2))
 next
-  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> res cs)
+  case False
+  hence "t = split"
+    using assms by auto
+  then show ?thesis 
+    using assms(2) 
+    by (smt Femto_VHDL_raw.add_to_beh2_def eq_iff fun_upd_def le_imp_less_Suc signal_of_add_to_beh2 signal_of_suc_sig)
+qed
+
+lemma add_to_beh2_fixed_point:
+  assumes "t < split"
+  assumes "\<And>s. \<forall>n > t. \<theta> n s = 0"
+  shows "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def"
+proof (rule)
+  fix x :: nat
+  have "x = split \<or> x < split \<or> x > split"
+    by auto
+  moreover
+  { assume "x = split"
+    have "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def split"
+      unfolding Femto_VHDL_raw.add_to_beh2_def[where \<theta>="Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def"] Let_def
+      `x = split` fun_upd_def using signal_of_add_to_beh2[where \<theta>="\<theta>", OF assms] by auto
+    hence "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+      using \<open>x = split\<close> by auto }
+  moreover
+  { assume "x > split"
+    hence "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = \<theta> x"
+      unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def
+      using `t < split` by auto
+    also have "... = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+      using \<open>x > split\<close> \<open>split > t\<close> unfolding Femto_VHDL_raw.add_to_beh2_def by auto
+    finally have "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+      by auto }
+  moreover
+  { assume "x < split"
+    have "x < t \<or> x = t \<or> x > t"
+      by auto
+    moreover
+    { assume "x > t"
+      hence "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = \<theta> x"
+        using \<open>x < split\<close> unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def by auto
+      also have "... = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+        using `x > t` unfolding Femto_VHDL_raw.add_to_beh2_def fun_upd_def Let_def by auto
+      finally have "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+        by auto }
+    moreover
+    { assume "x < t"
+      hence "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = \<theta> x"
+        using \<open>x < split\<close> unfolding Femto_VHDL_raw.add_to_beh2_def Let_def fun_upd_def by auto
+      also have "... = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+        using `x < t` unfolding Femto_VHDL_raw.add_to_beh2_def fun_upd_def Let_def by auto
+      finally have "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+        by auto }
+    moreover
+    { assume "x = t"
+      hence "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = 
+              (\<lambda>s. if to_signal (def s) (to_trans_raw_sig \<theta>) s t = \<sigma> s then \<theta> t s else Some (\<sigma> s))"
+        using \<open>x < split\<close> unfolding Femto_VHDL_raw.add_to_beh2_def fun_upd_def Let_def by auto
+      also have "... = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+        using \<open>x = t\<close> unfolding Femto_VHDL_raw.add_to_beh2_def fun_upd_def Let_def by auto
+      finally have "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+        by auto }
+    ultimately have "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+      by auto }
+  ultimately show "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def x = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def x"
+    by auto  
+qed
+
+lemma split_b_simulate_fin:
+  assumes "maxtime, t , \<sigma> , \<gamma>  ,  \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
+  assumes "t \<le> split" and "split \<le> maxtime"
+  assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
+  assumes " conc_stmt_wf cs "
+  assumes "\<And>n. t < n \<Longrightarrow> \<theta> n = 0"
+  shows   "\<exists>res'. split, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res' \<and> maxtime, split, get_state res', get_event res', get_beh res', def \<turnstile> <cs, get_trans res'> \<leadsto> res"
+  using assms
+proof (induction rule:b_simulate_fin.inducts)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  have hyp1: "\<And>n. n < next_time t \<tau>' \<Longrightarrow> (\<tau>'(next_time t \<tau>' := 0)) n = 0"
+    by (simp add: next_time_at_least2)
+  have hyp2: "\<And>n. next_time t \<tau>' < n \<Longrightarrow> Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def n = 0"
+    by (metis (no_types, lifting) "1.hyps"(3) "1.prems"(3) "1.prems"(4) "1.prems"(5)
+    Femto_VHDL_raw.add_to_beh2_def conc_next_time dual_order.strict_trans fun_upd_apply leD
+    nat_neq_iff)
+  have "t \<le> next_time t \<tau>'"
+    using "1.hyps"(3) "1.prems"(3) "1.prems"(4) conc_next_time by blast
+  consider (eq_split) "next_time t \<tau>' = split " | (neq_split_less) " next_time t \<tau>' < split" | (neq_split_gt) "next_time t \<tau>' > split"
+    by linarith
+  thus "\<exists>res'.
+             (split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res') \<and>
+             (maxtime, split , get_state res' , get_event res' , get_beh res', def \<turnstile> <cs , get_trans res'> \<leadsto> res)"
+  proof (cases)
+    case eq_split
+    have "t < next_time t \<tau>' \<or> t = next_time t \<tau>'"
+      using \<open>t \<le> next_time t \<tau>'\<close> by auto
+    moreover
+    { assume "t = next_time t \<tau>'"
+      hence "split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> (split, \<sigma>, \<gamma>, \<theta>, \<tau>)"
+        using eq_split  using b_simulate_fin.intros(4) by blast    
+      moreover have "maxtime, split , \<sigma> , \<gamma>, \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
+        using \<open>maxtime, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>' (next_time t \<tau>' := 0)> \<leadsto> res\<close>
+        \<open>t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'\<close>
+        using \<open>t = next_time t \<tau>'\<close> 
+        by (metis "1.hyps"(1) "1.hyps"(2) "1.hyps"(4) b_simulate_fin.intros(1) eq_split)
+      ultimately have "\<exists>res'.
+       split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res' \<and>
+       maxtime, split , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <cs , get_trans res'> \<leadsto> res"
+        by(intro exI[where x="(split, \<sigma>, \<gamma>, \<theta>, \<tau>)"])(auto) }
+    moreover
+    { assume "t < next_time t \<tau>'"
+      have "split, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> (split, next_state t \<tau>' \<sigma>, next_event t \<tau>' \<sigma>, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>'(next_time t \<tau>' :=0))"
+      proof (rule b_simulate_fin.intros(1))
+        show "t < split"
+          using \<open>t < next_time t \<tau>'\<close> eq_split by blast
+      next
+        show "\<not> quiet \<tau> \<gamma>"
+          using \<open>\<not> quiet \<tau> \<gamma> \<close> by auto
+      next
+        show "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+          using \<open>t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'\<close> by auto
+      next
+        show "next_time t \<tau>' \<le> split"
+          using eq_split by auto
+      next
+        show "split, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>' (next_time t \<tau>' := 0)> \<leadsto> (split, next_state t \<tau>' \<sigma>, next_event t \<tau>' \<sigma>, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>'(next_time t \<tau>' := 0))"
+          using eq_split  by (simp add: b_simulate_fin.intros(4))
+      qed
+      moreover have "maxtime, split , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma>, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , (\<tau>'(next_time t \<tau>' := 0))> \<leadsto> res"
+        using \<open>maxtime, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>' (next_time t \<tau>' := 0)> \<leadsto> res \<close>
+          eq_split by auto
+      ultimately have "\<exists>res'.
+       split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res' \<and>
+       maxtime, split , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <cs , get_trans res'> \<leadsto> res"
+        by(intro exI[where x="(split, next_state t \<tau>' \<sigma>, next_event t \<tau>' \<sigma>, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>'(next_time t \<tau>' :=0))"])(auto) }
+    ultimately show ?thesis 
+      by auto
+  next
+    case neq_split_gt
+    have "t = split \<or> t < split"
+      using \<open>t \<le> split\<close> by auto
+    moreover
+    { assume "t = split"
+      hence "split, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> (split, \<sigma>, \<gamma>, \<theta>, \<tau>)"
+        by (intro b_simulate_fin.intros(4))
+      moreover have "maxtime, split , get_state (split, \<sigma>, \<gamma>, \<theta>, \<tau>) , get_event (split, \<sigma>, \<gamma>, \<theta>, \<tau>) , get_beh (split, \<sigma>, \<gamma>, \<theta>, \<tau>), def \<turnstile> <cs , get_trans (split, \<sigma>, \<gamma>, \<theta>, \<tau>)> \<leadsto> res"
+        unfolding `t = split`[THEN sym]
+      proof (rule b_simulate_fin.intros(1))
+        show "t < maxtime"
+          using `t < maxtime` by auto
+      next
+        show "\<not> quiet (get_trans (t, \<sigma>, \<gamma>, \<theta>, \<tau>)) (get_beh' (t, \<sigma>, \<gamma>, \<theta>, \<tau>))"
+          using 1 by auto
+      next
+        show "t , get_state (t, \<sigma>, \<gamma>, \<theta>, \<tau>) , get_beh' (t, \<sigma>, \<gamma>, \<theta>, \<tau>) , get_beh (t, \<sigma>, \<gamma>, \<theta>, \<tau>), def  \<turnstile> <cs , get_trans (t, \<sigma>, \<gamma>, \<theta>, \<tau>)> \<longrightarrow>\<^sub>c \<tau>'"
+          using 1 by auto
+      next
+        show "next_time t \<tau>' \<le> maxtime"
+          using "1.hyps"(4) by blast
+      next
+        show "maxtime, next_time t
+              \<tau>' , next_state t \<tau>'
+                    (get_state
+                      (t, \<sigma>, \<gamma>, \<theta>, \<tau>)) , next_event t \<tau>' (get_state (t, \<sigma>, \<gamma>, \<theta>, \<tau>)) , Femto_VHDL_raw.add_to_beh2 (get_state (t, \<sigma>, \<gamma>, \<theta>, \<tau>)) (get_beh (t, \<sigma>, \<gamma>, \<theta>, \<tau>)) t def, def \<turnstile> <cs , \<tau>'
+    (next_time t \<tau>' := 0)> \<leadsto> res"
+          using 1 by auto
+      qed
+      ultimately have "\<exists>res'.
+       split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res' \<and>
+       maxtime, split , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <cs , get_trans res'> \<leadsto> res"
+        using  b_simulate_fin.intros(4) by (intro exI[where x="(split, \<sigma>, \<gamma>, \<theta>, \<tau>)"])(auto) }
+    moreover
+    { assume "t < split"
+      have "split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> (split, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>')"
+      proof (intro b_simulate_fin.intros(2))
+        show "t < split"
+          using \<open>t < split\<close> by auto
+      next
+        show "\<not> quiet \<tau> \<gamma>"
+          using \<open>\<not> quiet \<tau> \<gamma>\<close> by auto
+      next
+        show " t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+          using \<open> t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'\<close> by auto
+      next
+        show "split < next_time t \<tau>'"
+          using neq_split_gt by auto
+      qed
+      have "split, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs, \<tau>'> \<longrightarrow>\<^sub>c \<tau>'"
+        by (simp add: b_conc_exec_empty_event)
+      have "split < maxtime \<or> split = maxtime"
+        using \<open>split \<le> maxtime\<close> by auto
+      moreover
+      { assume "split = maxtime"
+        hence "\<exists>res'.
+        split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res' \<and>
+        maxtime, split , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <cs , get_trans res'> \<leadsto> res"
+        proof -
+          have "next_time t \<tau>' < maxtime"
+            using \<open>maxtime, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>' (next_time t \<tau>' := 0)> \<leadsto> res\<close> \<open>split = maxtime\<close> bau neq_split_gt by blast
+          then show ?thesis
+            using \<open>split = maxtime\<close> neq_split_gt by linarith
+        qed }
+      moreover 
+      { assume "split < maxtime"
+        have " maxtime, split , \<sigma> , {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs ,  \<tau>'> \<leadsto> res"
+        proof (rule b_simulate_fin.intros(1))
+          show "split < maxtime"
+            using \<open>split < maxtime\<close> by auto
+        next
+          show "\<not> quiet \<tau>' {}"
+            by (metis Suc_eq_plus1 Suc_leI \<open>t < split\<close> leD neq_split_gt next_time_def quiet_def)
+        next
+          show " split , \<sigma> , {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def  \<turnstile> <cs , \<tau>'> \<longrightarrow>\<^sub>c \<tau>'"
+            by (simp add: \<open>split , \<sigma> , {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'> \<longrightarrow>\<^sub>c \<tau>'\<close>)
+        next
+          show "next_time split \<tau>' \<le> maxtime"
+          proof -
+            have "next_time t \<tau>' = maxtime \<or> next_time t \<tau>' < maxtime"
+              using \<open>maxtime, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>' (next_time t \<tau>' := 0)> \<leadsto> res\<close> bau by blast
+            then show ?thesis
+              by (metis (no_types) Suc_eq_plus1 \<open>split < maxtime\<close> nat_less_le next_time_def not_le not_less_eq_eq)
+          qed
+        next
+          have "next_time split \<tau>' = next_time t \<tau>'"
+            by (metis Suc_eq_plus1 \<open>t < split\<close> less_Suc_eq_le neq_split_gt next_time_def not_le)
+          have " next_state split \<tau>' \<sigma> =  next_state t \<tau>' \<sigma>"
+            by (simp add: \<open>next_time split \<tau>' = next_time t \<tau>'\<close> next_state_def)
+          have "next_event split \<tau>' \<sigma> = next_event t \<tau>' \<sigma>"
+            by (simp add: \<open>next_time split \<tau>' = next_time t \<tau>'\<close> next_event_def)
+          have "\<And>s. \<forall>n>t. \<theta> n s = 0"
+            using 1  by (simp add: zero_fun_def)
+          hence "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def"
+            using \<open>t < split\<close> add_to_beh2_fixed_point by blast
+          show "maxtime, next_time split \<tau>' , next_state split \<tau>' \<sigma> , next_event split \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def, def \<turnstile> <cs , \<tau>' (next_time split \<tau>' := 0)> \<leadsto> res"          
+            using \<open>maxtime, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>' (next_time t \<tau>' := 0)> \<leadsto> res\<close>
+            by (simp add: \<open>Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def\<close> \<open>next_time split \<tau>' = next_time t \<tau>'\<close> next_event_alt_def next_state_def)
+        qed
+        hence "\<exists>res'.
+          split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res' \<and>
+          maxtime, split , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <cs , get_trans res'> \<leadsto> res"
+          using \<open>split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> (split, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>')\<close>
+          by (intro exI[where x="(split, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>')"]) auto }
+      ultimately have ?thesis
+        by auto }
+    ultimately show ?thesis 
+      by auto
+  next
+    case neq_split_less
+    then obtain res' where  "split, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'(next_time t \<tau>' := 0)> \<leadsto> res'" 
+      and  "maxtime, split , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <cs , get_trans res'> \<leadsto> res"
+      using  1(6)[OF _ `split \<le> maxtime` hyp1 `conc_stmt_wf cs` hyp2]  using dual_order.order_iff_strict by blast
+    have "split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res'"
+    proof (rule b_simulate_fin.intros(1))
+      show "t < split"
+        using \<open>t \<le> next_time t \<tau>'\<close> dual_order.strict_trans2 neq_split_less by blast
+    next
+      show "\<not> quiet \<tau> \<gamma>"
+        by (simp add: "1.hyps"(2))
+    next
+      show "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+        using "1.hyps"(3) by blast
+    next
+      show "next_time t \<tau>' \<le> split"
+        using nat_less_le neq_split_less by blast
+    next
+      show "split, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'(next_time t \<tau>' := 0)> \<leadsto> res'"
+        using \<open>split, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>' (next_time t \<tau>' := 0)> \<leadsto> res'\<close> by blast
+    qed
+    thus ?thesis
+      using \<open>maxtime, split , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <cs , get_trans res'> \<leadsto> res\<close> by blast
+  qed
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then consider (eq) "t = split" | (neq) "t < split"
+    by linarith
+  then show ?case 
+  proof (cases)
+    case eq
+    then show ?thesis 
+      using "2.hyps"(1) "2.hyps"(2) "2.hyps"(3) "2.hyps"(4) b_simulate_fin.intros(2) b_simulate_fin.intros(4) by fastforce
+  next
+    case neq
+    have *: "split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> (split, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>')"
+    proof (rule b_simulate_fin.intros(2))
+      show "t < split"
+        using neq by auto
+    next
+      show "\<not> quiet \<tau> \<gamma>"
+        using 2 by auto
+    next
+      show "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+        using 2 by auto
+    next
+      show "split < next_time t \<tau>'"
+        using 2  by linarith
+    qed
+    have "split < maxtime \<or> split = maxtime"
+      using 2 by linarith
+    moreover
+    { assume "split = maxtime"
+      hence "maxtime, split , \<sigma>, {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'> \<leadsto> (maxtime, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def, \<tau>')"
+        by (smt "2.prems"(5) add_to_beh2_fixed_point b_simulate_fin.simps neq zero_fun_def) }
+    moreover
+    { assume "split < maxtime" 
+      have "maxtime, split , \<sigma>, {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'> \<leadsto> (maxtime, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def, \<tau>')"
+      proof (rule b_simulate_fin.intros(2))
+        show "split < maxtime"
+          using `split < maxtime` by auto
+      next
+        show "\<not> quiet \<tau>' {}"
+          by (metis "2.hyps"(1) "2.hyps"(4) One_nat_def add.right_neutral add_Suc_right leD less_Suc_eq_le next_time_def quiet_def)
+      next
+        show "split , \<sigma> , {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def  \<turnstile> <cs , \<tau>'> \<longrightarrow>\<^sub>c \<tau>'"
+          by (simp add: b_conc_exec_empty_event)
+      next
+        show "maxtime < next_time split \<tau>'"
+          by (metis "2.hyps"(1) "2.hyps"(4) Suc_eq_plus1 Suc_le_eq leD next_time_def)
+      qed }
+    ultimately have "maxtime, split , \<sigma>, {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'> \<leadsto> (maxtime, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def, \<tau>')"
+      by auto
+    hence "maxtime, split , \<sigma>, {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'> \<leadsto> (maxtime, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>')"
+      using add_to_beh2_fixed_point 
+      by (simp add: add_to_beh2_fixed_point "2.prems"(5) neq zero_fun_def)
+    thus ?thesis 
+      apply (intro exI[where x="(split, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>')"])
+      using * by auto
+  qed
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  hence "t < split \<or> t = split"
+    by auto
+  moreover
+  { assume "t = split"
+    hence ?case
+      using 3  using b_simulate_fin.intros(3) b_simulate_fin.intros(4) by fastforce }
+  moreover
+  { assume "t < split"
+    hence " split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> (split, \<sigma>, \<gamma>, \<theta>, 0)"
+      using 3 apply (intro b_simulate_fin.intros(3))
+      by auto
+    moreover have "maxtime, split , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , 0> \<leadsto> (maxtime, \<sigma>, \<gamma>, \<theta>, 0)"
+    proof (cases "split = maxtime")
+      case True
+      then show ?thesis 
+        by (simp add: b_simulate_fin.intros(4))
+    next
+      case False
+      then show ?thesis 
+        by (metis (full_types) "3.hyps"(2) "3.prems"(2) b_simulate_fin.intros(3) dual_order.order_iff_strict quiet_def)
+    qed
+    ultimately have  ?case
+      by (auto intro!: exI) }
+  ultimately show ?case 
+    by auto
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  hence "split, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> (split, \<sigma>, \<gamma>, \<theta>, \<tau>)"
+    by (auto intro!: b_simulate_fin.intros(4))
+  moreover have "maxtime, split , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> (maxtime, \<sigma>, \<gamma>, \<theta>, \<tau>)"
+    using 4 by (auto intro!: b_simulate_fin.intros(4))
+  ultimately show ?case 
+    by (auto intro!: exI)
+qed
+
+lemma case_quiesce2:
+  assumes "t < maxtime"
+  assumes "quiet \<tau> \<gamma>"
+  assumes "(maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res)"
+  shows "get_time res = maxtime \<and> get_beh res = \<theta> \<and> get_state res = \<sigma> \<and> get_trans res = 0"
+  apply(rule bau[OF assms(3)])
+  using assms by auto
+
+lemma pseudo_inductive_rule_b_simulate_fin:
+  assumes "split, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res'"
+  assumes "maxtime, split, get_state res', get_event res', get_beh res', def \<turnstile> <cs, get_trans res'> \<leadsto> res"
+  assumes "\<forall>n < t. \<tau> n = 0" and "\<forall>n > t. \<theta> n = 0"
+  shows   "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res"
+  using assms
+proof (induction arbitrary: maxtime rule: b_simulate_fin.inducts)
+  case (1 t maxtime' \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res')
+  hence "t \<le> next_time t \<tau>'"
+    by (meson b_conc_exec_preserve_trans_removal next_time_at_least)
+  hence atb: "\<forall>n>next_time t \<tau>'. Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def n = 0"
+    using 1 by (simp add: Femto_VHDL_raw.add_to_beh2_def)
+  have trans: " \<forall>n<next_time t \<tau>'. (\<tau>'(next_time t \<tau>' := 0)) n = 0"
+    by (simp add: next_time_at_least2)
+  have IH: "maxtime, next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'
+    (next_time t \<tau>' := 0)> \<leadsto> res"
+    using 1(6)[OF 1(7) trans atb] by metis
+  have "maxtime' \<le> maxtime"
+    using 1(7) by (induction)(auto)
+  show ?case 
+    apply (rule b_simulate_fin.intros(1))
+    using 1 \<open>maxtime' \<le> maxtime\<close> apply linarith
+    using 1  apply linarith
+    using 1(3) apply simp
+    using 1 \<open>maxtime' \<le> maxtime\<close> apply simp
+    using IH by simp
+next
+  case (2 t split \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  hence *: "maxtime, split , \<sigma> , {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'> \<leadsto> res"
+    by auto
+  hence "split \<le> maxtime"
+    by (induction)(auto)
+  hence "split = maxtime \<or> split < maxtime"
+    by auto
+  moreover
+  { assume "split = maxtime"
+    hence ?case
+      by (metis "2.hyps"(1) "2.hyps"(2) "2.hyps"(3) "2.hyps"(4) \<open>maxtime, split , \<sigma> , {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'> \<leadsto> res\<close> b_simulate_fin.intros(2) b_simulate_fin.intros(4) b_simulate_fin_deterministic)  }
+  moreover
+  { assume "split < maxtime"
+    have "\<not> quiet \<tau>' {}"
+      using 2  by (metis (full_types) Suc_eq_plus1 less_Suc_eq_le next_time_def not_le quiet_def)
+    have "split, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs, \<tau>'> \<longrightarrow>\<^sub>c \<tau>'"
+      by (simp add: b_conc_exec_empty_event)
+    have "next_time split \<tau>' = next_time t \<tau>'"
+      by (metis \<open>\<not> quiet \<tau>' {}\<close> next_time_def quiet_def)
+    have "maxtime < next_time split \<tau>' \<or> next_time split \<tau>' \<le> maxtime"
+      by auto
+    moreover
+    { assume "maxtime < next_time split \<tau>'"
+      hence "res = (maxtime, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def, \<tau>')"
+        using bau[OF *] 
+        by (smt \<open>\<not> quiet \<tau>' {}\<close> \<open>split , \<sigma> , {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'> \<longrightarrow>\<^sub>c \<tau>'\<close> \<open>split < maxtime\<close> b_conc_exec_deterministic nat_less_le not_less)
+      moreover have "maxtime, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto>(maxtime, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>')"
+        by (metis (no_types, lifting) "2.hyps"(1) "2.hyps"(2) "2.hyps"(3) \<open>maxtime < next_time split \<tau>'\<close> \<open>next_time split \<tau>' = next_time t \<tau>'\<close> \<open>split < maxtime\<close> b_simulate_fin.intros(2) dual_order.strict_trans)
+      moreover have "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def"
+        by (simp add: "2.hyps"(1) "2.prems"(3) add_to_beh2_fixed_point zero_fun_def)
+      ultimately have ?case
+        by auto }
+    moreover
+    { assume "next_time split \<tau>' \<le> maxtime"
+      moreover have "next_state split \<tau>' \<sigma> = next_state t \<tau>' \<sigma>"
+        by (simp add: \<open>next_time split \<tau>' = next_time t \<tau>'\<close> next_state_def)
+      moreover have "next_event t \<tau>' \<sigma> = next_event split \<tau>' \<sigma>"
+        by (simp add: \<open>next_time split \<tau>' = next_time t \<tau>'\<close> next_event_alt_def next_state_def)
+      moreover have "Femto_VHDL_raw.add_to_beh2 \<sigma> (Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def) split def = Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def"
+        by (simp add: "2.hyps"(1) "2.prems"(3) add_to_beh2_fixed_point zero_fun_def)
+      ultimately have ?case
+        by (smt "*" "2.hyps"(1) "2.hyps"(2) "2.hyps"(3) \<open>\<not> quiet \<tau>' {}\<close> \<open>next_time split \<tau>' =
+        next_time t \<tau>'\<close> \<open>split , \<sigma> , {} , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'> \<longrightarrow>\<^sub>c
+        \<tau>'\<close> \<open>split < maxtime\<close> b_simulate_fin.intros(1) case_bau dual_order.strict_trans) }
+    ultimately have ?case
+      by auto }
+  ultimately show ?case
+    by auto
+next
+  case (3 t split \<tau> \<gamma> \<sigma> \<theta> def cs)
+  have "split \<le> maxtime"
+    using 3(3) by (induction)(auto)
+  hence "split = maxtime \<or> split < maxtime"
+    by auto
+  moreover
+  { assume "split = maxtime"
+    hence "res = (maxtime, \<sigma>, \<gamma>, \<theta>, 0)"
+      using 3 
+      by (metis (no_types, hide_lams) Collect_mem_eq b_simulate_fin.intros(4) b_simulate_fin_deterministic comp_apply fst_conv snd_conv) }
+  moreover
+  { assume "split < maxtime"
+    have "res = (maxtime, \<sigma>, \<gamma>, \<theta>, 0)"
+      using case_quiesce2[OF `split < maxtime` 3(2)] 3(3) 
+      by (metis "3.hyps"(2) Pair_inject \<open>split < maxtime\<close> b_simulate_fin.intros(3) b_simulate_fin_deterministic comp_apply comp_def fst_conv old.prod.exhaust quiet_def snd_conv) }
+  ultimately have res_def: "res = (maxtime, \<sigma>, \<gamma>, \<theta>, 0)"
+    by auto
   show ?case
-    using 2(3) by transfer' auto
+    unfolding res_def
+    apply (intro b_simulate_fin.intros(3))
+    using "3.hyps"(1) \<open>split \<le> maxtime\<close> order.strict_trans2 apply blast
+    using "3.hyps"(2) by auto
 next
-  case (3 t maxtime \<theta> res \<sigma> \<gamma> cs \<tau>)
+  case (4 t split \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+lemma conc_stmt_wf_nand4:
+  "conc_stmt_wf nand4"
+  unfolding conc_stmt_wf_def nand4_def by auto
+
+lemma get_trans_res_suc_maxtime:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res"
+  assumes "sig \<notin> set (signals_from cs)"
+  shows   "get_trans res (maxtime + 1) sig = \<tau> (maxtime + 1) sig"
+  using assms
+proof (induction )
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "get_trans res (maxtime + 1) sig = (\<tau>'(next_time t \<tau>' := 0)) (maxtime + 1) sig "
+    by auto
+  then show ?case 
+    using b_conc_exec_modifies_local[OF 1(3) 1(7)] 
+    by (metis "1.hyps"(1) "1.hyps"(4) Suc_eq_plus1 fun_upd_other le_add1 le_trans less_imp_le_nat not_less_eq_eq)
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  hence "get_trans (maxtime, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>') maxtime sig = \<tau>' maxtime sig"
+    by auto
+  then show ?case 
+    using b_conc_exec_modifies_local[OF 2(3) 2(5)]
+    using "2.hyps"(1) by auto
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case by (metis comp_apply quiet_def snd_conv)
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+lemma get_trans_res_maxtime:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res"
+  assumes "\<tau> t = 0"
+  shows   "get_trans res maxtime = 0"
+  using assms
+proof (induction )
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "get_trans res maxtime = 0"
+    by auto
+  then show ?case 
+    by (metis "1.hyps"(1) dual_order.strict_implies_order fun_upd_apply zero_fun_def)
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  hence "get_trans (maxtime, \<sigma>, {}, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>') maxtime  = \<tau>' maxtime"
+    by auto
+  then show ?case 
+    using "2.hyps"(1)  by (smt "2.hyps"(4) next_time_at_least2 zero_fun_def)
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case  by (simp add: zero_fun_def)
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case  by (simp add: zero_fun_def)
+qed
+
+lemma b_simulate_fin_preserve_trans_removal:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res"
+  assumes "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
+  shows   "\<And>n. n < maxtime \<Longrightarrow>  get_trans res n = 0"
+  using assms
+proof (induction )
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "\<And>n. n < next_time t \<tau>' \<Longrightarrow> (\<tau>'(next_time t \<tau>' := 0)) n = 0"
+    by (simp add: next_time_at_least2)
+  hence IH: "\<And>n. n < maxtime \<Longrightarrow> get_trans res n = 0"
+    using 1 by blast
+  then show ?case 
+    using 1 by auto
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    using b_conc_exec_preserve_trans_removal 
+    by (metis comp_apply dual_order.strict_trans2 less_imp_le_nat next_time_at_least2 snd_conv)
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case 
+    by (simp add: zero_fun_def)
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+lemma add_to_beh2_preserves_hist:
+  assumes "\<And>n. n > t \<Longrightarrow> \<theta> n = 0"
+  shows "\<And>n. n > t \<Longrightarrow> Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def n = 0"
+  using assms
+  by (simp add: Femto_VHDL_raw.add_to_beh2_def)
+
+lemma b_simulate_fin_preserves_hist:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res"
+  assumes "\<And>n. n > t \<Longrightarrow>  \<theta> n = 0"
+  assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
+  shows   "\<And>n. n > maxtime \<Longrightarrow>  get_beh res n = 0"
+  using assms
+proof (induction)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "t \<le> next_time t \<tau>'"
+    by (meson b_conc_exec_preserve_trans_removal next_time_at_least)
+  hence "\<And>n. next_time t \<tau>' < n \<Longrightarrow> Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def n = 0"
+    using add_to_beh2_preserves_hist 1  by (metis le_less_trans)
+  moreover have "\<And>n. n < next_time t \<tau>' \<Longrightarrow> (\<tau>'(next_time t \<tau>' := 0)) n = 0"
+    using 1  by (simp add: next_time_at_least2)
+  ultimately show ?case 
+    using 1 by blast
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    using add_to_beh2_preserves_hist 
+    by (metis comp_apply dual_order.strict_trans fst_conv snd_conv)
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
   then show ?case by auto
 next
   case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
   then show ?case by auto
-qed 
+qed
 
-(* lemma 
-  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> beh"
-  assumes "\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0"
-  assumes "t \<le> maxtime" and "cs = nand3"
-  assumes "\<And>n. t \<le> n \<Longrightarrow> \<theta> n = 0"
-  shows   "\<And>n. n \<le> t \<Longrightarrow> (\<theta>(t:= Some o \<sigma>)) n = get_beh beh n" *)
 
-theorem nand3_correctness_ind:
-  assumes "maxtime, t, \<sigma>, \<gamma>, beh, def \<turnstile> <cs, ctrans> \<leadsto> res"
-  assumes "cs = nand3" and "maxtime = Suc i"
-  assumes "\<And>n. n \<le> t \<Longrightarrow>  ctrans n = 0"
-  assumes "\<And>s. s \<in> dom (ctrans t) \<Longrightarrow> \<sigma> s = the ( ctrans t s)"
-  assumes "\<And>n. t \<le> n \<Longrightarrow>  beh n = 0"
-  assumes "t \<le> i" and "A \<notin> \<gamma> \<and> B \<notin> \<gamma> \<Longrightarrow> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-  assumes "\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig ctrans C) n = 0"
-  assumes "conc_wt \<Gamma> cs" and "styping \<Gamma> \<sigma>" and "ttyping \<Gamma> beh" and "ttyping \<Gamma> ctrans" and "\<Gamma> C = Bty" and "styping \<Gamma> def"
-  (* shows "bval_of (signal_of (def C) (get_beh res) C (Suc i)) \<longleftrightarrow> \<not> (bval_of (signal_of (\<sigma> A) ctrans A i) \<and> bval_of (signal_of (\<sigma> B) ctrans B i))" *)
-  shows "bval_of (get_state res C) \<longleftrightarrow> \<not> (bval_of (signal_of (\<sigma> A) ctrans A i) \<and> bval_of (signal_of (\<sigma> B) ctrans B i))"
+lemma b_simulate_fin_preserves_zeroed_unmodified_sigs:
+  assumes "maxtime, t, \<sigma>, \<gamma>, \<theta>, def \<turnstile> <cs, \<tau>> \<leadsto> res"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "\<tau> t sig = 0"
+  shows   "get_trans res maxtime sig = 0"
   using assms
-proof (induction rule:b_simulate_fin.induct)
+proof (induction)
   case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
-  have "t \<le> Suc i"
-    using `t \<le> i` by auto
-  have *: "\<And>n. n < t \<Longrightarrow>  \<tau>' n = 0"
-    using "1.hyps"(3) "1.prems"(3) b_conc_exec_preserve_trans_removal  by (metis nat_less_le)
-  hence **: "\<And>n. dom (\<tau>' n) \<noteq> {} \<Longrightarrow> t \<le> n"
-    using zero_map by force
-  hence "t \<le> next_time t \<tau>'"
-    using next_time_at_least[OF *] by auto
-  have h0: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow> (\<tau>' (next_time t \<tau>' := 0)) n = 0"
-    using b_conc_exec_preserve_trans_removal[OF _ `\<And>n. n \<le> t \<Longrightarrow> \<tau> n = 0`]
-    `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'`  by (simp add: nat_less_le next_time_at_least2)
-  have h0': "\<And>n. n < next_time t \<tau>' \<Longrightarrow> \<tau>' n = 0"
-  proof -
-    fix n
-    assume "n < next_time t \<tau>'"
-    hence "n < t \<or> t \<le> n \<and> n < next_time t \<tau>'"
-      using `t \<le> next_time t \<tau>'` by auto
-    moreover
-    { assume "n < t"
-      hence " \<tau>' n = 0"
-        using b_conc_exec_preserve_trans_removal[OF _ `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`]
-        `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` by auto }
-    moreover
-    { assume "t \<le> n \<and> n < next_time t \<tau>'"
-      hence " \<tau>' n = 0"
-        using `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'`  using next_time_at_least2 by blast }
-    ultimately show " \<tau>' n = 0"
-      by auto
-  qed
-  have h1: "\<And>s. s \<in> dom ((\<tau>'(next_time t \<tau>':=0)) (next_time t \<tau>')) \<Longrightarrow>
-                                        next_state t \<tau>' \<sigma> s = the ( (\<tau>'(next_time t \<tau>':=0)) (next_time t \<tau>') s)"
-    unfolding next_state_def Let_def
-    by (simp add: zero_fun_def zero_option_def)
-  have h1': "\<And>s. s \<in> dom ( \<tau>' (next_time t \<tau>')) \<Longrightarrow>
-                                        next_state t \<tau>' \<sigma> s = the ( \<tau>' (next_time t \<tau>') s)"
-    unfolding next_state_def Let_def by auto
-  have h2: "\<And>n. next_time t \<tau>' \<le> n \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n = 0"
-    unfolding add_to_beh_def
-    using "1.prems"(5) \<open>t \<le> next_time t \<tau>'\<close> by auto
-  { assume asm: "A \<notin> next_event t \<tau>' \<sigma> \<and> B \<notin> next_event t \<tau>' \<sigma> "
-    have sigA: "next_state t \<tau>' \<sigma> A = \<sigma> A" and sigB: "next_state t \<tau>' \<sigma> B = \<sigma> B"
-      using next_state_fixed_point asm by metis+
-    hence "next_event t \<tau>' \<sigma> = {C} \<or> next_event t \<tau>' \<sigma> = {}"
-    proof -
-      have "\<And>S Sa. B \<in> S \<or> S \<subseteq> insert C Sa \<or> A \<in> S"
-        by (metis (full_types) insertI1 sig.exhaust subset_eq)
-      then show ?thesis
-        by (meson asm subset_singleton_iff)
-    qed
-    moreover
-    { assume "next_event t \<tau>' \<sigma> = {}"
-      hence "C \<notin> next_event t \<tau>' \<sigma>"
-        by auto
-      hence sigC: "next_state t \<tau>' \<sigma> C = \<sigma> C"
-        using next_state_fixed_point[OF `C \<notin> next_event t \<tau>' \<sigma>`]
-        by auto
-      have " A \<notin> \<gamma> \<and> B \<notin> \<gamma>  \<or> \<not> ( A \<notin> \<gamma> \<and> B \<notin> \<gamma> )" by auto
-      moreover
-      { assume " A \<notin> \<gamma> \<and> B \<notin> \<gamma> "
-        hence " bval_of (\<sigma> C) = (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-          using `A \<notin> \<gamma> \<and> B \<notin> \<gamma> \<Longrightarrow> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))` by auto
-        hence " bval_of (next_state t \<tau>' \<sigma> C) = (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-          using sigA sigB sigC by auto }
-      moreover
-      { assume "\<not> ( A \<notin> \<gamma> \<and> B \<notin> \<gamma> )"
-        have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-        proof (intro beval_raw.intros)
-          have "seq_wt \<Gamma> (get_seq nand3)"
-            using `conc_wt \<Gamma> cs` `cs = nand3`
-            by (metis conc_stmt.distinct(1) conc_stmt.sel(4) conc_wt.cases nand3_def)
-          hence "bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)"
-            using seq_wt_cases(4)  by (metis conc_stmt.sel(4) nand3_def)
-          hence "\<Gamma> A = Bty" and "\<Gamma> B = Bty"
-            using bexp_wt_cases
-            by (metis (full_types) "1.prems"(10) assms(13) assms(14) beval_raw.intros(1) beval_raw_preserve_well_typedness styping_def)+
-          with `styping \<Gamma> \<sigma>` have "type_of (\<sigma> A) = Bty" and "type_of (\<sigma> B) = Bty"
-            by (simp add: styping_def)+
-          hence "is_Bv (\<sigma> A)" and "is_Bv (\<sigma> B)"
-            by (metis ty.distinct(1) type_of.simps(2) val.collapse(2))+
-          thus "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma> A))" and
-               "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma> B))"
-            using val.collapse(1)  by (simp add: beval_raw.intros(1))+
-        qed
-        hence "t , \<sigma> , \<gamma> , \<theta> , def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 , \<tau>> \<longrightarrow>\<^sub>s
-                              trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-          by (simp add: b_seq_exec.intros(5))
-        hence "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-          unfolding `cs = nand3` nand3_def
-          by (simp add: \<open>\<not> (A \<notin> \<gamma> \<and> B \<notin> \<gamma>)\<close> b_conc_exec.intros(2))
-        hence \<tau>'_def: "\<tau>' = trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-          using `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
-          nand3_def  by (simp add: b_conc_exec_deterministic)
-        have "(bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))) \<or>  (\<not> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-          by auto
-        moreover
-        { assume "\<not> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-          have "to_trans_raw_sig \<tau> C = 0"
-            using `\<And>n. t < n \<Longrightarrow> (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-            unfolding to_trans_raw_sig_def zero_fun_def zero_option_def
-            by (meson leI)
-          hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)"
-            unfolding to_trans_raw_sig_def by (metis zero_map)
-          hence "post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-            by (metis "1.prems"(3) Nat.add_0_right \<open>(\<not> bval_of (\<sigma> C)) = (\<not> (bval_of (\<sigma> A) \<and> bval_of
-            (\<sigma> B)))\<close> signal_of_def val.sel(1) zero_fun_def)
-          hence "\<tau>' \<noteq> 0"
-            by (metis \<open>(\<not> bval_of (\<sigma> C)) = (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))\<close> \<tau>'_def
-            trans_post_raw_imply_neq_map_empty val.sel(1) zero_less_one)
-          hence "next_time t \<tau>' = (LEAST n. dom ( \<tau>' n) \<noteq> {})"
-            unfolding next_time_def by auto
-          also have "... = t + 1"
-          proof (rule Least_equality)
-            show "dom ( \<tau>' (t + 1)) \<noteq> {}"
-              using `post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)`
-              unfolding \<tau>'_def trans_post_raw_def preempt_raw_def post_raw_def
-              by (auto simp add: zero_fun_def zero_option_def)
-          next
-            have " \<tau>' t = 0"
-              by (metis "1" \<open>\<tau>' \<noteq> 0\<close> \<open>t \<le> next_time t \<tau>'\<close> fun_upd_apply h0
-              less_not_refl2 t_strictly_increasing)
-            thus "\<And>y. dom (\<tau>' y) \<noteq> {} \<Longrightarrow> t + 1 \<le> y"
-              using **
-              by (metis Suc_eq_plus1 Suc_le_eq dom_eq_empty_conv nat_less_le zero_map)
-          qed
-          finally have "next_time t \<tau>' = t + 1"
-            by auto
-          moreover have " \<tau>' (t + 1) C = Some (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))))"
-            using `post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)`
-            unfolding \<tau>'_def  unfolding trans_post_raw_def post_raw_def
-            by (auto split:option.split simp add: zero_fun_def zero_option_def)
-          ultimately have "next_state t \<tau>' \<sigma> C = (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))))"
-            unfolding next_state_def Let_def  by (simp add: domIff)
-          hence " next_state t \<tau>' \<sigma> C = Bv (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-            using sigA sigB sigC by auto }
-        moreover
-        { assume "bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-          hence " next_state t \<tau>' \<sigma> C = Bv (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-            using sigA sigB sigC
-            by (smt "1.prems"(10) assms(14) styping_def ty.simps(3) type_of.simps(2) val.exhaust_sel) }
-        ultimately have " next_state t \<tau>' \<sigma> C = Bv (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-          by auto }
-      ultimately have "next_state t \<tau>' \<sigma> C = Bv (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-        by (smt "1.prems"(10) assms(14) sigC styping_def ty.simps(3) type_of.simps(2) val.exhaust_sel) }
-    moreover
-    { assume "next_event t \<tau>' \<sigma> = {C}"
-      hence "C \<in> dom ( \<tau>' (next_time t \<tau>'))"
-        unfolding next_event_def Let_def by transfer' auto
-      have " A \<notin> \<gamma> \<and> B \<notin> \<gamma>  \<or> \<not> ( A \<notin> \<gamma> \<and> B \<notin> \<gamma> )" by auto
-      moreover
-      { assume "A \<notin> \<gamma> \<and> B \<notin> \<gamma>"
-        hence "\<tau>' = \<tau>"
-          using ` t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
-          nand3_def by auto
-        have "\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0"
-          using `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` 1(9)
-           unfolding to_trans_raw_sig_def  by (metis le_neq_implies_less zero_fun_def)
-        with `t \<le> next_time t \<tau>'`
-        have "C \<notin> dom ( \<tau>' (next_time t \<tau>'))"
-          using 1(8) unfolding `\<tau>' = \<tau>` next_time_def  unfolding to_trans_raw_sig_def
-          by (simp add: domIff zero_option_def)
-        with `C \<in> dom ( \<tau>' (next_time t \<tau>'))` have "False" by auto
-        hence "next_state t \<tau>' \<sigma> C = Bv (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-          by auto }
-      moreover
-      { assume "\<not> ( A \<notin> \<gamma> \<and> B \<notin> \<gamma> )"
-        have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-        proof (intro beval_raw.intros)
-          have "seq_wt \<Gamma> (get_seq nand3)"
-            using `conc_wt \<Gamma> cs` `cs = nand3`
-            by (metis conc_stmt.distinct(1) conc_stmt.sel(4) conc_wt.cases nand3_def)
-          hence "bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)"
-            using seq_wt_cases(4)  by (metis conc_stmt.sel(4) nand3_def)
-          hence "\<Gamma> A = Bty" and "\<Gamma> B = Bty"
-            using bexp_wt_cases
-            by (metis (full_types) "1.prems"(10) assms(13) assms(14) beval_raw.intros(1) beval_raw_preserve_well_typedness styping_def)+
-          with `styping \<Gamma> \<sigma>` have "type_of (\<sigma> A) = Bty" and "type_of (\<sigma> B) = Bty"
-            by (simp add: styping_def)+
-          hence "is_Bv (\<sigma> A)" and "is_Bv (\<sigma> B)"
-            by (metis ty.distinct(1) type_of.simps(2) val.collapse(2))+
-          thus "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma> A))" and
-               "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma> B))"
-            using val.collapse(1)  by (simp add: beval_raw.intros(1))+
-        qed
-        hence "t , \<sigma> , \<gamma> , \<theta> , def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 , \<tau>> \<longrightarrow>\<^sub>s
-                              trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-          by (simp add: b_seq_exec.intros(5))
-        hence "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-          unfolding `cs = nand3` nand3_def
-          by (simp add: \<open>\<not> (A \<notin> \<gamma> \<and> B \<notin> \<gamma>)\<close> b_conc_exec.intros(2))
-        hence \<tau>'_def: "\<tau>' = trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-          using `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
-          nand3_def  by (simp add: b_conc_exec_deterministic)
-        have "\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0"
-          using `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` 1(9)
-          by (metis leI to_trans_raw_sig_def zero_fun_def)
-        have "\<not> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-        proof (rule ccontr)
-          assume "\<not> (\<not> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-          hence "bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-            by auto
-          moreover have "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)"
-            using `\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-            by (transfer', auto simp add: to_trans_raw_sig_def zero_fun_def zero_option_def )
-          ultimately have "\<not> post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-            using post_necessary_raw_correctness
-            by (smt "1.prems"(10) "1.prems"(3) Nat.add_0_right assms(14) signal_of_def styping_def
-            ty.simps(3) type_of.simps(2) val.exhaust_sel zero_fun_def)
-          hence "to_trans_raw_sig \<tau>' C = 0"
-            using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-            unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def to_trans_raw_sig_def
-            zero_fun_def zero_option_def zero_map by auto
-          with `C \<in> dom ( \<tau>' (next_time t \<tau>'))` have " \<tau>' (next_time t \<tau>') C \<noteq> 0"
-            by (metis domIff fun_upd_same zero_fun_def zero_upd)
-          hence " (to_trans_raw_sig \<tau>' C) (next_time t \<tau>') \<noteq> 0"
-            unfolding next_time_def  unfolding to_trans_raw_sig_def by auto
-          with `to_trans_raw_sig \<tau>' C = 0` show False
-            unfolding next_time_def  unfolding to_trans_raw_sig_def
-            by (metis zero_fun_def)
-        qed
-        have "to_trans_raw_sig \<tau> C = 0"
-          using `\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-          unfolding to_trans_raw_sig_def zero_fun_def zero_option_def  by (meson linear)
-        hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)"
-          unfolding to_trans_raw_sig_def  by (metis zero_fun_def zero_option_def)
-        hence "post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-          by (metis "1.prems"(3) Nat.add_0_right \<open>(\<not> bval_of (\<sigma> C)) = (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma>
-          B)))\<close> signal_of_def val.sel(1) zero_fun_def)
-        hence "\<tau>' \<noteq> 0"
-          by (metis \<open>C \<in> dom (\<tau>' (next_time t \<tau>'))\<close> domIff zero_fun_def zero_option_def)
-        hence "next_time t \<tau>' = (LEAST n. dom ( \<tau>' n) \<noteq> {})"
-          unfolding next_time_def by auto
-        also have "... = t + 1"
-        proof (rule Least_equality)
-          show "dom ( \<tau>' (t + 1)) \<noteq> {}"
-            using `post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)`
-            unfolding \<tau>'_def trans_post_raw_def post_raw_def
-            by (auto simp add: zero_fun_def zero_option_def)
-        next
-          have " \<tau>' t = 0"
-            using "1.hyps"(3) "1.prems"(1) "1.prems"(3) \<open>\<tau>' \<noteq> 0\<close> next_time_at_least2 t_strictly_increasing
-            by blast
-          thus "\<And>y. dom ( \<tau>' y) \<noteq> {} \<Longrightarrow> t + 1 \<le> y"
-            using **
-            by (metis Suc_eq_plus1 Suc_le_eq dom_eq_empty_conv nat_less_le zero_map)
-        qed
-        finally have "next_time t \<tau>' = t + 1"
-          by auto
-        moreover have " \<tau>' (t + 1) C = Some (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))))"
-          using `post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)`
-          unfolding \<tau>'_def trans_post_raw_def post_raw_def
-          by (auto split:option.split simp add: zero_fun_def zero_option_def)
-        ultimately have "next_state t \<tau>' \<sigma> C = (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))))"
-          unfolding next_state_def Let_def  by (simp add: domIff)
-        hence " next_state t \<tau>' \<sigma> C = Bv (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-          using sigA sigB by auto }
-      ultimately have " next_state t \<tau>' \<sigma> C = Bv (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-        by auto }
-    ultimately have "next_state t \<tau>' \<sigma> C = Bv (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-      by auto
-    hence "bval_of (next_state t \<tau>' \<sigma> C) = (\<not> (bval_of (next_state t \<tau>' \<sigma> A) \<and> bval_of (next_state t \<tau>' \<sigma> B)))"
-      by simp }
-  note h3 = this
-
-  have h4': "\<And>n. next_time t \<tau>' < n \<Longrightarrow>  (to_trans_raw_sig \<tau>' C) n = 0"
-  proof -
-    fix n
-    assume "next_time t \<tau>' < n"
-    have "\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0"
-      using `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` 1(9)
-       unfolding to_trans_raw_sig_def by (metis leI zero_fun_def)
-    have "A \<in> \<gamma> \<or> B \<in> \<gamma> \<or> (A \<notin> \<gamma> \<and> B \<notin> \<gamma>)"
-      by auto
-    moreover
-    { assume "A \<in> \<gamma> \<or> B \<in> \<gamma>"
-      have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-      proof (intro beval_raw.intros)
-        have "seq_wt \<Gamma> (get_seq nand3)"
-          using `conc_wt \<Gamma> cs` `cs = nand3`
-          by (metis conc_stmt.distinct(1) conc_stmt.sel(4) conc_wt.cases nand3_def)
-        hence "bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)"
-          using seq_wt_cases(4)  by (metis conc_stmt.sel(4) nand3_def)
-        hence "\<Gamma> A = Bty" and "\<Gamma> B = Bty"
-          using bexp_wt_cases
-          by (metis (full_types) "1.prems"(10) assms(13) assms(14) beval_raw.intros(1) beval_raw_preserve_well_typedness styping_def)+
-        with `styping \<Gamma> \<sigma>` have "type_of (\<sigma> A) = Bty" and "type_of (\<sigma> B) = Bty"
-          by (simp add: styping_def)+
-        hence "is_Bv (\<sigma> A)" and "is_Bv (\<sigma> B)"
-          by (metis ty.distinct(1) type_of.simps(2) val.collapse(2))+
-        thus "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma> A))" and
-             "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma> B))"
-          using val.collapse(1)  by (simp add: beval_raw.intros(1))+
-      qed
-      hence "t , \<sigma> , \<gamma> , \<theta> , def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 , \<tau>> \<longrightarrow>\<^sub>s
-                            trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-        by (simp add: b_seq_exec.intros(5))
-      hence "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-        unfolding `cs = nand3` nand3_def
-        by (simp add: \<open>A \<in> \<gamma> \<or> B \<in> \<gamma>\<close> b_conc_exec.intros(2))
-      hence \<tau>'_def: "\<tau>' = trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-        using `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
-        nand3_def  by (simp add: b_conc_exec_deterministic)
-      have "(bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))) \<or> (\<not> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-        by auto
-      moreover
-      { assume "bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-        moreover have "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)"
-          using `\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-          by (transfer', auto simp add: to_trans_raw_sig_def zero_fun_def zero_option_def )
-        ultimately have "\<not> post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-          using post_necessary_raw_correctness
-          by (smt "1.prems"(10) "1.prems"(3) add.right_neutral assms(14) signal_of_def styping_def
-          ty.simps(3) type_of.simps(2) val.exhaust_sel zero_fun_def)
-        hence "to_trans_raw_sig \<tau>' C = 0"
-          using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)` `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-          unfolding \<tau>'_def trans_post_raw_def preempt_raw_def post_raw_def to_trans_raw_sig_def
-          zero_fun_def zero_option_def zero_map by auto
-        hence " (to_trans_raw_sig \<tau>' C) n = 0"
-          by (simp add: zero_fun_def) }
-      moreover
-      { assume "(\<not> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-        have "to_trans_raw_sig \<tau> C = 0"
-          using `\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-           unfolding to_trans_raw_sig_def zero_fun_def zero_option_def
-           by (meson linear)
-        hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)"
-          unfolding to_trans_raw_sig_def
-          by (metis zero_fun_def zero_option_def)
-        hence "post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-          by (metis "1.prems"(3) Nat.add_0_right \<open>(\<not> bval_of (\<sigma> C)) = (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma>
-          B)))\<close> signal_of_def val.sel(1) zero_fun_def)
-        hence "\<tau>' \<noteq> 0"
-          by (metis One_nat_def \<tau>'_def cancel_comm_monoid_add_class.diff_cancel lessI signal_of_def
-          trans_post_raw_imply_neq_map_empty zero_option_def)
-        hence "next_time t \<tau>' = (LEAST n. dom ( \<tau>' n) \<noteq> {})"
-          unfolding next_time_def by auto
-        also have "... = t + 1"
-        proof (rule Least_equality)
-          show "dom ( \<tau>' (t + 1)) \<noteq> {}"
-            using `post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)`
-            unfolding \<tau>'_def  trans_post_raw_def post_raw_def
-            by (auto simp add: zero_fun_def zero_option_def)
-        next
-          have " \<tau>' t = 0"
-            using "1.hyps"(3) "1.prems"(1) "1.prems"(3) \<open>\<tau>' \<noteq> 0\<close> h0' t_strictly_increasing by auto
-          thus "\<And>y. dom ( \<tau>' y) \<noteq> {} \<Longrightarrow> t + 1 \<le> y"
-            using **
-            by (metis Suc_eq_plus1 Suc_le_eq dom_eq_empty_conv nat_less_le zero_map)
-        qed
-        finally have "next_time t \<tau>' = t + 1"
-          by auto
-        hence " (to_trans_raw_sig \<tau>' C) n = 0"
-          using `next_time t \<tau>' < n` unfolding \<tau>'_def  next_time_def
-          trans_post_raw_def to_trans_raw_sig_def post_raw_def preempt_raw_def
-          by (simp add: zero_option_def) }
-      ultimately have " (to_trans_raw_sig \<tau>' C) n = 0"
-        by auto }
-    moreover
-    { assume "A \<notin> \<gamma> \<and> B \<notin> \<gamma>"
-      hence \<tau>'_def: "\<tau>' = \<tau>"
-        using `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3` nand3_def
-        by auto
-      hence " (to_trans_raw_sig \<tau>' C) n = 0"
-        using `t \<le> next_time t \<tau>'` `next_time t \<tau>' < n` `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0`
-        by (metis le_less_trans) }
-    ultimately show " (to_trans_raw_sig \<tau>' C) n = 0"
-      by auto
-  qed
-  hence h4: "\<And>n. next_time t \<tau>' < n \<Longrightarrow>  (to_trans_raw_sig (\<tau>'(next_time t \<tau>' :=0)) C) n = 0"
-    by (simp add: to_trans_raw_sig_def)
-  have h5: "\<And>n. n < t \<Longrightarrow>  \<tau> n = 0"
-    using `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0` unfolding rem_curr_trans_def by  auto
-  have "ttyping \<Gamma> \<tau>'"
-    using conc_stmt_preserve_type_correctness[OF `conc_wt \<Gamma> cs` `styping \<Gamma> \<sigma>` `ttyping \<Gamma> \<theta>` `styping \<Gamma> def` `ttyping \<Gamma> \<tau>`
-    `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'`]
-    by auto
-  have " styping \<Gamma> (next_state t \<tau>' \<sigma>)"
-    using next_state_preserve_styping[OF `styping \<Gamma> \<sigma>` `ttyping \<Gamma> \<tau>'`] by auto
-  have "ttyping \<Gamma> (\<tau>'(next_time t \<tau>' := 0))"
-    using ttyping_rem_curr_trans[OF `ttyping \<Gamma> \<tau>'`] by auto
-  have "ttyping \<Gamma> (add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))"
-    using add_to_beh_preserve_type_correctness  using "1.prems"(10) "1.prems"(11) by blast
-  have IH: " next_time t \<tau>' \<le> i \<Longrightarrow>
-             bval_of (get_state res C) \<longleftrightarrow>
-             \<not> (bval_of (signal_of (next_state t \<tau>' \<sigma> A) (\<tau>'(next_time t \<tau>' := 0)) A i) \<and>
-                    bval_of (signal_of (next_state t \<tau>' \<sigma> B) (\<tau>'(next_time t \<tau>' := 0)) B i))"
-    using 1(6)[OF `cs = nand3` `maxtime = Suc i` h0 h1 h2 _ h3 h4 `conc_wt \<Gamma> cs` `styping \<Gamma> (next_state t \<tau>' \<sigma>)`
-               `ttyping \<Gamma> (add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))` `ttyping \<Gamma> (\<tau>'(next_time t \<tau>' := 0))` `\<Gamma> C = Bty` `styping \<Gamma> def`]
-    by metis
-  have "i < next_time t \<tau>' \<or> next_time t \<tau>' \<le> i"
-    by auto
-  moreover
-  { assume "i < next_time t \<tau>'"
-    have "t \<noteq> next_time t \<tau>'"
-    proof (rule ccontr)
-      assume "\<not> t \<noteq> next_time t \<tau>'" hence "t = next_time t \<tau>'" by auto
-      hence "i < t"  using `i < next_time t \<tau>'` by auto
-      with `t \<le> i` show False by auto
-    qed
-
-    have "A \<notin> \<gamma> \<and> B \<notin> \<gamma> \<or> A \<in> \<gamma> \<or> B \<in> \<gamma>" by auto
-    moreover
-    { assume "A \<notin> \<gamma> \<and> B \<notin> \<gamma>"
-      hence \<tau>'_def: "\<tau>' = \<tau>"
-        using `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3` nand3_def
-        by auto
-      have "signal_of (\<sigma> A) \<tau> A i = \<sigma> A" and "signal_of (\<sigma> B) \<tau> B i = \<sigma> B"
-        using signal_of2_init[OF `t \<le> i`, of "\<tau>" _ "\<sigma>"] `i < next_time t \<tau>'` 1(10) 1(9)
-        unfolding \<tau>'_def by auto
-      note no_trans_c = 1(14)
-      moreover have " \<tau> t = 0"
-        by (simp add: "1.prems"(3))
-      ultimately have 13: "\<And>n. t \<le> n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0"
-         unfolding to_trans_raw_sig_def
-        by (metis dual_order.order_iff_strict zero_fun_def)
-      note next_big_step = 1(5)
-      have "next_time t \<tau>' < maxtime \<or> next_time t \<tau>' = maxtime" 
-        using `next_time t \<tau>' \<le> maxtime` by auto
-      moreover
-      { assume "next_time t \<tau>' < maxtime"
-        hence pre: "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  get_beh res n"
-          using   beh_res[OF next_big_step h0] by auto
-        hence "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (\<theta>(t:=(Some o \<sigma>))) n =  get_beh res n"
-          using`t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` unfolding add_to_beh_def by auto
-        hence *: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>
-             ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))(next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n =  get_beh res n"
-          using beh_res2[OF next_big_step h0 `next_time t \<tau>' < maxtime` `cs = nand3` h2]
-          by auto
-        have "Suc i \<le> next_time t \<tau>'"
-          using `i < next_time t \<tau>'` `next_time t \<tau>' \<le> maxtime` by auto
-        hence "Suc i < next_time t \<tau>' \<or> Suc i = next_time t \<tau>'"
-          by auto
-        moreover have "\<not> Suc i < next_time t \<tau>'"
-          using `i < next_time t \<tau>'` `next_time t \<tau>' \<le> maxtime` `maxtime = Suc i` by linarith
-        ultimately have "Suc i = next_time t \<tau>'"
-          by auto
-        hence **: "signal_of (def C) (get_beh res) C (Suc i) =
-               signal_of (def C) ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>'))(next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) C (Suc i)"
-          using "1.prems"(1) "1.prems"(2) h0 h2 maxtime_maxtime_bigstep next_big_step \<open>next_time t \<tau>' < maxtime\<close> 
-          by linarith
-        define t' where "t' = next_time t \<tau>'"
-        define \<sigma>' where "\<sigma>' = next_state t \<tau>' \<sigma>"
-        define \<theta>' where "\<theta>' = add_to_beh \<sigma> \<theta> t (next_time t \<tau>')"
-        hence "signal_of (def C) (get_beh res) C (Suc i) = signal_of (def C) (\<theta>' (t' := (Some o \<sigma>'))) C (Suc i)"
-          unfolding t'_def \<sigma>'_def \<theta>'_def using ** by auto
-        also have "... = \<sigma>' C"
-          by (metis \<open>Suc i = next_time t \<tau>'\<close> fun_upd_same t'_def trans_some_signal_of)
-        finally have "signal_of (def C) (get_beh res) C (Suc i) = \<sigma>' C"
-          by auto
-        also have "... = \<sigma> C"
-        proof -
-          have "C \<notin> dom (\<tau> (i + 1))"
-            using 13 `t \<le> Suc i`  unfolding to_trans_raw_sig_def
-            by (auto simp add: zero_map zero_option_def)
-          moreover have *: "(next_time t \<tau>) = i + 1"
-            using `Suc i = next_time t \<tau>'` unfolding \<tau>'_def by auto
-          ultimately show ?thesis
-            unfolding \<sigma>'_def next_state_def \<tau>'_def * Let_def by auto
-        qed
-        finally have "signal_of (def C) (get_beh res) C (Suc i) = \<sigma> C"
-          by auto
-        moreover have "bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-          using 1(13) `A \<notin> \<gamma> \<and> B \<notin> \<gamma>` by auto
-        ultimately have ?case
-          using `signal_of (\<sigma> A) \<tau> A i = \<sigma> A` `signal_of (\<sigma> B) \<tau> B i = \<sigma> B` 
-          using "1.prems"(2) \<open>Suc i = next_time t \<tau>'\<close> \<open>next_time t \<tau>' < maxtime\<close> by linarith }
-      moreover
-      { assume "maxtime = next_time t \<tau>'"
-        hence pre: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  get_beh res n"
-          using borderline_big_step[OF next_big_step `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` order.strict_implies_order[OF `t < maxtime`]
-          `maxtime = next_time t \<tau>'` 1(11)]
-          by auto
-        have "Suc i = next_time t \<tau>'"
-          using `maxtime = Suc i` `maxtime = next_time t \<tau>'` by auto
-        hence "Suc i = next_time t \<tau>"
-          unfolding \<tau>'_def by auto
-        hence "signal_of (def C) (get_beh res) C (Suc i) =
-               signal_of (def C) (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) C (Suc i)"
-          using \<open>maxtime = next_time t \<tau>'\<close> bau next_big_step "1.prems"(1) maxtime_maxtime_bigstep 
-          by auto
-        also have "... =  signal_of (def C) (\<theta> (t:= (Some o \<sigma>))) C (Suc i)"
-          unfolding add_to_beh_def using `t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` by auto
-        also have "... = \<sigma> C"
-        proof -
-          have "inf_time (to_trans_raw_sig (\<theta>(t := Some o \<sigma>))) C (Suc i) = Some t"
-            using inf_time_update[OF 1(11)]  using \<open>t \<le> Suc i\<close> by simp
-          thus ?thesis
-            unfolding to_signal_def comp_def
-            by (simp add: lookup_update to_trans_raw_sig_def)
-        qed
-        finally have "signal_of (def C) (get_beh res) C (Suc i) = \<sigma> C"
-          by auto
-        moreover have "bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-          using 1(13) `A \<notin> \<gamma> \<and> B \<notin> \<gamma>` by auto
-        moreover have "get_state res  = next_state t \<tau>' \<sigma>"
-          using 1(5) unfolding \<open>maxtime = next_time t \<tau>'\<close> 
-        proof -
-          assume "next_time t \<tau>', next_time t \<tau>' , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , add_to_beh \<sigma> \<theta> t (next_time t \<tau>'), def \<turnstile> <cs , \<tau>' (next_time t \<tau>' := 0)> \<leadsto> res"
-          then have "(maxtime, next_state t \<tau> \<sigma>, add_to_beh \<sigma> \<theta> t maxtime, \<tau>(maxtime := 0)) = res"
-            using \<open>maxtime = next_time t \<tau>'\<close> \<tau>'_def bau by blast
-          then show ?thesis
-            using \<tau>'_def by force
-        qed
-        moreover have "next_state t \<tau>' \<sigma> C = \<sigma> C"
-          by (metis "13" \<open>t \<le> next_time t \<tau>'\<close> \<tau>'_def domIff next_state_def override_on_def
-          to_trans_raw_sig_def zero_option_def)
-        ultimately have ?case
-          using `signal_of (\<sigma> A) \<tau> A i = \<sigma> A` `signal_of (\<sigma> B) \<tau> B i = \<sigma> B` by simp }
-      ultimately have ?case by auto }
-    moreover
-    { assume "A \<in> \<gamma> \<or> B \<in> \<gamma>"
-      have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-      proof (intro beval_raw.intros)
-        have "seq_wt \<Gamma> (get_seq nand3)"
-          using `conc_wt \<Gamma> cs` `cs = nand3`
-          by (metis conc_stmt.distinct(1) conc_stmt.sel(4) conc_wt.cases nand3_def)
-        hence "bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)"
-          using seq_wt_cases(4)  by (metis conc_stmt.sel(4) nand3_def)
-        hence "\<Gamma> A = Bty" and "\<Gamma> B = Bty"
-          using bexp_wt_cases
-          by (metis (full_types) "1.prems"(10) assms(13) assms(14) beval_raw.intros(1) beval_raw_preserve_well_typedness styping_def)+
-        with `styping \<Gamma> \<sigma>` have "type_of (\<sigma> A) = Bty" and "type_of (\<sigma> B) = Bty"
-          by (simp add: styping_def)+
-        hence "is_Bv (\<sigma> A)" and "is_Bv (\<sigma> B)"
-          by (metis ty.distinct(1) type_of.simps(2) val.collapse(2))+
-        thus "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma> A))" and
-             "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma> B))"
-          using val.collapse(1)  by (simp add: beval_raw.intros(1))+
-      qed
-      hence "t , \<sigma> , \<gamma> , \<theta> , def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 , \<tau>> \<longrightarrow>\<^sub>s
-                            trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-        by (simp add: b_seq_exec.intros(5))
-      hence "t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-        unfolding `cs = nand3` nand3_def
-        by (simp add: \<open>A \<in> \<gamma> \<or> B \<in> \<gamma>\<close> b_conc_exec.intros(2))
-      hence \<tau>'_def: "\<tau>' = trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-        using `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` unfolding `cs = nand3`
-        nand3_def  by (simp add: b_conc_exec_deterministic)
-      have "(bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))) \<or> (\<not> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-        by auto
-      moreover
-      { assume "bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-        moreover have "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  (\<tau>(t:=0)) i C = None)"
-          using `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-          by (auto simp add: to_trans_raw_sig_def zero_fun_def zero_option_def )
-        ultimately have "\<not> post_necessary_raw 0 (\<tau>(t:=0)) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-          using post_necessary_raw_correctness `bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))`
-          by (smt "1.prems"(10) "1.prems"(3) Nat.add_0_right add_Suc_right assms(14)
-          fun_upd_idem_iff le_add2 order_refl plus_1_eq_Suc signal_of_def styping_def ty.simps(3)
-          type_of.simps(2) val.exhaust_sel zero_option_def)
-        hence "\<not> post_necessary_raw 0 \<tau> t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-          by (metis "1.prems"(3) fun_upd_triv order_refl)
-        hence "to_trans_raw_sig \<tau>' C = 0"
-          using `(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  (\<tau>(t:=0)) i C = None)`
-          `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-          unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def to_trans_raw_sig_def
-                    zero_fun_def zero_option_def zero_map comp_def by auto
-        have "next_time t \<tau> = next_time t \<tau>'"
-        proof (cases "\<tau> = 0")
-          case True
-          hence "next_time t \<tau> = t + 1"
-            unfolding next_time_def by auto
-          have "\<tau>' = 0"
-            using True `to_trans_raw_sig \<tau>' C = 0` `\<not> post_necessary_raw 0 (\<tau>(t:=0)) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)`
-            unfolding \<tau>'_def
-            by (auto simp add: zero_map zero_fun_def zero_option_def to_trans_raw_sig_def
-                trans_post_raw_def preempt_raw_def)
-          hence "next_time t \<tau>' = t + 1"
-            by auto
-          then show ?thesis
-            using `next_time t \<tau> = t + 1` by auto
-        next
-          case False
-          hence "next_time t \<tau> = (LEAST n. dom ( \<tau> n) \<noteq> {})"
-            unfolding next_time_def by auto
-          from `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-          have lookC: " (to_trans_raw_sig \<tau> C) = 0"
-            unfolding to_trans_raw_sig_def
-            by (intro ext, metis leI zero_fun_def)
-          hence " (to_trans_raw_sig \<tau> A) \<noteq> 0 \<or> (to_trans_raw_sig \<tau> B) \<noteq> 0"
-            using False  unfolding to_trans_raw_sig_def
-            unfolding zero_map zero_fun_def by (metis sig.exhaust)
-          moreover have lookA: " (to_trans_raw_sig \<tau>' A) =  (to_trans_raw_sig \<tau> A)"
-            unfolding \<tau>'_def trans_post_raw_def preempt_raw_def to_trans_raw_sig_def post_raw_def
-            by auto
-          moreover have lookB: " (to_trans_raw_sig \<tau>' B) =  (to_trans_raw_sig \<tau> B)"
-            unfolding \<tau>'_def trans_post_raw_def preempt_raw_def to_trans_raw_sig_def post_raw_def
-            by auto
-          ultimately have "\<tau>' \<noteq> 0"
-            by (auto simp add: to_trans_raw_sig_def zero_map zero_fun_def zero_option_def)
-          hence "next_time t \<tau>' = (LEAST n. dom ( \<tau>' n) \<noteq> {})"
-            unfolding next_time_def by auto
-          also have "... = (LEAST n. dom (\<tau> n) \<noteq> {})"
-            apply (rule LEAST_ext)
-            using lookA lookB lookC `to_trans_raw_sig \<tau>' C = 0`
-            unfolding to_trans_raw_sig_def zero_map zero_fun_def zero_option_def
-            by (smt Collect_empty_eq dom_def sig.exhaust)
-          finally show ?thesis
-            by (simp add: \<open>next_time t \<tau> = (LEAST n. dom (\<tau> n) \<noteq> {})\<close>)
-        qed
-        hence "signal_of (\<sigma> A) \<tau> A i = \<sigma> A" and "signal_of (\<sigma> B) \<tau> B i = \<sigma> B"
-          using  1(10) `i < next_time t \<tau>'`
-          by (metis "1.prems"(3) "1.prems"(6) h5 nat_less_le not_le signal_of2_init)+
-        note next_big_step = 1(5)
-        have "next_time t \<tau>' < maxtime \<or> maxtime = next_time t \<tau>'" 
-          by (simp add: "1.hyps"(4) nat_less_le)
-        moreover
-        { assume "next_time t \<tau>' < maxtime"
-          hence pre: "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  get_beh res n"
-            using  beh_res[OF next_big_step h0] by auto
-          hence "\<And>n. n < next_time t \<tau>' \<Longrightarrow>  (\<theta> (t := (Some o \<sigma>))) n =  get_beh res n"
-            using`t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` unfolding add_to_beh_def by auto
-          hence *: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>
-               ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) (next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) n =  get_beh res n"
-            using beh_res2[OF next_big_step h0 `next_time t \<tau>' < maxtime` `cs = nand3` h2]
-            by auto
-          have "Suc i \<le> next_time t \<tau>'"
-            using `i < next_time t \<tau>'` `next_time t \<tau>' \<le> maxtime` by auto
-          hence "Suc i < next_time t \<tau>' \<or> Suc i = next_time t \<tau>'"
-            by auto
-          moreover have  "\<not> Suc i < next_time t \<tau>'"
-            using `i < next_time t \<tau>'` `next_time t \<tau>' \<le> maxtime` `maxtime = Suc i` by auto
-          ultimately have "Suc i = next_time t \<tau>'"
-            by auto
-          hence **: "signal_of (def C) (get_beh res) C (Suc i) =
-                 signal_of (def C) ((add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) (next_time t \<tau>' := Some \<circ> next_state t \<tau>' \<sigma>)) C (Suc i)"
-            using "1.prems"(1) "1.prems"(2) h0 h2 maxtime_maxtime_bigstep next_big_step 
-            using \<open>next_time t \<tau>' < maxtime\<close> by linarith
-          define t' where "t' = next_time t \<tau>'"
-          define \<sigma>' where "\<sigma>' = next_state t \<tau>' \<sigma>"
-          define \<theta>' where "\<theta>' = add_to_beh \<sigma> \<theta> t (next_time t \<tau>')"
-          hence "signal_of (def C) (get_beh res) C (Suc i) = signal_of (def C) (\<theta>'(t' := (Some o \<sigma>'))) C (Suc i)"
-            unfolding t'_def \<sigma>'_def \<theta>'_def using ** by auto
-          also have "... = \<sigma>' C"
-            by (metis \<open>Suc i = next_time t \<tau>'\<close> fun_upd_same t'_def trans_some_signal_of)
-          finally have "signal_of (def C) (get_beh res) C (Suc i) = \<sigma>' C"
-            by auto
-          also have "... = \<sigma> C"
-          proof -
-            have "\<And>n. C \<notin> dom ( \<tau>' n)"
-              using `to_trans_raw_sig \<tau>' C = 0`   unfolding to_trans_raw_sig_def
-              by (metis domIff fun_upd_idem_iff zero_fun_def zero_upd)
-            thus ?thesis
-              unfolding \<sigma>'_def next_state_def \<tau>'_def Let_def  by simp
-          qed
-          finally have "signal_of (def C) (get_beh res) C (Suc i) = \<sigma> C"
-            by auto
-          hence ?case
-            using `signal_of (\<sigma> A) \<tau> A i = \<sigma> A` `signal_of (\<sigma> B) \<tau> B i = \<sigma> B`
-            `bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))` 
-            using "1.prems"(2) \<open>Suc i = next_time t \<tau>'\<close> \<open>next_time t \<tau>' < maxtime\<close> by linarith }
-        moreover
-        { assume "maxtime = next_time t \<tau>'"
-          hence pre: "\<And>n. n \<le> next_time t \<tau>' \<Longrightarrow>  (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) n =  get_beh res n"
-            using borderline_big_step[OF next_big_step `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` order.strict_implies_order[OF `t < maxtime`] 
-                    `maxtime = next_time t \<tau>'` 1(11)]
-            by auto
-          have "Suc i = next_time t \<tau>'"
-            using `maxtime = Suc i` `maxtime = next_time t \<tau>'` by auto
-          hence "signal_of (def C) (get_beh res) C (Suc i) =
-                 signal_of (def C) (add_to_beh \<sigma> \<theta> t (next_time t \<tau>')) C (Suc i)"
-            using \<open>maxtime = next_time t \<tau>'\<close> bau next_big_step "1.prems"(1) maxtime_maxtime_bigstep 
-            by auto
-          also have "... =  signal_of (def C) (\<theta>(t := (Some o \<sigma>))) C (Suc i)"
-            unfolding add_to_beh_def using `t \<le> next_time t \<tau>'` `t \<noteq> next_time t \<tau>'` by auto
-          also have "... = \<sigma> C"
-          proof -
-            have "inf_time (to_trans_raw_sig (\<theta>(t := Some o \<sigma>))) C (Suc i) = Some t"
-              using inf_time_update[OF 1(11)]  using \<open>t \<le> Suc i\<close> by simp
-            thus ?thesis
-              unfolding to_signal_def comp_def
-              by (simp add: lookup_update to_trans_raw_sig_def)
-          qed
-          finally have "signal_of (def C) (get_beh res) C (Suc i) = \<sigma> C"
-            by auto
-          have "get_state res = next_state t \<tau>' \<sigma>"
-            using next_big_step unfolding \<open>maxtime = next_time t \<tau>'\<close>
-            by (metis "1.prems"(1) \<open>maxtime = next_time t \<tau>'\<close> b_simulate_fin.intros(4)
-            b_simulate_fin_deterministic comp_eq_dest_lhs fst_conv snd_conv)
-          have "next_state t \<tau>' \<sigma> C = \<sigma> C"
-            by (metis (mono_tags, hide_lams) \<open>to_trans_raw_sig \<tau>' C = 0\<close> domIff next_state_def
-            override_on_def to_trans_raw_sig_def zero_fun_def zero_option_def)
-          hence ?case
-            using `signal_of (\<sigma> A) \<tau> A i = \<sigma> A` `signal_of (\<sigma> B) \<tau> B i = \<sigma> B` `bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))`
-            using \<open>get_state res = next_state t \<tau>' \<sigma>\<close> by auto }
-        ultimately have ?case by auto }
-      moreover
-      { assume "(\<not> bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-        have "to_trans_raw_sig \<tau> C = 0"
-          using `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-          unfolding to_trans_raw_sig_def zero_fun_def zero_option_def  by (meson le_less_linear)
-        hence "(\<forall>i\<ge>t. i \<le> t + 1 \<longrightarrow>  \<tau> i C = None)"
-          unfolding to_trans_raw_sig_def zero_fun_def zero_option_def by metis
-        hence post_nec: "post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-          by (metis "1.prems"(3) Nat.add_0_right \<open>(\<not> bval_of (\<sigma> C)) = (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma>
-          B)))\<close> le_add1 signal_of_def val.sel(1) zero_option_def)
-        hence "\<tau>' \<noteq> 0"
-          by (metis One_nat_def \<tau>'_def add_diff_cancel_left' plus_1_eq_Suc signal_of_def
-          trans_post_raw_imply_neq_map_empty zero_less_one zero_option_def)
-        hence "next_time t \<tau>' = (LEAST n. dom ( \<tau>' n) \<noteq> {})"
-          unfolding next_time_def by auto
-        also have "... = t + 1"
-        proof (rule Least_equality)
-          show "dom ( \<tau>' (t + 1)) \<noteq> {}"
-            using `post_necessary_raw 0 ( \<tau>) t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)`
-            unfolding \<tau>'_def trans_post_raw_def preempt_raw_def post_raw_def
-            by (auto simp add: zero_fun_def zero_option_def)
-        next
-          { fix y
-            assume "\<not> t + 1 \<le> y" hence "y < t + 1" by auto
-            hence "dom ( \<tau>' y) = {}"
-              using 1(9) unfolding \<tau>'_def  trans_post_raw_def preempt_raw_def post_raw_def
-              by (auto simp add:zero_map) }
-          thus "\<And>y. dom ( \<tau>' y) \<noteq> {} \<Longrightarrow> t + 1 \<le> y"
-            by auto
-        qed
-        finally have "next_time t \<tau>' = t + 1"
-          by auto
-        with `i < next_time t \<tau>'` have "i < t + 1" by auto
-        with `t \<le> i` have "i = t" by auto
-        hence "signal_of (\<sigma> A) \<tau> A i = signal_of (\<sigma> A) \<tau> A t"
-          by auto
-        also have "... = \<sigma> A"
-        proof -
-          consider "inf_time (to_trans_raw_sig \<tau>) A t = None" |  ta where "inf_time (to_trans_raw_sig \<tau>) A t = Some ta"
-            by blast
-          thus ?thesis
-          proof (cases)
-            case 1
-            then show ?thesis unfolding to_signal_def comp_def by auto
-          next
-            case 2
-            have "t = ta"
-            proof (rule ccontr)
-              assume "t \<noteq> ta"
-              with 2 have "ta \<le> t" by (auto dest!:inf_time_at_most)
-              with `t \<noteq> ta` have "ta < t" by auto
-              hence "\<tau> ta = 0"
-                using 1(9) by auto
-              have "ta \<in> dom (to_trans_raw_sig \<tau> A)"
-                by (metis "2" \<open>i = t\<close> dom_is_keys inf_time_some_exists)
-              hence "(to_trans_raw_sig \<tau> A) ta \<noteq> 0"
-                 unfolding to_trans_raw_sig_def by (metis domIff zero_fun_def zero_map)
-              hence "\<tau> ta \<noteq> 0"
-                 unfolding to_trans_raw_sig_def by (metis zero_fun_def)
-              thus False
-                using `\<tau> ta = 0` by auto
-            qed
-            hence "inf_time (to_trans_raw_sig \<tau>) A t = Some t"
-              using 2 by auto
-            hence "t \<in> dom (to_trans_raw_sig \<tau> A)"
-              by (metis Femto_VHDL_raw.keys_def dom_def inf_time_some_exists zero_option_def)
-            hence "A \<in> dom (\<tau> t)"
-               unfolding to_trans_raw_sig_def by auto
-            hence "the ((to_trans_raw_sig \<tau> A) t) = \<sigma> A"
-              using 1(10)  unfolding to_trans_raw_sig_def by auto
-            then show ?thesis
-              using `inf_time (to_trans_raw_sig \<tau>) A t = Some t` unfolding to_signal_def comp_def
-              by auto
-          qed
-        qed
-        finally have sigA: "signal_of (\<sigma> A) \<tau> A i = \<sigma> A"
-          by auto
-        have "signal_of (\<sigma> B) \<tau> B i = signal_of (\<sigma> B) \<tau> B t"
-          using `i = t` by auto
-        also have "... = \<sigma> B"
-        proof -
-        consider "inf_time (to_trans_raw_sig \<tau>) B t = None" |  ta where "inf_time (to_trans_raw_sig \<tau>) B t = Some ta"
-          by blast
-        thus ?thesis
-        proof (cases)
-          case 1
-          then show ?thesis unfolding to_signal_def comp_def by auto
-        next
-          case 2
-          have "t = ta"
-          proof (rule ccontr)
-            assume "t \<noteq> ta"
-            with 2 have "ta \<le> t" by (auto dest!:inf_time_at_most)
-            with `t \<noteq> ta` have "ta < t" by auto
-            hence "\<tau> ta = 0"
-              using 1(9) by auto
-            have "ta \<in> dom ((to_trans_raw_sig \<tau> B))"
-              by (metis "2" Femto_VHDL_raw.keys_def dom_def inf_time_some_exists zero_option_def)
-            hence "(to_trans_raw_sig \<tau> B) ta \<noteq> 0"
-              unfolding to_trans_raw_sig_def
-              by (metis domIff zero_fun_def zero_map)
-            hence "\<tau> ta \<noteq> 0"
-              unfolding to_trans_raw_sig_def
-              by (metis zero_fun_def)
-            thus False
-              using `\<tau> ta = 0` by auto
-          qed
-          hence "inf_time (to_trans_raw_sig \<tau>) B t = Some t"
-            using 2 by auto
-          hence "t \<in> dom ((to_trans_raw_sig \<tau> B))"
-            by (metis Femto_VHDL_raw.keys_def dom_def inf_time_some_exists zero_option_def)
-          hence "B \<in> dom (\<tau> t)"
-            unfolding to_trans_raw_sig_def by auto
-          hence "the ((to_trans_raw_sig \<tau> B) t) = \<sigma> B"
-            using 1(10) unfolding to_trans_raw_sig_def by auto
-          then show ?thesis
-            using `inf_time (to_trans_raw_sig \<tau>) B t = Some t` unfolding to_signal_def comp_def
-            by auto
-        qed
-        qed
-        finally have sigB: "signal_of (\<sigma> B) \<tau> B i = \<sigma> B"
-          by auto
-        note next_big_step = 1(5)
-        have "next_time t \<tau>' = maxtime"
-          using `next_time t \<tau>' = t + 1` `maxtime = Suc i` `i = t` by auto
-        have "get_state res = next_state t \<tau>' \<sigma>"
-          using next_big_step unfolding \<open>next_time t \<tau>' = maxtime\<close> 
-        proof -
-          assume "maxtime, maxtime , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , add_to_beh \<sigma> \<theta> t maxtime, def \<turnstile> <cs , \<tau>' (maxtime := 0)> \<leadsto> res"
-          then have "(maxtime, next_state t \<tau>' \<sigma>, add_to_beh \<sigma> \<theta> t maxtime, \<tau>'(maxtime := 0)) = res"
-            using bau by blast
-          then show ?thesis
-            by force
-        qed
-        have "\<tau>' = post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) \<tau> (t + 1)"
-          unfolding \<tau>'_def trans_post_raw_def using post_nec by auto
-        hence "\<tau>' (next_time t \<tau>') C = Some (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))))"
-          by (metis \<open>next_time t \<tau>' = t + 1\<close> fun_upd_same post_raw_def)
-        hence "next_state t \<tau>' \<sigma> C = Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-          unfolding next_state_def Let_def 
-          by (simp add: domIff)
-        hence ?case
-          using \<open>get_state res = next_state t \<tau>' \<sigma>\<close> sigA sigB by auto }
-      ultimately have ?case by auto }
-    ultimately have ?case by auto }
-  moreover
-  { assume "next_time t \<tau>' \<le> i"
-    with IH have IH': "bval_of (get_state res C) = 
-      (\<not> (bval_of (signal_of (next_state t \<tau>' \<sigma> A) (\<tau>'(next_time t \<tau>' := 0)) A i) \<and>
-          bval_of (signal_of (next_state t \<tau>' \<sigma> B) (\<tau>'(next_time t \<tau>' := 0)) B i)))"
-      by auto
-    have Anot: "A \<notin> set (signals_from cs)"
-      unfolding `cs = nand3` nand3_def by auto
-    have "signal_of (\<sigma> A) \<tau> A i = signal_of (next_state t \<tau>' \<sigma> A) \<tau>' A i"
-      using b_conc_exec_does_not_modify_signals2[OF h5 `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` Anot `next_time t \<tau>' \<le> i`]
-      unfolding `cs = nand3` nand3_def by auto
-    also have "... = signal_of (next_state t \<tau>' \<sigma> A) (\<tau>'(next_time t \<tau>' := 0)) A i"
-      using h0' h1' by(intro sym[OF signal_of_rem_curr_trans_at_t])
-    finally have "signal_of (next_state t \<tau>' \<sigma> A) (\<tau>'(next_time t \<tau>':=0)) A i  = signal_of (\<sigma> A) \<tau> A i"
-      by auto
-
-    have Bnot: "B \<notin> set (signals_from cs)"
-      unfolding `cs = nand3` nand3_def by auto
-    have " signal_of (\<sigma> B) \<tau> B i = signal_of (next_state t \<tau>' \<sigma> B) \<tau>' B i"
-      using b_conc_exec_does_not_modify_signals2[OF h5 `t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'` Bnot `next_time t \<tau>' \<le> i`]
-      unfolding `cs = nand3` nand3_def by auto
-    also have "... = signal_of (next_state t \<tau>' \<sigma> B) (\<tau>'(next_time t \<tau>' := 0)) B i"
-      using h0' h1' by(intro sym[OF signal_of_rem_curr_trans_at_t])
-    finally have "signal_of (next_state t \<tau>' \<sigma> B) (\<tau>'(next_time t \<tau>' := 0)) B i  = signal_of (\<sigma> B) \<tau> B i"
-      by auto
-    hence ?case
-      using `signal_of (next_state t \<tau>' \<sigma> A) (\<tau>'(next_time t \<tau>' := 0)) A i  = signal_of (\<sigma> A) \<tau> A i` IH'
-      by auto }
-  ultimately show ?case by auto
-next
-  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
-  have "\<tau> = 0"
-    using `quiet \<tau> \<gamma>` unfolding quiet_def by metis
-  hence *: "signal_of (\<sigma> A) \<tau> A i = \<sigma> A" and **: "signal_of (\<sigma> B) \<tau> B i = \<sigma> B"
-    unfolding to_signal_def by auto
-  have "inf_time (to_trans_raw_sig (\<theta>(t:=Some o \<sigma>))) C (Suc i) = Some t"
-    unfolding to_signal_def to_trans_raw_sig_def
-  proof -
-    have 0: "t \<in> keys (\<lambda>n. (\<theta>(t := Some \<circ> \<sigma>)) n C)"
-      unfolding keys_def by (auto simp add: zero_option_def)
-    moreover have 1: "t \<le> Suc i"
-      using 3 by auto
-    ultimately have "\<exists>k\<in>Femto_VHDL_raw.keys (\<lambda>n. (\<theta>(t := Some \<circ> \<sigma>)) n C). k \<le> Suc i"
-      by auto
-    hence "inf_time (\<lambda>sig n. (\<theta>(t := Some \<circ> \<sigma>)) n sig) C (Suc i) =
-            Some (GREATEST k. k \<in> Femto_VHDL_raw.keys (\<lambda>n. (\<theta>(t := Some \<circ> \<sigma>)) n C) \<and> k \<le> Suc i)"
-      unfolding inf_time_def by auto
-    also have "... = Some t"
-    proof (unfold option.inject, intro Greatest_equality)
-      show "t \<in> Femto_VHDL_raw.keys (\<lambda>n. (\<theta>(t := Some \<circ> \<sigma>)) n C) \<and> t \<le> Suc i"
-        using 0 1 by auto
-    next
-      { fix y
-        assume "\<not> y \<le> t" hence "t < y" by auto
-        hence "y \<notin> keys (\<lambda>n. (\<theta>(t := Some \<circ> \<sigma>)) n C)"
-          using 3(7) by (auto simp add: keys_def zero_map zero_option_def)
-        hence "\<not> (y \<in> Femto_VHDL_raw.keys (\<lambda>n. (\<theta>(t := Some \<circ> \<sigma>)) n C) \<and> y \<le> Suc i)"
-          by auto }
-      thus "\<And>y. y \<in> Femto_VHDL_raw.keys (\<lambda>n. (\<theta>(t := Some \<circ> \<sigma>)) n C) \<and> y \<le> Suc i \<Longrightarrow> y \<le> t"
-        by auto
-    qed
-    finally show "inf_time (\<lambda>sig n. (\<theta>(t := Some \<circ> \<sigma>)) n sig) C (Suc i) = Some t"
-      by auto
-  qed
-  hence "signal_of (def C) (\<theta>(t := Some \<circ> \<sigma>)) C (Suc i) = \<sigma> C"
-    unfolding to_signal_def comp_def to_trans_raw_sig_def by auto
-  moreover have "A \<notin> \<gamma> \<and> B \<notin> \<gamma>"
-    using `quiet \<tau> \<gamma>` unfolding quiet_def  by (metis emptyE)
-  ultimately show ?case
-    using 3(9) * **  by (metis comp_apply fst_conv snd_conv)
-next
-  case (4 t maxtime \<sigma> \<gamma> def cs \<tau>)
-  then show ?case by auto
+  then show ?case 
+    by (simp add: zero_fun_def)
 next
   case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
-  hence "t + 1 \<le> maxtime"
-    by auto
-  have " A \<notin> \<gamma> \<and> B \<notin> \<gamma> \<or> \<not> ( A \<notin> \<gamma> \<and> B \<notin> \<gamma>)"
+  then show ?case 
+    by (metis comp_apply snd_conv until_next_time_zero zero_fun_def)
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case  by (simp add: zero_fun_def)
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+lemma get_state_b_simulate_fin:
+  assumes "maxtime, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "\<tau> maxtime sig \<noteq> 0"
+  assumes "t < maxtime"
+  shows   "get_state res sig = the (\<tau> maxtime sig)"
+  using assms
+proof (induction)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "next_time t \<tau>' < maxtime \<or> next_time t \<tau>' = maxtime"
     by auto
   moreover
-  { assume " \<not> (A \<notin> \<gamma> \<and> B \<notin> \<gamma>)"
-    hence "b_seq_exec t \<sigma> \<gamma> \<theta> def (Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1) \<tau> \<tau>'"
-      using 2(3)  by (metis "2.prems"(1) conc_cases(1) disjnt_insert1 nand3_def)
-    have "\<exists>v. t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> (Bnand (Bsig A) (Bsig B)) \<longrightarrow>\<^sub>b v"
-      using beval_raw_progress 2 
-      by (meson \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close> seq_cases_trans)
-    have "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> (Bnand (Bsig A) (Bsig B)) \<longrightarrow>\<^sub>b Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-      apply (intro beval_raw.intros(12))
-      by (metis (no_types, lifting) "2.prems"(1) "2.prems"(10) "2.prems"(11) "2.prems"(14)
-      "2.prems"(9) \<open>\<exists>v. t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b v\<close> assms(14) beval_cases(1)
-      beval_cases(9) beval_raw_preserve_well_typedness conc_stmt.sel(4) conc_stmt.simps(4)
-      conc_wt.cases nand3_def seq_wt_cases(4) ty.simps(3) type_of.simps(2) val.collapse(1)
-      val.disc(1))+    
-    hence \<tau>'_def: "\<tau>' = trans_post_raw C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C) \<tau> t 1"
-      using 2(3) unfolding `cs = nand3` nand3_def 
-      by (meson \<open>t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close>
-      b_seq_exec.intros(5) b_seq_exec_deterministic)
-    have "bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-    proof (rule ccontr)
-      assume " bval_of (\<sigma> C) \<noteq> (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-      hence  "\<not>  bval_of (\<sigma> C) \<longleftrightarrow> (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))"
-        by auto
-      hence "post_necessary_raw 0 \<tau> t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-        by (metis "2.prems"(3) Nat.add_0_right signal_of_def val.sel(1) zero_fun_def)
-      hence "next_time t \<tau>' = t + 1"
-        using \<tau>'_def unfolding trans_post_raw_def
-        by (metis (mono_tags, lifting) "2.hyps"(1) "2.hyps"(4) Nat.add_0_right One_nat_def Suc_leI
-        add_Suc_right cancel_comm_monoid_add_class.diff_cancel fun_upd_same le_less_trans lessI
-        option.simps(3) post_raw_def until_next_time_zero zero_fun_def zero_option_def)
-      thus "False"
-        using "2.hyps"(4) \<open>t + 1 \<le> maxtime\<close> by linarith
-    qed 
-    hence "\<not> post_necessary_raw 0 \<tau> t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)"
-      unfolding post_necessary_raw_correctness 
-      by (smt "2.prems"(10) "2.prems"(3) Nat.add_0_right assms(14) styping_def ty.simps(3)
-      type_of.simps(2) val.exhaust_sel zero_fun_def zero_option_def)
-    have "next_time t \<tau> = next_time t \<tau>'"
-    proof (cases "\<tau> = 0")
-      case True
-      hence "next_time t \<tau> = t + 1"
-        unfolding next_time_def by auto
-      have "\<tau>' = 0"
-        using True `\<not> post_necessary_raw 0 \<tau> t C (Bv (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)`
-        unfolding \<tau>'_def
-        by (auto simp add: zero_map zero_fun_def zero_option_def to_trans_raw_sig_def
-            trans_post_raw_def preempt_raw_def)
-      hence "next_time t \<tau>' = t + 1"
-        by auto
-      then show ?thesis
-        using `next_time t \<tau> = t + 1` by auto
-    next
-      case False
-      hence "next_time t \<tau> = (LEAST n. dom ( \<tau> n) \<noteq> {})"
-        unfolding next_time_def by auto
-      from `\<And>n. t < n \<Longrightarrow>  (to_trans_raw_sig \<tau> C) n = 0` `\<And>n. n \<le> t \<Longrightarrow>  \<tau> n = 0`
-      have lookC: " (to_trans_raw_sig \<tau> C) = 0"
-        unfolding to_trans_raw_sig_def
-        by (intro ext, metis leI zero_fun_def)
-      hence " (to_trans_raw_sig \<tau> A) \<noteq> 0 \<or> (to_trans_raw_sig \<tau> B) \<noteq> 0"
-        using False  unfolding to_trans_raw_sig_def
-        unfolding zero_map zero_fun_def by (metis sig.exhaust)
-      moreover have lookA: " (to_trans_raw_sig \<tau>' A) =  (to_trans_raw_sig \<tau> A)"
-        unfolding \<tau>'_def trans_post_raw_def preempt_raw_def to_trans_raw_sig_def post_raw_def
-        by auto
-      moreover have lookB: " (to_trans_raw_sig \<tau>' B) =  (to_trans_raw_sig \<tau> B)"
-        unfolding \<tau>'_def trans_post_raw_def preempt_raw_def to_trans_raw_sig_def post_raw_def
-        by auto
-      ultimately have "\<tau>' \<noteq> 0"
-        by (auto simp add: to_trans_raw_sig_def zero_map zero_fun_def zero_option_def)
-      hence "next_time t \<tau>' = (LEAST n. dom ( \<tau>' n) \<noteq> {})"
-        unfolding next_time_def by auto
-      also have "... = (LEAST n. dom (\<tau> n) \<noteq> {})"
-        apply (rule LEAST_ext)
-        using lookA lookB lookC  unfolding to_trans_raw_sig_def zero_map zero_fun_def zero_option_def
-        by (metis (mono_tags, lifting) One_nat_def \<open>\<not> post_necessary_raw 0 \<tau> t C (Bv (\<not> (bval_of (\<sigma>
-        A) \<and> bval_of (\<sigma> B)))) (\<sigma> C)\<close> \<tau>'_def add_diff_cancel_left' fun_upd_triv plus_1_eq_Suc
-        preempt_raw_def trans_post_raw_def)
-      finally show ?thesis
-        by (simp add: \<open>next_time t \<tau> = (LEAST n. dom (\<tau> n) \<noteq> {})\<close>)
-    qed    
-    hence "signal_of (\<sigma> A) \<tau> A i = \<sigma> A" and "signal_of (\<sigma> B) \<tau> B i = \<sigma> B"
-      using  2(10) 
-      by (metis "2.hyps"(4) "2.prems"(2) le_Suc_eq le_less_trans next_time_at_least2 signal_of_def zero_fun_def)+
+  { assume "next_time t \<tau>' < maxtime"
     hence ?case
-      by (simp add: \<open>bval_of (\<sigma> C) = (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))\<close>) }
+      using 1  using b_conc_exec_modifies_local_strongest by fastforce }
   moreover
-  { assume "A \<notin> \<gamma> \<and> B \<notin> \<gamma>"
-    hence "bval_of (\<sigma> C) \<longleftrightarrow> \<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B))"
-      using 2 by auto 
-    hence \<tau>'_def: "\<tau>' = \<tau>"
-      using 2(3) \<open>A \<notin> \<gamma> \<and> B \<notin> \<gamma>\<close> unfolding `cs = nand3` nand3_def by auto
-    have "signal_of (\<sigma> A) \<tau> A i = \<sigma> A" and "signal_of (\<sigma> B) \<tau> B i = \<sigma> B"
-      by (metis "2.hyps"(4) "2.prems"(2) \<tau>'_def dual_order.strict_trans less_Suc_eq_le
-      next_time_at_least2 signal_of_def zero_fun_def)+
+  { assume "next_time t \<tau>' = maxtime"
+    hence *: "maxtime, maxtime , next_state t \<tau>' \<sigma> , next_event t \<tau>' \<sigma> , Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, def \<turnstile> <cs , \<tau>'(next_time t \<tau>' := 0)> \<leadsto> res"
+      using 1 by auto
+    have "res = (maxtime, next_state t \<tau>' \<sigma>, next_event t \<tau>' \<sigma>, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>'(next_time t \<tau>' := 0))"
+      using bau[OF *] by blast
+    hence "get_state res = next_state t \<tau>' \<sigma>"
+      by auto
     hence ?case
-      by (simp add: \<open>bval_of (\<sigma> C) = (\<not> (bval_of (\<sigma> A) \<and> bval_of (\<sigma> B)))\<close>) }
+      using 1 
+      by (metis (mono_tags, hide_lams) \<open>next_time t \<tau>' = maxtime\<close> b_conc_exec_modifies_local_strongest comp_apply domIff next_state_def override_on_apply_in zero_option_def) }
   ultimately show ?case 
     by auto
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    by (metis b_conc_exec_modifies_local_strongest until_next_time_zero zero_fun_def)
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case  by (metis quiet_def zero_fun_def)
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+lemma get_state_b_simulate_fin_inf_none:
+  assumes "maxtime, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "inf_time (to_trans_raw_sig \<tau>) sig maxtime = None"
+  shows   "get_state res sig = \<sigma> sig"
+  using assms
+proof (induction)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  have "inf_time (to_trans_raw_sig (\<tau>'(next_time t \<tau>' := 0))) sig maxtime = None"
+    unfolding inf_time_none_iff[THEN sym]
+  proof 
+    { fix x 
+      assume " x \<in> dom (to_trans_raw_sig (\<tau>'(next_time t \<tau>' := 0)) sig)"
+      hence "(\<tau>' (next_time t \<tau>' := 0)) x sig \<noteq> None"
+        unfolding to_trans_raw_sig_def dom_def by auto
+      hence "x \<noteq> next_time t \<tau>'"
+        by (metis fun_upd_def zero_fun_def zero_option_def)
+      assume " x \<le> maxtime"
+      have "(\<tau>'(next_time t \<tau>' := 0)) x sig = \<tau>' x sig"
+        using `x \<noteq> next_time t \<tau>'` by auto
+      also have "... = \<tau> x sig"
+        using "1.hyps"(3) "1.prems"(1) b_conc_exec_modifies_local_strongest by fastforce
+      also have "... = None"
+        using 1(8) `x \<le> maxtime` unfolding inf_time_none_iff[THEN sym]
+          to_trans_raw_sig_def dom_def by auto
+      finally have False
+        using \<open>(\<tau>' (next_time t \<tau>' := 0)) x sig \<noteq> None\<close> by auto }
+    thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(next_time t \<tau>' := 0)) sig) \<Longrightarrow> maxtime < x"
+      using le_less_linear by blast
+  qed
+  hence "get_state res sig = next_state t \<tau>' \<sigma> sig"
+    using "1.IH" "1.prems"(1) by blast
+  moreover have "sig \<notin> (dom (\<tau>' (next_time t \<tau>'))) "
+    using 1(8) `next_time t \<tau>' \<le> maxtime`
+    using "1.hyps"(3) "1.prems"(1) b_conc_exec_modifies_local_strongest 
+    by (metis domIff inf_time_noneE2 to_trans_raw_sig_def zero_option_def)
+  ultimately have "next_state t \<tau>' \<sigma> sig = \<sigma> sig"
+    unfolding next_state_def Let_def by auto
+  then show ?case 
+    using \<open>get_state res sig = next_state t \<tau>' \<sigma> sig\<close> by auto    
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    by auto
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case 
+    by auto
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+
+
+lemma get_state_b_simulate_fin_signal_of:
+  assumes "maxtime, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "t < maxtime"
+  assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
+  shows   "get_state res sig = signal_of (\<sigma> sig) \<tau> sig maxtime"
+  using assms
+proof (induction)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "next_time t \<tau>' < maxtime \<or> next_time t \<tau>' = maxtime"
+    by auto
+  moreover
+  { assume "next_time t \<tau>' < maxtime"
+    hence IH: "get_state res sig = signal_of (next_state t \<tau>' \<sigma> sig) (\<tau>'(next_time t \<tau>' := 0)) sig maxtime"
+      using 1 next_time_at_least2 by fastforce
+    also have "... = signal_of (next_state t \<tau>' \<sigma> sig) \<tau>' sig maxtime"
+      apply (rule signal_of_rem_curr_trans_at_t[where \<sigma>="next_state t \<tau>' \<sigma>" and A="sig"])
+       apply (metis comp_eq_dest_lhs next_state_def override_on_apply_in)
+      by (simp add: next_time_at_least2)
+    finally have ?case
+      using b_conc_exec_does_not_modify_signals2[OF _ 1(3) 1(7) 1(4)]
+      by (simp add: "1.prems"(3)) }
+  moreover
+  { assume "next_time t \<tau>' = maxtime"
+    hence "res = (maxtime, next_state t \<tau>' \<sigma>, next_event t \<tau>' \<sigma>, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>'(next_time t \<tau>' := 0))"
+      using bau[OF 1(5)] by auto
+    hence "get_state res sig = next_state t \<tau>' \<sigma> sig"
+      by auto
+    also have  "... =  (let m = \<tau>' maxtime in override_on \<sigma> (the \<circ> m) (dom m)) sig"
+      unfolding next_state_def \<open>next_time t \<tau>' = maxtime\<close> by auto
+    also have "... = signal_of (\<sigma> sig) \<tau>' sig maxtime"
+      using \<open>next_time t \<tau>' = maxtime\<close> 
+      by (smt "1.prems"(2) comp_apply domIff le_less next_time_at_least2 next_time_def option.exhaust_sel override_on_apply_in override_on_apply_notin signal_of_def trans_some_signal_of' zero_fun_def)
+    also have "... = signal_of (\<sigma> sig) \<tau> sig maxtime"
+      by (metis "1.hyps"(3) "1.prems"(1) b_conc_exec_modifies_local_strongest comp_def le_refl to_signal_equal_when_trans_equal_upto2)
+    finally have ?case
+      by auto }
+  ultimately show ?case 
+    by auto
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  have "signal_of (\<sigma> sig) \<tau> sig maxtime = (\<sigma> sig)"
+    apply (intro signal_of_def)
+    using 2  by (metis b_conc_exec_modifies_local_strongest le_less_trans next_time_at_least2 zero_fun_def)
+  thus ?case 
+    by auto
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case 
+    by (metis comp_apply fst_conv quiet_def signal_of_empty snd_conv)
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+lemma get_event_never_empty:
+  assumes "maxtime, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "\<tau> maxtime sig \<noteq> 0"
+  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
+  assumes "t < maxtime"
+  assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
+  assumes "conc_stmt_wf cs"
+  shows   "sig \<in> get_event res"
+  using assms
+proof (induction)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "next_time t \<tau>' < maxtime \<or> next_time t \<tau>' = maxtime"
+    by auto
+  moreover
+  { assume "next_time t \<tau>' < maxtime"
+    hence "(\<tau>'(next_time t \<tau>' := 0)) maxtime sig \<noteq> 0"
+      using 1 b_conc_exec_modifies_local_strongest[OF 1(3) `sig \<notin> set (signals_from cs)`] 
+      using calculation by auto
+    have "non_stuttering (to_trans_raw_sig \<tau>') \<sigma> sig"
+      using b_conc_exec_preserves_non_stuttering[OF 1(3) ] 1(9) 
+      using "1.prems"(5) "1.prems"(6) by blast
+    hence "non_stuttering (to_trans_raw_sig (\<tau>'(next_time t \<tau>' := 0))) (next_state t \<tau>' \<sigma>) sig"
+      using non_stuttering_next  by (simp add: non_stuttering_next)
+    have "\<And>n. n < next_time t \<tau>' \<Longrightarrow> (\<tau>'(next_time t \<tau>' := 0)) n = 0"
+      using 1  by (simp add: next_time_at_least2)
+    hence IH: "sig \<in> get_beh' res"
+      using 1
+      using \<open>(\<tau>'(next_time t \<tau>' := 0)) maxtime sig \<noteq> 0\<close> \<open>next_time t \<tau>' < maxtime\<close> \<open>non_stuttering (to_trans_raw_sig (\<tau>'(next_time t \<tau>' := 0))) (next_state t \<tau>' \<sigma>) sig\<close> by blast
+    hence ?case
+      by blast }
+  moreover
+  { assume "next_time t \<tau>' = maxtime"
+    hence "res = (maxtime, next_state t \<tau>' \<sigma>, next_event t \<tau>' \<sigma>, Femto_VHDL_raw.add_to_beh2 \<sigma> \<theta> t def, \<tau>'(next_time t \<tau>' := 0))"
+      using bau[OF 1(5)] by auto
+    hence "get_event res = next_event t \<tau>' \<sigma>"
+      by auto
+    have "sig \<in> ... "
+      unfolding next_event_alt_def
+    proof -
+      have "\<tau>' maxtime sig = \<tau> maxtime sig"
+        using "1.hyps"(3) "1.prems"(1) b_conc_exec_modifies_local_strongest by fastforce
+      hence "\<tau>' maxtime sig \<noteq> 0"
+        using 1 by auto
+      hence "next_state t \<tau>' \<sigma> sig = the (\<tau> maxtime sig)"
+        by (metis \<open>\<tau>' maxtime sig = \<tau> maxtime sig\<close> \<open>next_time t \<tau>' = maxtime\<close> comp_apply domIff next_state_def override_on_apply_in zero_option_def)
+      have "Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig) \<noteq> {}"
+        by (metis "1.prems"(2) Femto_VHDL_raw.keys_def dom_def dom_eq_empty_conv to_trans_raw_sig_def zero_option_def)
+      have " maxtime \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)"
+        by (simp add: "1.prems"(2) Femto_VHDL_raw.keys_def to_trans_raw_sig_def)
+      have " t \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig) \<or> t \<notin> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)"
+        by auto
+      moreover
+      { assume "t \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)"
+        have "t < maxtime"
+          using 1 by auto
+        moreover have "(\<forall>k. t < k \<and> k < maxtime \<longrightarrow> k \<notin> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig))"
+          using 1  by (metis Femto_VHDL_raw.keys_def \<open>next_time t \<tau>' = maxtime\<close>
+          b_conc_exec_modifies_local_strongest domIff dom_def next_time_at_least2
+          to_trans_raw_sig_def zero_fun_def zero_option_def)
+        ultimately have " to_trans_raw_sig \<tau> sig t \<noteq> to_trans_raw_sig \<tau> sig maxtime"
+          using \<open> non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig\<close>[unfolded non_stuttering_def]
+          using \<open>maxtime \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)\<close> \<open>t \<in> Femto_VHDL_raw.keys
+          (to_trans_raw_sig \<tau> sig)\<close> by blast
+        moreover have "to_trans_raw_sig \<tau> sig t =  Some (\<sigma> sig)"
+          by (metis (mono_tags) "1.hyps"(3) "1.prems"(1) "1.prems"(4) Femto_VHDL_raw.keys_def
+          \<open>next_time t \<tau>' = maxtime\<close> \<open>t \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)\<close>
+          b_conc_exec_modifies_local_strongest mem_Collect_eq next_time_at_least2
+          to_trans_raw_sig_def zero_fun_def)
+        moreover have "to_trans_raw_sig \<tau> sig maxtime = Some (next_state t \<tau>' \<sigma> sig)"
+          by (metis \<open>\<tau>' maxtime sig = \<tau> maxtime sig\<close> \<open>\<tau>' maxtime sig \<noteq> 0\<close> \<open>next_state t \<tau>' \<sigma> sig =
+          the (\<tau> maxtime sig)\<close> option.exhaust_sel to_trans_raw_sig_def zero_option_def) 
+        ultimately have " sig \<in> {sig. \<sigma> sig \<noteq> next_state t \<tau>' \<sigma> sig}"
+          by auto }
+      moreover
+      { assume "t \<notin> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)"
+        have "(LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)) = maxtime"
+        proof (rule Least_equality)
+          show "maxtime \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)"
+            using \<open>maxtime \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)\<close> by blast
+        next
+          { fix y 
+            assume "y < maxtime"
+            hence " y \<notin> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig)"
+              unfolding Femto_VHDL_raw.keys_def to_trans_raw_sig_def zero_option_def
+              by (metis (mono_tags, lifting) "1.hyps"(3) "1.prems"(1) \<open>next_time t \<tau>' = maxtime\<close>
+              b_conc_exec_modifies_local_strongest mem_Collect_eq next_time_at_least2 zero_fun_def
+              zero_option_def) }
+          thus "\<And>y. y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig) \<Longrightarrow> maxtime \<le> y"
+            using le_less_linear by blast          
+        qed 
+        hence " sig \<in> {sig. \<sigma> sig \<noteq> next_state t \<tau>' \<sigma> sig}"
+          using \<open> non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig\<close>[unfolded non_stuttering_def]
+          by (metis (mono_tags) \<open>Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sig) \<noteq> {}\<close> \<open>next_state t \<tau>' \<sigma> sig = the (\<tau> maxtime sig)\<close> mem_Collect_eq to_trans_raw_sig_def) }
+      ultimately show " sig \<in> {sig. \<sigma> sig \<noteq> next_state t \<tau>' \<sigma> sig}"
+        by auto
+    qed
+    hence ?case
+      using \<open>get_beh' res = next_event t \<tau>' \<sigma>\<close> by blast }
+  ultimately show ?case 
+    by auto
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    by (metis b_conc_exec_modifies_local_strongest until_next_time_zero zero_fun_def)
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case 
+    unfolding quiet_def zero_option_def zero_fun_def by presburger
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+lemma get_event_never_empty':
+  assumes "maxtime, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "\<tau> maxtime sig \<noteq> 0"
+  assumes "non_stuttering (to_trans_raw_sig \<tau>) \<sigma> sig"
+  assumes "t < maxtime"
+  assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
+  assumes "conc_stmt_wf cs"
+  shows   "get_event res \<noteq> {}"
+  using get_event_never_empty assms 
+  by (metis empty_iff)
+
+lemma bau_signal_of:
+  assumes "maxtime, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
+  assumes "sig \<notin> set (signals_from cs)"
+  assumes "maxtime \<le> i"
+  assumes "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
+  shows   "signal_of (\<sigma> sig) \<tau>  sig i = signal_of (get_state res sig) (get_trans res) sig i"
+  using assms
+proof (induction)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence "next_time t \<tau>' \<le> i "
+    by linarith
+  hence IH: "signal_of (next_state t \<tau>' \<sigma> sig) (\<tau>'(next_time t \<tau>' := 0)) sig i = signal_of (get_state res sig) (get_trans res) sig i"
+    using 1 next_time_at_least2 by fastforce
+  have "\<And>i. \<tau> i sig = \<tau>' i sig"
+    using b_conc_exec_modifies_local_strongest[OF 1(3) 1(7)] by auto
+  have "signal_of (\<sigma> sig) \<tau> sig i = signal_of (next_state t \<tau>' \<sigma> sig) \<tau>' sig i"
+  proof (rule b_conc_exec_does_not_modify_signals2)
+    show "\<And>n. n < t \<Longrightarrow> \<tau> n = 0"
+      by (simp add: "1.prems"(3))
+  next
+    show "t , \<sigma> , \<gamma> , \<theta>, def  \<turnstile> <cs , \<tau>> \<longrightarrow>\<^sub>c \<tau>'"
+      using 1 by auto
+  next
+    show "sig \<notin> set (signals_from cs)"
+      using 1 by auto
+  next
+    show " next_time t \<tau>' \<le> i"
+      using ` next_time t \<tau>' \<le> i` by auto
+  qed
+  also have "... = signal_of (next_state t \<tau>' \<sigma> sig) (\<tau>'(next_time t \<tau>' := 0)) sig i"
+    by (smt comp_def next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+  finally show ?case
+    unfolding IH by auto   
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    by (metis b_conc_exec_modifies_local_strongest comp_apply fst_conv less_or_eq_imp_le snd_conv
+        to_signal_equal_when_trans_equal_upto2)
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case  
+    by (metis comp_apply fst_conv quiet_def snd_conv)
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+lemma b_simulate_fin_get_trans_gt_maxtime:
+  assumes "maxtime, t , \<sigma> , \<gamma> , \<theta>, def \<turnstile> <cs , \<tau>> \<leadsto> res"
+  assumes "sig \<notin> set (signals_from cs)"
+  shows   "\<forall>n > maxtime. get_trans res n sig = \<tau> n sig"
+  using assms
+proof (induction)
+  case (1 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>' res)
+  hence " \<forall>n>maxtime. get_trans res n sig = (\<tau>'(next_time t \<tau>' := 0)) n sig"
+    by auto
+  moreover have "\<And>n. \<tau> n sig = \<tau>' n sig"
+    using b_conc_exec_modifies_local_strongest[OF 1(3) 1(7)] by auto
+  ultimately show ?case
+    using 1 by auto
+next
+  case (2 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs \<tau>')
+  then show ?case 
+    using b_conc_exec_modifies_local_strongest by fastforce
+next
+  case (3 t maxtime \<tau> \<gamma> \<sigma> \<theta> def cs)
+  then show ?case 
+    by (metis comp_apply quiet_def snd_conv)
+next
+  case (4 t maxtime \<sigma> \<gamma> \<theta> def cs \<tau>)
+  then show ?case by auto
+qed
+
+
+theorem nand4_correctness:
+  assumes "b_simulate (Suc i) def nand4 \<tau> res"
+  assumes "to_trans_raw_sig \<tau> C = 0"
+  assumes "conc_wt \<Gamma> nand4" and "styping \<Gamma> def" and "\<Gamma> C = Bty" and "ttyping \<Gamma> \<tau>"
+  assumes "\<forall>s. non_stuttering (to_trans_raw_sig \<tau>) def s"
+  shows "bval_of (signal_of (def C) (get_beh res) C i) \<longleftrightarrow>
+          \<not> (bval_of (signal_of (def A) \<tau> A i) \<and> bval_of (signal_of (def B) \<tau> B i))"
+proof (cases "inf_time (to_trans_raw_sig \<tau>) A i = None \<and> inf_time (to_trans_raw_sig \<tau>) B i = None")
+  case True
+  hence "signal_of (def A) \<tau> A i = def A" and "signal_of (def B) \<tau> B i = def B"
+    unfolding to_signal_def comp_def by auto
+  have "\<forall>n \<le> i. \<tau> n A = 0"
+    using True  by (metis (full_types) inf_time_noneE2 leI less_irrefl_nat to_trans_raw_sig_def)
+  have "\<forall>n \<le> i. \<tau> n B = 0"
+    using True by (metis (full_types) inf_time_noneE2 leI less_irrefl_nat to_trans_raw_sig_def)
+  obtain \<tau>' t' \<sigma>' \<gamma>' where "init' 0 def {} 0 def nand4 \<tau> \<tau>'" and "next_time  0 \<tau>' = t'" and "next_state 0 \<tau>' def = \<sigma>'" and "next_event 0 \<tau>' def = \<gamma>'"
+    using bsim[OF assms(1)] by meson
+  have  bigstep: "Suc i, t', \<sigma>', \<gamma>', 0, def \<turnstile> <nand4, \<tau>'(t' := 0)> \<leadsto> res"
+    using bsim[OF assms(1)] 
+    by (metis \<open>init' 0 def {} 0 def nand4 \<tau> \<tau>'\<close> \<open>next_event 0 \<tau>' def = \<gamma>'\<close> \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> assms(1) bsimulate_obt_big_step)
+  have trans_removal: "\<And>n. n < t' \<Longrightarrow> (\<tau>'(t' := 0)) n = 0"
+    using \<open>next_time 0 \<tau>' = t'\<close> next_time_at_least2 by auto
+  have "\<Gamma> A = Bty" and "\<Gamma> B = Bty"
+    using assms  by (metis bexp_wt_cases(4) bexp_wt_cases_slice(2) conc_wt_cases(1) nand4_def seq_wt_cases(4))+
+  consider (good_default) "bval_of (def C) \<longleftrightarrow> \<not> (bval_of (def A) \<and> bval_of (def B))" | (bad_default) "bval_of (def C) \<noteq> (\<not> (bval_of (def A) \<and> bval_of (def B)))"
+    by auto
+  then show ?thesis 
+  proof (cases)
+    case good_default
+    have " \<tau>' = preempt_raw C \<tau> 0"
+    proof (rule init'_cases(1)[OF  \<open>init' 0 def {} 0 def nand4 \<tau> \<tau>'\<close>[unfolded nand4_def]])
+      assume asm: "0 , def , {} , 0, def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , \<tau>> \<longrightarrow>\<^sub>s \<tau>' "
+      show "\<tau>' = preempt_raw C \<tau> 0"
+      proof (rule seq_cases_trans[OF asm])
+        fix x
+        assume "0 , def , {} , 0, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x"
+        have "0 , def , {} , 0, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b def A"
+          by (simp add: beval_raw.intros(1))
+        have "0 , def , {} , 0, def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b def B"
+          by (simp add: beval_raw.intros(1))
+        have "def A = Bv (bval_of (def A))"
+          using \<open>\<Gamma> A = Bty\<close> \<open>styping \<Gamma> def\<close> 
+          by (metis \<open>signal_of (def A) \<tau> A i = def A\<close> assms(6) signal_of_preserve_well_typedness ty.distinct(1) type_of.simps(2) val.exhaust_sel)
+        moreover have "def B = Bv (bval_of (def B))"
+          using \<open>\<Gamma> B = Bty\<close> \<open>styping \<Gamma> def\<close> 
+          by (metis \<open>signal_of (def B) \<tau> B i = def B\<close> assms(6) signal_of_preserve_well_typedness ty.distinct(1) type_of.simps(2) val.exhaust_sel)
+        ultimately have "x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))"
+          using \<open>0 , def , {} , 0, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> 
+          by (metis (no_types, hide_lams) beval_raw.intros(1) beval_raw.intros(12) beval_raw_deterministic)
+        moreover have "def C = Bv (bval_of (def C))"
+          using \<open>\<Gamma> C = Bty\<close>  by (metis assms(4) styping_def ty.simps(3) type_of.simps(2) val.exhaust_sel)
+        ultimately have "x = def C"
+          using good_default by auto
+        assume " trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'"
+        moreover have "\<not> post_necessary_raw (0 - 1) \<tau> 0 C x (def C)"
+          unfolding post_necessary_raw_correctness using \<open>x = def C\<close> assms(2) unfolding to_trans_raw_sig_def
+          by (metis zero_fun_def zero_option_def)
+        ultimately show ?thesis
+          unfolding trans_post_raw_def  by auto
+      qed
+    qed
+    hence "to_trans_raw_sig \<tau>' C = 0"
+      using assms(2) unfolding preempt_raw_def to_trans_raw_sig_def zero_fun_def zero_option_def
+      fun_upd_def by auto
+    have "\<tau> \<noteq> 0 \<or> \<tau> = 0"
+      by auto
+    moreover
+    { assume "\<tau> \<noteq> 0"
+      hence "\<tau>' \<noteq> 0"
+        using \<open>to_trans_raw_sig \<tau> C = 0\<close>
+        unfolding \<open>\<tau>' = preempt_raw C \<tau> 0\<close> preempt_raw_def to_trans_raw_sig_def 
+        by (smt fun_upd_triv less_Suc_eq_le less_irrefl_nat next_time_at_least next_time_def zero_fun_def zero_option_def)
+      have "i < next_time 0 \<tau>'"
+      proof (rule ccontr)
+        assume "\<not> i < next_time 0 \<tau>'" hence "next_time 0 \<tau>' \<le> i" by auto
+        hence "(LEAST n. dom (\<tau>' n) \<noteq> {}) \<le> i"
+          unfolding next_time_def using \<open>\<tau>' \<noteq> 0\<close> by auto
+        have "\<exists>n. dom (\<tau>' n) \<noteq> {}"
+          using \<open>\<tau>' \<noteq> 0\<close> unfolding dom_def zero_fun_def zero_option_def  by fastforce
+        hence "dom (\<tau>' (LEAST n. dom (\<tau>' n) \<noteq> {})) \<noteq> {}"
+          by (metis (mono_tags) LeastI)
+        have "\<tau>' (LEAST n. dom (\<tau>' n) \<noteq> {}) A = None"
+          using \<open>\<forall>n \<le> i. \<tau> n A = 0\<close> \<open>(LEAST n. dom (\<tau>' n) \<noteq> {}) \<le> i\<close> unfolding \<open>\<tau>' = preempt_raw C \<tau> 0\<close>
+          preempt_raw_def  by (simp add: zero_option_def)
+        moreover have "\<tau>' (LEAST n. dom (\<tau>' n) \<noteq> {}) B = None"
+          using \<open>\<forall>n \<le> i. \<tau> n B = 0\<close> \<open>(LEAST n. dom (\<tau>' n) \<noteq> {}) \<le> i\<close> unfolding \<open>\<tau>' = preempt_raw C \<tau> 0\<close>
+          preempt_raw_def  by (simp add: zero_option_def)
+        moreover have "\<tau>' (LEAST n. dom (\<tau>' n) \<noteq> {}) C = None"
+          unfolding \<open>\<tau>' = preempt_raw C \<tau> 0\<close> preempt_raw_def  by (simp add: zero_option_def)
+        ultimately have "dom (\<tau>' (LEAST n. dom (\<tau>' n) \<noteq> {})) = {}"
+          unfolding dom_def  by (metis (mono_tags, lifting) empty_Collect_eq sig.exhaust)
+        thus False
+          using \<open>dom (\<tau>' (LEAST n. dom (\<tau>' n) \<noteq> {})) \<noteq> {}\<close> by blast
+      qed
+      have "t' \<le> Suc i"
+        using bigstep by (induction) auto
+      hence "t' = Suc i"
+        using Suc_leI \<open>i < next_time 0 \<tau>'\<close> \<open>next_time 0 \<tau>' = t'\<close> le_antisym by blast
+      hence "res = (Suc i, \<sigma>', \<gamma>', 0, \<tau>'(t' := 0))"
+        using bau[OF bigstep] by auto
+      hence "get_beh res = 0"
+        by auto
+      hence "signal_of (def C) (get_beh res) C i = def C"
+        using signal_of_empty by force
+      hence ?thesis
+        using \<open>signal_of (def A) \<tau> A i = def A\<close> \<open>signal_of (def B) \<tau> B i = def B\<close> good_default by auto }
+    moreover
+    { assume "\<tau> = 0"
+      hence "\<tau>' = 0"
+        using \<open>to_trans_raw_sig \<tau> C = 0\<close>
+        unfolding \<open>\<tau>' = preempt_raw C \<tau> 0\<close> preempt_raw_def  by (simp add: zero_fun_def zero_option_def)
+      moreover hence "\<gamma>' = {}"
+        by (smt Collect_empty_eq \<open>next_event 0 \<tau>' def = \<gamma>'\<close> domIff next_event_def zero_fun_def zero_option_def)
+      ultimately have "quiet (\<tau>'(t':=0)) \<gamma>'"
+        unfolding quiet_def fun_upd_def zero_fun_def zero_option_def by auto
+      hence "res = (Suc i, \<sigma>', \<gamma>', 0, 0)"
+        using bau[OF bigstep]  by (smt quiet_def)
+      hence ?thesis
+        using \<open>signal_of (def A) \<tau> A i = def A\<close> \<open>signal_of (def B) \<tau> B i = def B\<close> good_default 
+        by (metis comp_def fst_conv signal_of_empty snd_conv) }
+    ultimately show ?thesis
+      by blast
+  next
+    case bad_default
+    have "\<tau>' = post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 0 \<and> post_necessary_raw (0 - 1) \<tau> 0 C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C)"
+    proof (rule init'_cases(1)[OF  \<open>init' 0 def {} 0 def nand4 \<tau> \<tau>'\<close>[unfolded nand4_def]])
+      assume asm: "0 , def , {} , 0, def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , \<tau>> \<longrightarrow>\<^sub>s \<tau>' "
+      show "\<tau>' = post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 0 \<and> post_necessary_raw (0 - 1) \<tau> 0 C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C)"
+      proof (rule seq_cases_trans[OF asm])
+        fix x
+        assume "0 , def , {} , 0, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x"
+        have "0 , def , {} , 0, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b def A"
+          by (simp add: beval_raw.intros(1))
+        have "0 , def , {} , 0, def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b def B"
+          by (simp add: beval_raw.intros(1))
+        have "def A = Bv (bval_of (def A))"
+          using \<open>\<Gamma> A = Bty\<close> \<open>styping \<Gamma> def\<close> 
+          by (metis \<open>signal_of (def A) \<tau> A i = def A\<close> assms(6) signal_of_preserve_well_typedness ty.distinct(1) type_of.simps(2) val.exhaust_sel)
+        moreover have "def B = Bv (bval_of (def B))"
+          using \<open>\<Gamma> B = Bty\<close> \<open>styping \<Gamma> def\<close> 
+          by (metis \<open>signal_of (def B) \<tau> B i = def B\<close> assms(6) signal_of_preserve_well_typedness ty.distinct(1) type_of.simps(2) val.exhaust_sel)
+        ultimately have x_def: "x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))"
+          using \<open>0 , def , {} , 0, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> 
+          by (metis (no_types, hide_lams) beval_raw.intros(1) beval_raw.intros(12) beval_raw_deterministic)
+        moreover have "def C = Bv (bval_of (def C))"
+          using \<open>\<Gamma> C = Bty\<close>  by (metis assms(4) styping_def ty.simps(3) type_of.simps(2) val.exhaust_sel)
+        ultimately have "x \<noteq> def C"
+          using bad_default by auto
+        assume " trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'"
+        moreover have "post_necessary_raw (0) \<tau> 0 C x (def C)"
+          unfolding post_necessary_raw_correctness2 using \<open>x \<noteq> def C\<close> assms(2) unfolding to_trans_raw_sig_def
+          by (metis zero_fun_def zero_option_def)
+        ultimately show ?thesis
+          unfolding trans_post_raw_def x_def  by auto
+      qed
+    qed
+    hence \<tau>'_def: "\<tau>' = post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 0" and "post_necessary_raw 0 \<tau> 0 C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C)"
+      by auto
+    hence "next_time  0 \<tau>' = 0"
+      by (metis (full_types) fun_upd_eqD fun_upd_triv le0 nat_less_le next_time_at_least2 option.distinct(1) post_raw_def zero_fun_def zero_option_def)
+    have "A \<notin> next_event 0 \<tau>' def"
+    proof (rule ccontr)
+      assume "\<not> A \<notin> next_event 0 \<tau>' def"
+      hence "def A \<noteq> next_state 0 \<tau>' def A"
+        unfolding next_event_alt_def by auto
+      moreover have "next_state 0 \<tau>' def A = def A"
+        unfolding next_state_def Let_def \<open>next_time 0 \<tau>' = 0\<close> comp_def dom_def \<tau>'_def 
+        using \<open>\<forall>n \<le> i. \<tau> n A = 0\<close> 
+        by (metis (mono_tags) \<open>next_time 0 \<tau>' = 0\<close> \<tau>'_def fun_upd_other le0 mem_Collect_eq override_on_apply_notin post_raw_def sig.distinct(3) zero_option_def)
+      ultimately show False
+        by auto
+    qed
+    have "B \<notin> next_event 0 \<tau>' def"
+    proof (rule ccontr)
+      assume "\<not> B \<notin> next_event 0 \<tau>' def"
+      hence "def B \<noteq> next_state 0 \<tau>' def B"
+        unfolding next_event_alt_def by auto
+      moreover have "next_state 0 \<tau>' def B = def B"
+        unfolding next_state_def Let_def \<open>next_time 0 \<tau>' = 0\<close> comp_def dom_def \<tau>'_def 
+        using \<open>\<forall>n \<le> i. \<tau> n B = 0\<close> 
+        by (metis (mono_tags, hide_lams) \<open>next_time 0 \<tau>' = 0\<close> \<tau>'_def calculation domIff
+        fun_upd_other le0 next_state_def override_on_apply_notin post_raw_def sig.distinct(5)
+        zero_option_def)
+      ultimately show False
+        by auto
+    qed
+    show ?thesis 
+    proof -
+      note True = \<open>A \<notin> next_event 0 \<tau>' def\<close> \<open>B \<notin> next_event 0 \<tau>' def\<close>
+      hence "next_event 0 \<tau>' def = {C}"
+      proof - 
+        have "\<And>sig. def sig \<noteq> next_state 0 \<tau>' def sig \<Longrightarrow> sig = C"
+        proof (rule ccontr)
+          fix sig
+          assume "sig \<noteq> C"
+          hence "sig = A \<or> sig = B"
+            using sig.exhaust by blast
+          hence "next_state 0 \<tau>' def sig = def sig"
+            unfolding next_state_def \<open>next_time 0 \<tau>' = 0\<close> \<tau>'_def Let_def comp_def 
+            by (metis \<open>\<forall>n\<le>i. \<tau> n A = 0\<close> \<open>\<forall>n\<le>i. \<tau> n B = 0\<close> \<open>next_time 0 \<tau>' = 0\<close> \<open>sig \<noteq> C\<close> \<tau>'_def domIff fun_upd_other leD not_less_eq_eq override_on_apply_notin post_raw_def zero_less_Suc zero_option_def)
+          moreover assume "def sig \<noteq> next_state 0 \<tau>' def sig"
+          ultimately show False
+            by auto
+        qed
+        moreover have "def C \<noteq> next_state 0 \<tau>' def C"
+          using bad_default \<open>post_necessary_raw 0 \<tau> 0 C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C)\<close> unfolding post_necessary_raw_correctness2
+          by (smt \<open>next_time 0 \<tau>' = 0\<close> \<tau>'_def domIff fun_upd_same next_state_def o_def option.distinct(1) option.sel override_on_def post_raw_def val.sel(1))
+        ultimately show ?thesis
+          unfolding next_event_alt_def  by (intro equalityI)auto
+      qed
+      have "t' < Suc i"
+        using \<open>next_time 0 \<tau>' = 0\<close> \<open>next_time 0 \<tau>' = t'\<close> less_Suc_eq_0_disj by blast
+      have "\<not> quiet (\<tau>'(t':=0)) \<gamma>'"
+        using \<open>next_event 0 \<tau>' def = \<gamma>'\<close> \<open>next_event 0 \<tau>' def = {C}\<close> quiet_def by force
+      have "t', \<sigma>', \<gamma>', 0, def \<turnstile> <nand4, \<tau>'(t':=0)> \<longrightarrow>\<^sub>c \<tau>'(t':=0)"
+        unfolding nand4_def
+        apply (intro b_conc_exec.intros(1))
+        using \<open>next_event 0 \<tau>' def = {C}\<close> by (simp add: \<open>next_event 0 \<tau>' def = \<gamma>'\<close>)
+      have "next_time t' (\<tau>'(t':=0)) \<le> Suc i \<or> Suc i < next_time t' (\<tau>'(t':=0))"
+        by auto
+      moreover
+      { assume "Suc i < next_time t' (\<tau>'(t':=0))"
+        hence "res = (Suc i, \<sigma>', {}, Femto_VHDL_raw.add_to_beh2 \<sigma>' 0 t' def, \<tau>'(t':=0))"
+          using bau[OF bigstep]
+          by (smt \<open>\<not> quiet (\<tau>'(t' := 0)) \<gamma>'\<close> \<open>next_time 0 \<tau>' = 0\<close> \<open>next_time 0 \<tau>' = t'\<close> \<open>t' , \<sigma>' ,
+          \<gamma>' , 0, def \<turnstile> <nand4 , \<tau>' (t' := 0)> \<longrightarrow>\<^sub>c \<tau>'(t' := 0)\<close> \<open>t' < Suc i\<close>
+          b_conc_exec_deterministic leD le_numeral_extra(3))
+        hence "get_beh res = Femto_VHDL_raw.add_to_beh2 \<sigma>' 0 0 def"
+          using \<open>next_time 0 \<tau>' = 0\<close> \<open>next_time 0 \<tau>' = t'\<close> by auto
+        hence "signal_of (def C) (get_beh res) C i = \<sigma>' C"
+          using signal_of_add_to_beh2'  by (metis (full_types) zero_fun_def zero_le)
+        also have "... = the (\<tau>' 0 C)"
+          by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = 0\<close> \<tau>'_def comp_def domIff fun_upd_eqD fun_upd_triv next_state_def option.distinct(1) override_on_def post_raw_def)
+        also have "... = (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) "
+          unfolding \<tau>'_def post_raw_def by auto
+        finally have "bval_of (signal_of (def C) (get_beh res) C i) \<longleftrightarrow> \<not> (bval_of (def A) \<and> bval_of (def B))"
+          by auto
+        hence ?thesis
+          using \<open>signal_of (def A) \<tau> A i = def A\<close> \<open>signal_of (def B) \<tau> B i = def B\<close> by auto }
+      moreover
+      { assume "next_time t' (\<tau>'(t':=0)) \<le> Suc i"
+        hence bigstep2: "Suc i, next_time t' (\<tau>'(t':=0)) , next_state t' (\<tau>'(t':=0)) \<sigma>' , next_event t' (\<tau>'(t':=0)) \<sigma>' , Femto_VHDL_raw.add_to_beh2 \<sigma>' 0 t' def, def \<turnstile> <nand4 , (\<tau>'(t':=0))(next_time t' (\<tau>'(t':=0)) := 0)> \<leadsto> res"
+          using bau[OF bigstep] 
+          by (smt \<open>\<not> quiet (\<tau>'(t' := 0)) \<gamma>'\<close> \<open>t' , \<sigma>' , \<gamma>' , 0, def \<turnstile> <nand4 , \<tau>' (t' := 0)> \<longrightarrow>\<^sub>c \<tau>'(t' := 0)\<close> \<open>t' < Suc i\<close> bigstep case_bau)
+        have "(\<tau>'(0:=0)) = 0 \<or> (\<tau>'(0:=0) \<noteq> 0)"
+          by auto
+        moreover
+        { assume "\<tau>'(0:=0) = 0"
+          hence " (\<tau>'(t':=0))(next_time t' (\<tau>'(t':=0)) := 0) = 0"
+            by (metis \<open>next_time 0 \<tau>' = 0\<close> \<open>next_time 0 \<tau>' = t'\<close> fun_upd_triv zero_fun_def)
+          moreover hence "next_event t' (\<tau>'(t':=0)) \<sigma>' = {}"
+            by (metis (mono_tags) Collect_empty_eq \<open>\<tau>'(0 := 0) = 0\<close> \<open>next_time 0 \<tau>' = 0\<close> \<open>next_time
+            0 \<tau>' = t'\<close> dom_eq_empty_conv next_event_alt_def next_state_def override_on_emptyset
+            zero_fun_def zero_option_def)
+          ultimately have "quiet ((\<tau>'(t':=0))(next_time t' (\<tau>'(t':=0)) := 0)) (next_event t' (\<tau>'(t':=0)) \<sigma>') "
+            unfolding quiet_def  by auto
+          hence "res = (Suc i, next_state t' (\<tau>'(t':=0)) \<sigma>', next_event t' (\<tau>'(t':=0)) \<sigma>', Femto_VHDL_raw.add_to_beh2 \<sigma>' 0 t' def, 0)"
+            using bau[OF bigstep2]  using \<open>\<tau>'(t' := 0, next_time t' (\<tau>'(t' := 0)) := 0) = 0\<close> by blast
+          hence "get_beh res = Femto_VHDL_raw.add_to_beh2 \<sigma>' 0 0 def"
+            using \<open>next_time 0 \<tau>' = 0\<close> \<open>next_time 0 \<tau>' = t'\<close> by auto
+          hence "signal_of (def C) (get_beh res) C i = \<sigma>' C"
+            using signal_of_add_to_beh2'  by (metis (full_types) zero_fun_def zero_le)
+          also have "... = the (\<tau>' 0 C)"
+            by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = 0\<close> \<tau>'_def comp_apply domIff fun_upd_same next_state_def option.distinct(1) override_on_def post_raw_def)
+          also have "... = (Bv (\<not> (bval_of (def A) \<and> bval_of (def B))))"
+            unfolding \<tau>'_def  by (simp add: post_raw_def)
+          finally have ?thesis
+            using \<open>signal_of (def A) \<tau> A i = def A\<close> \<open>signal_of (def B) \<tau> B i = def B\<close> by auto }
+        moreover
+        { assume "\<tau>'(0:=0) \<noteq> 0"
+          have "i < next_time 0 (\<tau>'(0 := 0))"
+          proof (rule ccontr)
+            assume "\<not> i < next_time 0 (\<tau>'(0:=0))" hence "next_time 0 (\<tau>'(0:=0)) \<le> i"
+              by auto
+            hence "(LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}) \<le> i"
+              using \<open>\<tau>'(0:=0) \<noteq> 0\<close> unfolding next_time_def by auto
+            have "\<exists>n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}"
+              using \<open>\<tau>'(0:=0) \<noteq> 0\<close> unfolding dom_def zero_fun_def zero_option_def  by (metis dom_def dom_eq_empty_conv)
+            hence "dom ((\<tau>'(0 := 0)) (LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {})) \<noteq> {}"
+              by (metis (mono_tags, lifting) LeastI_ex)
+            moreover have "C \<notin> dom ((\<tau>'(0 := 0)) (LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}))"
+              using \<tau>'_def unfolding post_raw_def  by (simp add: zero_fun_def zero_option_def)
+            moreover have "A \<notin> dom ((\<tau>'(0 := 0)) (LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}))"
+              using \<open>(LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}) \<le> i\<close> \<tau>'_def \<open>\<forall>n \<le> i. \<tau> n A = 0\<close>
+              by (simp add: domIff post_raw_def zero_fun_def zero_option_def)
+            moreover have "B \<notin> dom ((\<tau>'(0 := 0)) (LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}))"
+              using \<open>(LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}) \<le> i\<close> \<tau>'_def \<open>\<forall>n \<le> i. \<tau> n B = 0\<close>
+              by (simp add: domIff post_raw_def zero_fun_def zero_option_def)
+            ultimately show False
+              using sig.exhaust 
+            proof -
+              obtain ss :: "(sig \<Rightarrow> val option) \<Rightarrow> sig" where
+                f1: "\<And>f. f (ss f) \<noteq> None \<or> dom f = {}"
+                by (meson dom_eq_empty_conv)
+              then have "\<And>f. f C \<noteq> None \<or> ss f = B \<or> ss f = A \<or> dom f = {}"
+                by (metis (full_types) sig.exhaust)
+              then show ?thesis
+                using f1 by (metis (lifting) \<open>A \<notin> dom ((\<tau>'(0 := 0)) (LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}))\<close> \<open>B \<notin> dom ((\<tau>'(0 := 0)) (LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}))\<close> \<open>C \<notin> dom ((\<tau>'(0 := 0)) (LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {}))\<close> \<open>dom ((\<tau>'(0 := 0)) (LEAST n. dom ((\<tau>'(0 := 0)) n) \<noteq> {})) \<noteq> {}\<close> domIff)
+            qed
+          qed
+          hence "i < next_time t' (\<tau>'(t' := 0))"
+            using \<open>next_time 0 \<tau>' = 0\<close> \<open>next_time 0 \<tau>' = t'\<close> by auto
+          have "\<And>n. n < next_time t' (\<tau>'(t' := 0)) \<Longrightarrow> (\<tau>'(t' := 0, next_time t' (\<tau>'(t' := 0)) := 0)) n = 0"
+            using next_time_at_least2 by fastforce
+          hence " \<And>n. n < next_time t' (\<tau>'(t' := 0)) \<Longrightarrow> Femto_VHDL_raw.add_to_beh2 \<sigma>' 0 t' def n = get_beh res n"
+            using beh_res[OF bigstep2 _ `next_time t' (\<tau>'(t' := 0)) \<le> Suc i` ] by auto
+          hence "\<And>n. n \<le> i \<Longrightarrow> Femto_VHDL_raw.add_to_beh2 \<sigma>' 0 t' def n = get_beh res n"
+            by (simp add: \<open>i < next_time t' (\<tau>'(t' := 0))\<close> le_less_trans)
+          hence "signal_of (def C) (get_beh res) C i = \<sigma>' C"
+            by (smt \<open>i < next_time t' (\<tau>'(t' := 0))\<close> \<open>t' < Suc i\<close> b_simulate_fin.simps bigstep2
+            comp_def fst_conv leD le_Suc_eq nat_less_le signal_of_add_to_beh2' snd_conv
+            zero_fun_def)
+          also have "... = the (\<tau>' 0 C)"
+            by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = 0\<close> \<tau>'_def comp_apply domIff fun_upd_same next_state_def option.distinct(1) override_on_def post_raw_def)
+          also have "... = (Bv (\<not> (bval_of (def A) \<and> bval_of (def B))))"
+            unfolding \<tau>'_def  by (simp add: post_raw_def)
+          finally have ?thesis
+            using \<open>signal_of (def A) \<tau> A i = def A\<close> \<open>signal_of (def B) \<tau> B i = def B\<close> by auto }
+        ultimately have ?thesis
+          by auto }
+      ultimately show ?thesis
+        by auto
+    qed
+  qed
+next
+  case False
+  obtain \<tau>' t' \<sigma>' \<gamma>' where "init' 0 def {} 0 def nand4 \<tau> \<tau>'" and "next_time  0 \<tau>' = t'" and "next_state 0 \<tau>' def = \<sigma>'" and "next_event 0 \<tau>' def = \<gamma>'"
+    using bsim[OF assms(1)] by meson
+  have  bigstep: "Suc i, t', \<sigma>', \<gamma>', 0, def \<turnstile> <nand4, \<tau>'(t' := 0)> \<leadsto> res"
+    using bsim[OF assms(1)] 
+    by (metis \<open>init' 0 def {} 0 def nand4 \<tau> \<tau>'\<close> \<open>next_event 0 \<tau>' def = \<gamma>'\<close> \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> assms(1) bsimulate_obt_big_step)
+  have trans_removal: "\<And>n. n < t' \<Longrightarrow> (\<tau>'(t' := 0)) n = 0"
+    using \<open>next_time 0 \<tau>' = t'\<close> next_time_at_least2 by auto
+  have "\<tau> \<noteq> 0"
+    using False by auto
+  have "0 , def , {} , 0, def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'"
+    using init'_cases(1)[OF \<open>init' 0 def {} 0 def nand4 \<tau> \<tau>'\<close>[unfolded nand4_def]] by auto
+  then obtain x where "0 , def , {} , 0, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x" and "trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'"
+    using seq_cases_trans[OF \<open>0 , def , {} , 0, def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close>] by blast
+  hence "x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))"
+    by (smt assms(3) assms(4) assms(5) beval_cases(1) beval_cases(9) bexp_wt_cases(4)
+    bexp_wt_cases_slice(2) conc_wt_cases(1) nand4_def seq_wt_cases(4) styping_def ty.simps(3)
+    type_of.simps(2) val.sel(1))
+  hence \<tau>'_def: "\<tau>' = trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 0"
+    using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> by blast
+  have "\<tau>' \<noteq> 0"
+  proof (rule ccontr)
+    assume "\<not> \<tau>' \<noteq> 0" hence "\<tau>' = 0" by auto
+    have "to_trans_raw_sig \<tau>' A = to_trans_raw_sig \<tau> A"
+      unfolding \<tau>'_def to_trans_raw_sig_def trans_post_raw_def comp_def
+    proof -
+      have "\<forall>n. (if ((0::nat) < 0 + 0 \<longrightarrow> to_signal (def C) (\<lambda>s n. \<tau> n s) C (0 + 0 - 1) \<noteq> Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) \<and> (\<not> (0::nat) < 0 + 0 \<longrightarrow> def C \<noteq> Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) then post_raw C (Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) \<tau> (0 + 0) else preempt_raw C \<tau> (0 + 0)) n A = \<tau> n A"
+        by (simp add: post_raw_def preempt_raw_def)
+      then show "(\<lambda>n. (if if (0::nat) < 0 + 0 then to_signal (def C) (\<lambda>s n. \<tau> n s) C (0 + 0 - 1) \<noteq> Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) else def C \<noteq> Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) then post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> (0 + 0) else preempt_raw C \<tau> (0 + 0)) n A) = (\<lambda>n. \<tau> n A)"
+        by presburger
+    qed
+    hence "to_trans_raw_sig \<tau> A = 0"
+      using \<open>\<tau>' = 0\<close>  by (simp add: to_trans_raw_sig_def zero_fun_def)
+    hence "inf_time (to_trans_raw_sig \<tau>) A i = None"
+      by (metis domIff inf_time_none_iff zero_map)
+    have "to_trans_raw_sig \<tau>' B = to_trans_raw_sig \<tau> B"
+      unfolding \<tau>'_def to_trans_raw_sig_def trans_post_raw_def comp_def 
+    proof -
+      { fix nn :: nat
+        have "post_raw C (Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) \<tau> nn nn B = \<tau> nn B \<and> preempt_raw C \<tau> nn nn B = \<tau> nn B"
+          by (simp add: post_raw_def preempt_raw_def)
+        moreover
+        { assume "0 + 0 \<noteq> nn"
+          have "(0 + 0 \<noteq> nn \<and> \<not> 0 + 0 < nn) \<and> preempt_raw C \<tau> (0 + 0) nn B = \<tau> nn B \<or> (if ((0::nat) < 0 + 0 \<longrightarrow> to_signal (def C) (\<lambda>s n. \<tau> n s) C (0 + 0 - 1) \<noteq> Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) \<and> (\<not> (0::nat) < 0 + 0 \<longrightarrow> def C \<noteq> Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) then post_raw C (Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) \<tau> (0 + 0) else preempt_raw C \<tau> (0 + 0)) nn B = \<tau> nn B"
+            by (simp add: post_raw_def preempt_raw_def)
+          then have "(if ((0::nat) < 0 + 0 \<longrightarrow> to_signal (def C) (\<lambda>s n. \<tau> n s) C (0 + 0 - 1) \<noteq> Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) \<and> (\<not> (0::nat) < 0 + 0 \<longrightarrow> def C \<noteq> Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) then post_raw C (Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) \<tau> (0 + 0) else preempt_raw C \<tau> (0 + 0)) nn B = \<tau> nn B"
+            by linarith }
+        ultimately have "(if ((0::nat) < 0 + 0 \<longrightarrow> to_signal (def C) (\<lambda>s n. \<tau> n s) C (0 + 0 - 1) \<noteq> Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) \<and> (\<not> (0::nat) < 0 + 0 \<longrightarrow> def C \<noteq> Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) then post_raw C (Bv (\<not> bval_of (def A) \<or> \<not> bval_of (def B))) \<tau> (0 + 0) else preempt_raw C \<tau> (0 + 0)) nn B = \<tau> nn B"
+          by force }
+      then show "(\<lambda>n. (if if (0::nat) < 0 + 0 then to_signal (def C) (\<lambda>s n. \<tau> n s) C (0 + 0 - 1) \<noteq> Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) else def C \<noteq> Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) then post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> (0 + 0) else preempt_raw C \<tau> (0 + 0)) n B) = (\<lambda>n. \<tau> n B)"
+        by presburger
+    qed
+    hence "to_trans_raw_sig \<tau> B = 0"
+      using \<open>\<tau>' = 0\<close>  by (simp add: to_trans_raw_sig_def zero_fun_def)
+    hence "inf_time (to_trans_raw_sig \<tau>) B i = None"
+      by (metis domIff inf_time_none_iff zero_map)
+    with False show False
+      by (simp add: \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close>)
+  qed
+  have "inf_time (to_trans_raw_sig \<tau>) A i \<noteq> None \<or> inf_time (to_trans_raw_sig \<tau>) B i \<noteq> None"
+    using False by auto
+  then consider (both) "inf_time (to_trans_raw_sig \<tau>) A i \<noteq> None \<and> inf_time (to_trans_raw_sig \<tau>) B i \<noteq> None " 
+    | (either) "inf_time (to_trans_raw_sig \<tau>) A i \<noteq> None \<and> inf_time (to_trans_raw_sig \<tau>) B i = None \<or> 
+       inf_time (to_trans_raw_sig \<tau>) A i = None \<and> inf_time (to_trans_raw_sig \<tau>) B i \<noteq> None"
+    by linarith
+  then show ?thesis 
+  proof (cases)
+    case both
+    then obtain time1 time2 time where "inf_time (to_trans_raw_sig \<tau>) A i = Some time1" and "inf_time (to_trans_raw_sig \<tau>) B i = Some time2"
+        and "time = max time1 time2"
+      by blast
+    have "next_time 0 \<tau>' \<le> time"
+    proof -
+      have "next_time 0 \<tau>' = (LEAST n. dom (\<tau>' n) \<noteq> {})"
+        unfolding next_time_def using \<open>\<tau>' \<noteq> 0\<close> by auto
+      have "\<exists>n. dom (\<tau>' n) \<noteq> {}"
+        using \<open>\<tau>' \<noteq> 0\<close> unfolding dom_def zero_fun_def zero_option_def 
+        by fastforce
+      have "inf_time (to_trans_raw_sig \<tau>) A i = inf_time (to_trans_raw_sig \<tau>') A i"
+        using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> inf_time_trans_post by fastforce
+      hence "dom (\<tau>' time1) \<noteq> {}"
+        using \<open>inf_time (to_trans_raw_sig \<tau>) A i  = Some time1\<close> unfolding dom_def 
+      proof -
+        have "\<exists>s. to_trans_raw_sig \<tau>' s time1 \<noteq> None"
+          by (metis Femto_VHDL_raw.keys_def \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>inf_time (to_trans_raw_sig \<tau>) A i = inf_time (to_trans_raw_sig \<tau>') A i\<close> domIff dom_def inf_time_some_exists zero_option_def)
+        then show "{s. \<tau>' time1 s \<noteq> None} \<noteq> {}"
+          by (simp add: to_trans_raw_sig_def)
+      qed
+      hence "(LEAST n. dom (\<tau>' n) \<noteq> {}) \<le> time1"
+        using Least_le by auto
+      also have "... \<le> time"
+        unfolding \<open>time = max time1 time2\<close> by auto
+      finally show "next_time 0 \<tau>' \<le> time"
+        using \<open>next_time 0 \<tau>' = (LEAST n. dom (\<tau>' n) \<noteq> {})\<close> by linarith
+    qed
+    have "time < Suc i"
+      unfolding \<open>time = max time1 time2\<close> 
+      using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close>
+      inf_time_at_most by fastforce
+    have "\<exists>res'. time, t' , \<sigma>' , \<gamma>' , 0, def \<turnstile> <nand4 , \<tau>'(t' := 0)> \<leadsto> res' \<and> Suc i, time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<leadsto> res"
+      using split_b_simulate_fin[OF bigstep \<open>next_time 0 \<tau>' \<le>time\<close>[unfolded \<open>next_time 0 \<tau>' = t'\<close>] _ trans_removal conc_stmt_wf_nand4]  \<open>time < Suc i\<close>
+      by (meson less_or_eq_imp_le zero_fun_def)
+    then obtain res' where bigstep2_pre: "time, t' , \<sigma>' , \<gamma>' , 0, def \<turnstile> <nand4 , \<tau>'(t' := 0)> \<leadsto> res'"
+      and bigstep2: "Suc i, time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<leadsto> res"
+      by auto
+    have "A \<notin> set (signals_from nand4)" and "B \<notin> set (signals_from nand4)"
+      unfolding nand4_def by auto
+    have "t' < time \<or> t' = time"
+      using bau bigstep2_pre by blast
+    moreover 
+    { assume "t' < time"
+      moreover have "\<tau>' time A = \<tau> time A" and "\<tau>' time B = \<tau> time B"
+        unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def by auto
+      moreover have "\<tau> time A \<noteq> 0 \<or> \<tau> time B \<noteq> 0"
+        using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close> \<open>time = max time1 time2\<close>
+      proof -
+        have f1: "\<And>n. Some time2 \<noteq> Some n \<or> to_trans_raw_sig \<tau> B n \<noteq> 0"
+          using Femto_VHDL_raw.keys_def \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close> inf_time_some_exists by fastforce
+        have "\<And>n. Some time1 \<noteq> Some n \<or> to_trans_raw_sig \<tau> A n \<noteq> 0"
+          using Femto_VHDL_raw.keys_def \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> inf_time_some_exists by fastforce
+        then show ?thesis
+          using f1 by (metis (no_types) \<open>time = max time1 time2\<close> max_def to_trans_raw_sig_def)
+      qed
+      ultimately have "(\<tau>'(t' := 0)) time A \<noteq> 0 \<or> (\<tau>'(t' := 0)) time B \<noteq> 0"
+        by auto
+      then obtain sigAB where "(\<tau>'(t' := 0)) time sigAB \<noteq> 0" and "sigAB = A \<or> sigAB = B"
+        by blast
+      hence "sigAB \<notin> set (signals_from nand4)"
+        unfolding nand4_def by auto
+      have "non_stuttering (to_trans_raw_sig \<tau>') def sigAB"
+        using init'_preserves_non_stuttering[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` _ _ conc_stmt_wf_nand4] assms(7)
+        by blast
+      hence "non_stuttering (to_trans_raw_sig (\<tau>'(t' := 0))) \<sigma>' sigAB"
+        using non_stuttering_next \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> by fastforce
+      hence "get_event res' \<noteq>  {}"
+        using get_event_never_empty'[OF bigstep2_pre \<open>sigAB \<notin> set (signals_from nand4)\<close> ` (\<tau>'(t' := 0)) time sigAB \<noteq> 0 ` _ _ trans_removal conc_stmt_wf_nand4]
+        using \<open>t' < time\<close> by blast 
+      have "\<not> disjnt {A, B} (get_event res')"
+        using get_event_never_empty[OF bigstep2_pre \<open>sigAB \<notin> set (signals_from nand4)\<close> ` (\<tau>'(t' := 0)) time sigAB \<noteq> 0 ` _ _ trans_removal conc_stmt_wf_nand4]
+        using \<open>t' < time\<close> \<open>non_stuttering (to_trans_raw_sig (\<tau>'(t' := 0))) \<sigma>' sigAB\<close> \<open>sigAB = A \<or> sigAB = B\<close> by fastforce
+      hence "get_event res' \<noteq>  {} \<and> \<not> disjnt {A, B} (get_event res')"
+        by auto }
+    moreover 
+    { assume "t' = time"
+      hence "res' = (time, \<sigma>', \<gamma>', 0, \<tau>'(t' := 0))"
+        using bau[OF bigstep2_pre] by auto
+      hence "get_event res' = \<gamma>'"
+        by auto
+      also have "... = next_event 0 \<tau>' def"
+        using \<open>next_event 0 \<tau>' def = \<gamma>'\<close> by auto
+      also have "... = {sig. def sig \<noteq> next_state 0 \<tau>' def sig} "
+        unfolding next_event_alt_def by auto
+      also have "... \<noteq> {}"
+      proof -
+        have "\<tau>' time A = \<tau> time A" and "\<tau>' time B = \<tau> time B"
+          unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def by auto
+        moreover have "\<tau> time A \<noteq> 0 \<or> \<tau> time B \<noteq> 0"
+          using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close> \<open>time = max time1 time2\<close>
+        proof -
+          have f1: "\<And>n. Some time2 \<noteq> Some n \<or> to_trans_raw_sig \<tau> B n \<noteq> 0"
+            using Femto_VHDL_raw.keys_def \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close> inf_time_some_exists by fastforce
+          have "\<And>n. Some time1 \<noteq> Some n \<or> to_trans_raw_sig \<tau> A n \<noteq> 0"
+            using Femto_VHDL_raw.keys_def \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> inf_time_some_exists by fastforce
+          then show ?thesis
+            using f1 by (metis (no_types) \<open>time = max time1 time2\<close> max_def to_trans_raw_sig_def)
+        qed
+        ultimately have "\<tau>' time A \<noteq> 0 \<or> \<tau>' time B \<noteq> 0"
+          by auto
+        then obtain sigAB where "\<tau>' time sigAB \<noteq> 0" and "sigAB = A \<or> sigAB = B"
+          by auto
+        moreover have "\<tau>' time sigAB = \<tau> time sigAB"
+          using \<open>\<tau>' time A = \<tau> time A\<close> \<open>\<tau>' time B = \<tau> time B\<close> calculation(2) by blast
+        moreover have  "Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB) \<noteq> {}"
+          using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i
+          = Some time2\<close> calculation(2) inf_time_some_exists by force
+        moreover have *: "(LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB)) = time"
+        proof (rule Least_equality)
+          show " time \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB)"
+            by (metis Femto_VHDL_raw.keys_def calculation(1) calculation(3) domIff dom_def to_trans_raw_sig_def zero_option_def)
+        next
+          { fix y 
+            assume "y < time"
+            assume "y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB)"
+            hence "\<tau> y sigAB \<noteq> 0"
+              unfolding Femto_VHDL_raw.keys_def to_trans_raw_sig_def by auto
+            hence "\<tau>' y sigAB \<noteq> 0"
+              by (metis \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> calculation(2) sig.distinct(3) sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+            with `y < time` have False
+              unfolding `t' = time`[THEN sym] `next_time  0 \<tau>' = t'`[THEN sym] 
+              by (simp add: next_time_at_least2 zero_fun_def) }
+          thus "\<And>y. y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB) \<Longrightarrow> time \<le> y"
+            using not_less by blast
+        qed
+        moreover have "the (to_trans_raw_sig \<tau> sigAB (LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB))) = next_state 0 \<tau>' def sigAB"
+          unfolding * next_state_def 
+          by (metis \<open>next_time 0 \<tau>' = t'\<close> \<open>t' = time\<close> calculation(1) calculation(3) comp_apply domIff override_on_apply_in to_trans_raw_sig_def zero_option_def) 
+        ultimately show ?thesis
+          using assms(7)[unfolded non_stuttering_def] by auto
+      qed
+      finally have "get_event res' \<noteq>  {}"
+        by auto
+      have "\<not> disjnt {A, B} (get_event res')"
+      proof -
+        have "\<tau>' time A = \<tau> time A" and "\<tau>' time B = \<tau> time B"
+          unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def by auto
+        moreover have "\<tau> time A \<noteq> 0 \<or> \<tau> time B \<noteq> 0"
+          using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close> \<open>time = max time1 time2\<close>
+        proof -
+          have f1: "\<And>n. Some time2 \<noteq> Some n \<or> to_trans_raw_sig \<tau> B n \<noteq> 0"
+            using Femto_VHDL_raw.keys_def \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close> inf_time_some_exists by fastforce
+          have "\<And>n. Some time1 \<noteq> Some n \<or> to_trans_raw_sig \<tau> A n \<noteq> 0"
+            using Femto_VHDL_raw.keys_def \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> inf_time_some_exists by fastforce
+          then show ?thesis
+            using f1 by (metis (no_types) \<open>time = max time1 time2\<close> max_def to_trans_raw_sig_def)
+        qed
+        ultimately have "\<tau>' time A \<noteq> 0 \<or> \<tau>' time B \<noteq> 0"
+          by auto
+        then obtain sigAB where "\<tau>' time sigAB \<noteq> 0" and "sigAB = A \<or> sigAB = B"
+          by auto
+        moreover have "\<tau>' time sigAB = \<tau> time sigAB"
+          using \<open>\<tau>' time A = \<tau> time A\<close> \<open>\<tau>' time B = \<tau> time B\<close> calculation(2) by blast
+        moreover have  "Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB) \<noteq> {}"
+          using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i
+          = Some time2\<close> calculation(2) inf_time_some_exists by force
+        moreover have *: "(LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB)) = time"
+        proof (rule Least_equality)
+          show " time \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB)"
+            by (metis Femto_VHDL_raw.keys_def calculation(1) calculation(3) domIff dom_def to_trans_raw_sig_def zero_option_def)
+        next
+          { fix y 
+            assume "y < time"
+            assume "y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB)"
+            hence "\<tau> y sigAB \<noteq> 0"
+              unfolding Femto_VHDL_raw.keys_def to_trans_raw_sig_def by auto
+            hence "\<tau>' y sigAB \<noteq> 0"
+              by (metis \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> calculation(2) sig.distinct(3) sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+            with `y < time` have False
+              unfolding `t' = time`[THEN sym] `next_time  0 \<tau>' = t'`[THEN sym] 
+              by (simp add: next_time_at_least2 zero_fun_def) }
+          thus "\<And>y. y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB) \<Longrightarrow> time \<le> y"
+            using not_less by blast
+        qed
+        moreover have "the (to_trans_raw_sig \<tau> sigAB (LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> sigAB))) = next_state 0 \<tau>' def sigAB"
+          unfolding * next_state_def 
+          by (metis \<open>next_time 0 \<tau>' = t'\<close> \<open>t' = time\<close> calculation(1) calculation(3) comp_apply domIff override_on_apply_in to_trans_raw_sig_def zero_option_def) 
+        ultimately show ?thesis
+          by (metis (full_types) \<open>get_beh' res' = \<gamma>'\<close> \<open>next_event 0 \<tau>' def = \<gamma>'\<close> assms(7) disjnt_insert1 next_state_fixed_point non_stuttering_def)
+      qed 
+      hence "get_event res' \<noteq> {} \<and> \<not> disjnt {A, B} (get_event res')"
+        using \<open>get_beh' res' \<noteq> {}\<close> by blast }
+    ultimately have "get_event res' \<noteq> {} \<and> \<not> disjnt {A, B} (get_event res')"
+      by auto
+    hence " \<not> quiet (get_trans res') (get_event res')" and "\<not> disjnt {A, B} (get_event res')"
+      by (simp add: quiet_def)+
+    then obtain \<tau>_res where "time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res"
+      using bau[OF bigstep2]  using \<open>time < Suc i\<close> by force
+    have "next_time time \<tau>_res \<le> Suc i \<or> Suc i < next_time time \<tau>_res"
+      by auto
+    moreover
+    { assume "Suc i < next_time time \<tau>_res"
+      hence " res = (Suc i, get_state res', {}, Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, \<tau>_res) "
+        using bau[OF bigstep2] `\<not> quiet (get_trans res') (get_event res')` `time < Suc i` 
+        by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans
+        res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_deterministic less_irrefl_nat not_le)
+      hence gb_res: "get_beh res =  Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def"
+        by auto
+      have "time \<le> i"
+        using \<open>time < Suc i\<close> less_Suc_eq_le by blast
+      have "\<forall>n>time. get_beh res' n C = 0"
+        by (metis b_simulate_fin_preserves_hist bigstep2_pre trans_removal zero_fun_def)
+      hence "signal_of (def C) (get_beh res) C i = get_state res' C"
+        using signal_of_add_to_beh2'[OF `time \<le> i` ] unfolding gb_res by auto
+      have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+        using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+        using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+      also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+        by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+      also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+        by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+      also have "... = signal_of (get_state res' A) (get_trans res') A i"
+        using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+        by blast
+      also have "... = get_state res' A"
+        by (rule signal_of_def)
+           (metis (no_types, lifting) Suc_lessD \<open>A \<notin> set (signals_from nand4)\<close> \<open>Suc i < next_time
+           time \<tau>_res\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 ,
+           get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> antisym_conv2 b_conc_exec_modifies_local_strongest
+           dual_order.strict_trans next_time_at_least2 zero_fun_def)
+      finally have "signal_of (def A) \<tau> A i = get_state res' A"
+        by auto
+      have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+        using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+        using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+      also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+        by (metis \<open>0 , def , {} , 0, def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close>
+        \<open>\<And>thesis. (\<And>time1 time2 time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) A i = Some time1; inf_time
+        (to_trans_raw_sig \<tau>) B i = Some time2; time = max time1 time2\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> comp_def
+        inf_time_trans_post option.simps(5) seq_cases_trans sig.distinct(5) to_signal_def)
+      also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+        by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+      also have "... = signal_of (get_state res' B) (get_trans res') B i"
+        using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+        by blast
+      also have "... = get_state res' B"
+        by (rule signal_of_def)
+           (metis (no_types, lifting) Suc_lessD \<open>B \<notin> set (signals_from nand4)\<close> \<open>Suc i < next_time
+           time \<tau>_res\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 ,
+           get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> antisym_conv2 b_conc_exec_modifies_local_strongest
+           dual_order.strict_trans next_time_at_least2 zero_fun_def)
+      finally have "signal_of (def B) \<tau> B i = get_state res' B"
+        by auto
+      have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+        using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+        `\<not> disjnt {A, B} (get_event res')` by auto
+      obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+        \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+        using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+        by blast
+      have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+        by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+        get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+        beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+        styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+      moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+        by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+        \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+        (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+        val.distinct(1) val.exhaust_sel)
+      ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+        using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+        by (smt beval_cases(1) val.distinct(1))
+      have "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+      proof (rule ccontr)
+        assume "\<not> \<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+        hence "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+          by auto
+        hence "\<tau>_res time C = post_raw C x' (get_trans res') (time + 0) time C"
+          unfolding \<tau>_res_def[THEN sym] trans_post_raw_def by auto
+        hence "next_time time \<tau>_res = time"
+          by (metis (no_types, lifting) \<open>Suc i < next_time time \<tau>_res\<close> \<open>time < Suc i\<close>
+          add.right_neutral dual_order.strict_trans fun_upd_same next_time_at_least2
+          option.distinct(1) post_raw_def zero_fun_def zero_option_def)
+        thus "False"
+          using `Suc i < next_time time \<tau>_res`  using \<open>time < Suc i\<close> by linarith
+      qed
+      moreover have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+        using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+        by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+        b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+        diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+        option.distinct(1) snd_conv zero_fun_def zero_option_def)
+      ultimately have "x' = get_state res' C"
+        unfolding post_necessary_raw_correctness by blast
+      hence "bval_of (get_state res' C) \<longleftrightarrow> \<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B))"
+        using `x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))`
+        using val.sel(1) by presburger
+      hence ?thesis
+        using `signal_of (def A) \<tau> A i = get_state res' A` `signal_of (def B) \<tau> B i = get_state res' B`
+        `signal_of (def C) (get_beh res) C i = get_state res' C` by auto }
+    moreover
+    { assume "next_time time \<tau>_res = Suc i"
+      hence bigstep3: "Suc i, next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<leadsto> res"
+        using bau[OF bigstep2] 
+        by (smt \<open>\<not> quiet (get_trans res') (get_beh' res')\<close> \<open>time , get_state res' , get_beh' res' ,
+        get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> \<open>time < Suc i\<close> bigstep2
+        calculation(1) case_bau less_irrefl_nat)
+      have "res = (Suc i, next_state time \<tau>_res (get_state res'), next_event time \<tau>_res (get_state res'), Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, \<tau>_res (next_time time \<tau>_res := 0))"
+        using bau[OF bigstep3] `next_time time \<tau>_res = Suc i` by auto
+      hence gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def"
+        by auto
+      have "time \<le> i"
+        using \<open>time < Suc i\<close> less_Suc_eq_le by blast
+      have "\<forall>n>time. get_beh res' n C = 0"
+        by (metis b_simulate_fin_preserves_hist bigstep2_pre trans_removal zero_fun_def)
+      hence "signal_of (def C) (get_beh res) C i = get_state res' C"
+        using signal_of_add_to_beh2'[OF `time \<le> i` ] unfolding gb_res by auto
+      have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+        using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+        using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+      also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+        by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+      also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+        by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+      also have "... = signal_of (get_state res' A) (get_trans res') A i"
+        using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+        by blast
+      also have "... = get_state res' A"
+        by (metis (no_types, lifting) \<open>A \<notin> set (signals_from nand4)\<close> \<open>next_time time \<tau>_res = Suc i\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest dual_order.strict_trans2 lessI next_time_at_least2 signal_of_def zero_fun_def)
+      finally have "signal_of (def A) \<tau> A i = get_state res' A"
+        by auto
+      have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+        using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+        using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+      also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+        by (metis \<open>0 , def , {} , 0, def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close>
+        \<open>\<And>thesis. (\<And>time1 time2 time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) A i = Some time1; inf_time
+        (to_trans_raw_sig \<tau>) B i = Some time2; time = max time1 time2\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> comp_def
+        inf_time_trans_post option.simps(5) seq_cases_trans sig.distinct(5) to_signal_def)
+      also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+        by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+      also have "... = signal_of (get_state res' B) (get_trans res') B i"
+        using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+        by blast
+      also have "... = get_state res' B"
+        by (metis (no_types, lifting) \<open>B \<notin> set (signals_from nand4)\<close> \<open>next_time time \<tau>_res = Suc i\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest dual_order.strict_trans2 lessI next_time_at_least2 signal_of_def zero_fun_def)
+      finally have "signal_of (def B) \<tau> B i = get_state res' B"
+        by auto
+      have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+        using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+        `\<not> disjnt {A, B} (get_event res')` by auto
+      obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+        \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+        using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+        by blast
+      have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+        by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+        get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+        beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+        styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+      moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+        by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+        \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+        (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+        val.distinct(1) val.exhaust_sel)
+      ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+        using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+        by (smt beval_cases(1) val.distinct(1))
+      have "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+      proof (rule ccontr)
+        assume "\<not> \<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+        hence "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+          by auto
+        hence "\<tau>_res time C = post_raw C x' (get_trans res') (time + 0) time C"
+          unfolding \<tau>_res_def[THEN sym] trans_post_raw_def by auto
+        hence "next_time time \<tau>_res = time"
+          by (metis (no_types, lifting) \<open> next_time time \<tau>_res = Suc i\<close> \<open>time < Suc i\<close>
+          add.right_neutral dual_order.strict_trans fun_upd_same next_time_at_least2
+          option.distinct(1) post_raw_def zero_fun_def zero_option_def)
+        thus "False"
+          using `next_time time \<tau>_res = Suc i`  using \<open>time < Suc i\<close> by linarith
+      qed
+      moreover have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+        using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+        by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+        b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+        diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+        option.distinct(1) snd_conv zero_fun_def zero_option_def)
+      ultimately have "x' = get_state res' C"
+        unfolding post_necessary_raw_correctness by blast
+      hence "bval_of (get_state res' C) \<longleftrightarrow> \<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B))"
+        using `x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))`
+        using val.sel(1) by presburger
+      hence ?thesis
+        using `signal_of (def A) \<tau> A i = get_state res' A` `signal_of (def B) \<tau> B i = get_state res' B`
+        `signal_of (def C) (get_beh res) C i = get_state res' C` by auto }
+    moreover
+    { assume "next_time time \<tau>_res < Suc i"
+      hence bigstep3: "Suc i, next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<leadsto> res"
+        using bau[OF bigstep2] 
+        by (smt \<open>\<not> quiet (get_trans res') (get_beh' res')\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> \<open>time < Suc i\<close> bigstep2 case_bau nat_less_le)
+      have "\<tau>_res = 0 \<or> \<tau>_res \<noteq> 0"
+        by auto
+      moreover
+      { assume "\<tau>_res = 0"
+        hence "next_event time \<tau>_res (get_state res') = {}"
+        proof -
+          have "next_state time \<tau>_res (get_state res') = get_state res'"
+            using `\<tau>_res = 0` unfolding next_state_def Let_def  by (simp add: zero_fun_def zero_option_def)
+          thus ?thesis
+            unfolding next_event_alt_def  by auto
+        qed
+        hence "quiet (\<tau>_res (next_time time \<tau>_res := 0)) (next_event time \<tau>_res (get_state res'))"
+          using `\<tau>_res = 0`  by (simp add: fun_upd_idem_iff quiet_def zero_fun_def)
+        hence "res = (Suc i, next_state time \<tau>_res (get_state res'), next_event time \<tau>_res (get_state res'), Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, 0)"
+          using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` by auto
+        hence gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def"
+          by auto
+        have "time \<le> i"
+          using \<open>time < Suc i\<close> less_Suc_eq_le by blast
+        have "\<forall>n>time. get_beh res' n C = 0"
+          by (metis b_simulate_fin_preserves_hist bigstep2_pre trans_removal zero_fun_def)
+        hence "signal_of (def C) (get_beh res) C i = get_state res' C"
+          using signal_of_add_to_beh2'[OF `time \<le> i` ] unfolding gb_res by auto
+        have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+          using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+          using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+        also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+          by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+        also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+          by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+        also have "... = signal_of (get_state res' A) (get_trans res') A i"
+          using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+          by blast
+        also have "... = get_state res' A"
+          by (metis (no_types, hide_lams) \<open>A \<notin> set (signals_from nand4)\<close> \<open>\<tau>_res = 0\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest signal_of_def zero_fun_def)
+        finally have "signal_of (def A) \<tau> A i = get_state res' A"
+          by auto
+        have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+          using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+          using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+        also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+          by (metis \<open>0 , def , {} , 0, def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , \<tau>> \<longrightarrow>\<^sub>s \<tau>'\<close>
+          \<open>\<And>thesis. (\<And>time1 time2 time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) A i = Some time1; inf_time
+          (to_trans_raw_sig \<tau>) B i = Some time2; time = max time1 time2\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> comp_def
+          inf_time_trans_post option.simps(5) seq_cases_trans sig.distinct(5) to_signal_def)
+        also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+          by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+        also have "... = signal_of (get_state res' B) (get_trans res') B i"
+          using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+          by blast
+        also have "... = get_state res' B"
+          by (metis (no_types, hide_lams) \<open>B \<notin> set (signals_from nand4)\<close> \<open>\<tau>_res = 0\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest signal_of_def zero_fun_def)
+        finally have "signal_of (def B) \<tau> B i = get_state res' B"
+          by auto
+        have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+          using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+          `\<not> disjnt {A, B} (get_event res')` by auto
+        obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+          \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+          using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+          by blast
+        have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+          by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+          get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+          beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+          styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+        moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+          by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+          \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+          (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+          val.distinct(1) val.exhaust_sel)
+        ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+          using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+          by (smt beval_cases(1) val.distinct(1))
+        have "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+        proof (rule ccontr)
+          assume "\<not> \<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+          hence "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+            by auto
+          hence "\<tau>_res time C = post_raw C x' (get_trans res') (time + 0) time C"
+            unfolding \<tau>_res_def[THEN sym] trans_post_raw_def by auto
+          hence "next_time time \<tau>_res = time"
+            by (simp add: \<open>\<tau>_res = 0\<close> post_raw_def zero_fun_def zero_option_def)
+          thus "False"
+            using `next_time time \<tau>_res < Suc i`  using \<open>time < Suc i\<close> 
+            by (simp add: \<open>\<tau>_res = 0\<close>)
+        qed
+        moreover have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+          using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+          by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+          b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+          diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+          option.distinct(1) snd_conv zero_fun_def zero_option_def)
+        ultimately have "x' = get_state res' C"
+          unfolding post_necessary_raw_correctness by blast
+        hence "bval_of (get_state res' C) \<longleftrightarrow> \<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B))"
+          using `x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))`
+          using val.sel(1) by presburger
+        hence ?thesis
+          using `signal_of (def A) \<tau> A i = get_state res' A` `signal_of (def B) \<tau> B i = get_state res' B`
+          `signal_of (def C) (get_beh res) C i = get_state res' C` by auto }
+      moreover
+      { assume "\<tau>_res \<noteq> 0"
+        have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+          using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+          `\<not> disjnt {A, B} (get_event res')` by auto
+        obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+          \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+          using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+          by blast
+        have "\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0"
+          using b_conc_exec_preserve_trans_removal[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`]
+          b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] by auto
+        have "next_time time \<tau>_res = time"
+        proof (rule ccontr)
+          assume "next_time time \<tau>_res \<noteq> time" 
+          hence "time < next_time time \<tau>_res"
+            by (metis \<open>\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0\<close> nat_less_le next_time_at_least)
+          hence "\<tau>_res (next_time time \<tau>_res) C = None"
+            unfolding \<tau>_res_def[THEN sym] trans_post_raw_def preempt_raw_def post_raw_def
+            by (smt add.right_neutral dual_order.strict_implies_order fun_upd_eqD fun_upd_triv nat_neq_iff)
+          have "next_time time \<tau>_res = (LEAST n. dom (\<tau>_res n) \<noteq> {})"
+            using `\<tau>_res \<noteq> 0` unfolding next_time_def by auto
+          hence "\<tau>_res time = 0"
+            using `time < next_time time \<tau>_res`  using next_time_at_least2 by blast
+          have "\<exists>n. dom (\<tau>_res n) \<noteq> {}"
+            using `\<tau>_res \<noteq> 0` unfolding dom_def zero_fun_def zero_option_def by fastforce
+          have "\<tau>_res (next_time time \<tau>_res) \<noteq> 0"
+            by (metis (mono_tags, lifting) LeastI \<open>\<exists>n. dom (\<tau>_res n) \<noteq> {}\<close> \<open>next_time time \<tau>_res = (LEAST n. dom (\<tau>_res n) \<noteq> {})\<close> dom_eq_empty_conv zero_map)
+          hence "\<tau>_res (next_time time \<tau>_res) A \<noteq> None \<or> \<tau>_res (next_time time \<tau>_res) B \<noteq> None "
+            using `\<tau>_res (next_time time \<tau>_res) C = None` unfolding zero_fun_def zero_option_def 
+            by (metis sig.exhaust)
+          hence "get_trans res' (next_time time \<tau>_res) A \<noteq> None \<or> get_trans res' (next_time time \<tau>_res) B \<noteq> None"
+            using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`]
+            by (simp add: \<open>A \<notin> set (signals_from nand4)\<close> \<open>B \<notin> set (signals_from nand4)\<close>)
+          hence "(\<tau>'(t' := 0)) (next_time time \<tau>_res) A \<noteq> None \<or> (\<tau>'(t' := 0)) (next_time time \<tau>_res) B \<noteq> None"
+            using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `A \<notin> set (signals_from nand4)`]
+            using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `B \<notin> set (signals_from nand4)`]
+            by (simp add: \<open>time < next_time time \<tau>_res\<close>)
+          hence "\<tau>' (next_time time \<tau>_res) A \<noteq> None \<or> \<tau>' (next_time time \<tau>_res) B \<noteq> None"
+            by (metis \<open>\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0\<close> \<open>\<tau>_res (next_time time \<tau>_res) \<noteq> 0\<close> \<open>next_time time \<tau>_res \<noteq> time\<close> \<open>t' < time \<or> t' = time\<close> fun_upd_other)
+          hence "\<tau> (next_time time \<tau>_res) A \<noteq> None \<or> \<tau> (next_time time \<tau>_res) B \<noteq> None"
+            by (metis \<open>\<And>thesis. (\<And>x. \<lbrakk>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x;
+            trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> sig.distinct(3)
+            sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+          thus "False"
+            using inf_time_someE[OF \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close>]
+            using inf_time_someE[OF \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close>]
+            \<open>time = max time1 time2\<close> \<open>time < next_time time \<tau>_res\<close> \<open>next_time time \<tau>_res < Suc i\<close>
+            by (metis domIff max_less_iff_conj not_le not_less_eq_eq to_trans_raw_sig_def)
+        qed
+        hence "\<tau>_res time \<noteq> 0"
+          using `\<tau>_res \<noteq> 0` unfolding zero_fun_def zero_option_def next_time_def 
+          by (metis (mono_tags, lifting) LeastI_ex dom_eq_empty_conv)
+        have " get_trans res' time = 0"
+          using get_trans_res_maxtime[OF bigstep2_pre ] by auto          
+        hence "\<tau>_res time A = 0" and "\<tau>_res time B = 0"
+          using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `A \<notin> set (signals_from nand4)`]
+          using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `B \<notin> set (signals_from nand4)`]
+          by (metis zero_fun_def)+
+        hence " A \<notin> next_event time \<tau>_res (get_state res')" and " B \<notin> next_event time \<tau>_res (get_state res')"
+          unfolding next_event_alt_def next_state_def \<open>next_time time \<tau>_res = time\<close> 
+          by (smt domIff mem_Collect_eq override_on_def zero_option_def)+
+        hence "disjnt {A, B} (next_event time \<tau>_res (get_state res'))"
+          by auto
+        have "\<tau>_res time C \<noteq> 0"
+        proof (rule ccontr)
+          assume "\<not> \<tau>_res time C \<noteq> 0" hence "\<tau>_res time C = 0" by auto
+          hence "\<tau>_res time = 0"
+            using `\<tau>_res time A = 0` `\<tau>_res time B = 0` 
+            unfolding zero_fun_def zero_option_def  by (metis sig.exhaust)
+          with `\<tau>_res time \<noteq> 0` show False 
+            by auto
+        qed
+        have "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+        proof (rule ccontr)
+          assume "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+          hence "\<tau>_res time C = 0"
+            unfolding \<tau>_res_def[THEN sym] trans_post_raw_def preempt_raw_def by (auto simp add: zero_option_def)
+          with `\<tau>_res time C \<noteq> 0` show False
+            by auto
+        qed
+        hence "\<tau>_res time C = Some x'"
+          unfolding \<tau>_res_def[THEN sym] trans_post_raw_def post_raw_def by auto
+        have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+          using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+          by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+          b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+          diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+          option.distinct(1) snd_conv zero_fun_def zero_option_def)
+        hence "get_state res' C \<noteq> x'"
+          using `post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)`
+          unfolding post_necessary_raw_correctness2 
+          by (metis (no_types, lifting) Suc_diff_1 \<open>next_time time \<tau>_res = time\<close> \<open>post_necessary_raw
+          0 (get_trans res') time C x' (get_state res' C)\<close> \<tau>_res_def add.right_neutral
+          le_imp_less_Suc next_time_at_least2 option.distinct(1) order.asym post_raw_def
+          trans_post_raw_def zero_fun_def zero_option_def)
+        hence "get_state res'  C \<noteq> the (\<tau>_res time C)"
+          by (simp add: \<open>\<tau>_res time C = Some x'\<close>)
+        hence "C \<in> (next_event time \<tau>_res (get_state res'))" 
+          unfolding next_event_alt_def next_state_def 
+          by (smt \<open>\<tau>_res time C \<noteq> 0\<close> \<open>next_time time \<tau>_res = time\<close> comp_def domIff mem_Collect_eq override_on_apply_in zero_option_def)
+        hence "next_time time
+            \<tau>_res , next_state time \<tau>_res
+                     (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def  \<turnstile> <nand4 , \<tau>_res
+           (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c  \<tau>_res (next_time time \<tau>_res := 0)"
+          using `disjnt {A, B} (next_event time \<tau>_res (get_state res'))` 
+          unfolding nand4_def by (intro b_conc_exec.intros(1))
+        have " \<not> quiet (\<tau>_res(next_time time \<tau>_res := 0)) (next_event time \<tau>_res (get_state res'))"
+          by (metis \<open>C \<in> next_event time \<tau>_res (get_state res')\<close> empty_iff quiet_def)
+
+        have "(\<tau>_res (next_time time \<tau>_res := 0)) \<noteq> 0 \<Longrightarrow> Suc i \<le> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+          unfolding `next_time time \<tau>_res = time`
+        proof (rule ccontr)
+          assume " \<tau>_res(time := 0) \<noteq> 0"
+          assume "\<not> Suc i \<le> next_time time (\<tau>_res (time := 0))"
+          hence "next_time time (\<tau>_res (time := 0)) < Suc i"
+            by auto
+          have "to_trans_raw_sig (\<tau>_res (time := 0)) C = 0"
+            using `\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0`
+            using `post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)`
+            unfolding to_trans_raw_sig_def \<tau>_res_def[THEN sym] trans_post_raw_def post_raw_def
+            zero_fun_def zero_option_def 
+            by (intro ext) auto
+          have tr: "\<And>n. n < time \<Longrightarrow> (\<tau>_res (time := 0)) n = 0"
+            using `\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0` by auto
+          have "time \<le> next_time time (\<tau>_res (time := 0))"
+            by (intro next_time_at_least[OF tr] )
+          moreover have "time \<noteq> next_time time (\<tau>_res (time := 0))"
+            by (smt Suc_eq_plus1 Suc_n_not_le_n fun_upd_same less_Suc_eq next_time_at_least next_time_def tr)
+          ultimately have "time < next_time time (\<tau>_res (time := 0))"
+            by auto
+          have "(\<tau>_res(time := 0)) (next_time time (\<tau>_res (time := 0))) \<noteq> 0"
+            using `\<tau>_res (time := 0) \<noteq> 0` unfolding next_time_def zero_fun_def zero_option_def
+          proof -
+            assume a1: "\<tau>_res(time := Map.empty) \<noteq> (\<lambda>x. Map.empty)"
+            have f2: "\<And>n. {s. (\<tau>_res(time := Map.empty)) n s \<noteq> None} = {} \<or> dom ((\<tau>_res(time := Map.empty)) (LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {})) \<noteq> {}"
+              by (metis (mono_tags, lifting) LeastI_ex a1 dom_eq_empty_conv) 
+            obtain nn :: nat and ss :: sig where f3: "(\<tau>_res(time := Map.empty)) nn ss \<noteq> None"
+              using a1 by meson
+            obtain ssa :: "(sig \<Rightarrow> val option) \<Rightarrow> sig" where f4: "\<And>f s fa. (dom f \<noteq> {} \<or> f (s::sig) = (None::val option)) \<and> (fa (ssa fa) \<noteq> None \<or> dom fa = {})"
+              by (metis (no_types) dom_eq_empty_conv)
+            then have "{s. (\<tau>_res(time := Map.empty)) (LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) s \<noteq> None} \<noteq> {}"
+              using f3 f2 by (metis (no_types) dom_def)
+            then have "{s. (\<tau>_res(time := Map.empty)) (if \<forall>n s. (\<tau>_res(time := Map.empty)) n s = None then Suc time else LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) s \<noteq> None} = {} \<longrightarrow> (\<forall>n s. (\<tau>_res(time := Map.empty)) n s = None)"
+              by presburger
+            then have "\<exists>s. (\<tau>_res(time := Map.empty)) (if \<forall>n s. (\<tau>_res(time := Map.empty)) n s = None then Suc time else LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) s \<noteq> None"
+              using f4 f3 by blast
+            then show "(\<tau>_res(time := Map.empty)) (if \<tau>_res(time := Map.empty) = (\<lambda>n. Map.empty) then time + 1 else LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) \<noteq> Map.empty"
+              by (metis Suc_eq_plus1)
+          qed
+          hence "(\<tau>_res(time := 0)) (next_time time (\<tau>_res (time := 0))) A \<noteq> 0 \<or> 
+                (\<tau>_res(time := 0)) (next_time time (\<tau>_res (time := 0))) B \<noteq> 0" 
+            using `to_trans_raw_sig (\<tau>_res (time := 0)) C = 0` unfolding to_trans_raw_sig_def
+          proof -
+            assume a1: "(\<lambda>n. (\<tau>_res(time := 0)) n C) = 0"
+            obtain ss :: "sig set \<Rightarrow> sig set \<Rightarrow> sig" where
+              "\<forall>x0 x1. (\<exists>v2. v2 \<in> x1 \<and> v2 \<notin> x0) = (ss x0 x1 \<in> x1 \<and> ss x0 x1 \<notin> x0)"
+              by moura
+            then have f2: "\<forall>S Sa. ss Sa S \<in> S \<and> ss Sa S \<notin> Sa \<or> S \<subseteq> Sa"
+              by (meson subsetI)
+            then have "dom (0::sig \<Rightarrow> val option) \<subseteq> {}"
+              by (meson domIff zero_map)
+            then have f3: "\<not> dom ((\<tau>_res(time := 0)) (next_time time (\<tau>_res(time := 0)))) \<subseteq> {}"
+              using \<open>(\<tau>_res(time := 0)) (next_time time (\<tau>_res(time := 0))) \<noteq> 0\<close> by auto
+            have "(\<tau>_res(time := 0)) (next_time time (\<tau>_res(time := 0))) C = None"
+              using a1 by (metis (no_types) zero_map)
+            then show ?thesis
+              using f3 f2 by (metis (full_types) domIff sig.exhaust zero_option_def)
+          qed
+          hence "get_trans res' (next_time time (\<tau>_res (time := 0))) A \<noteq> 0 \<or> 
+                 get_trans res' (next_time time (\<tau>_res (time := 0))) B \<noteq> 0"
+            using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `A \<notin> set (signals_from nand4)`]
+            using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `A \<notin> set (signals_from nand4)`]
+            using `time < next_time time (\<tau>_res (time := 0))` 
+            using \<open>B \<notin> set (signals_from nand4)\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest by fastforce
+          hence "(\<tau>'(t' := 0)) (next_time time (\<tau>_res(time := 0))) A \<noteq> None \<or> (\<tau>'(t' := 0)) (next_time time (\<tau>_res(time := 0))) B \<noteq> None"
+            using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `A \<notin> set (signals_from nand4)`]
+            using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `B \<notin> set (signals_from nand4)`]
+            by (simp add: \<open>time < next_time time (\<tau>_res(time := 0))\<close> zero_option_def)
+          hence "\<tau>' (next_time time (\<tau>_res(time := 0))) A \<noteq> None \<or> \<tau>' (next_time time (\<tau>_res(time := 0))) B \<noteq> None"
+            by (metis fun_upd_other fun_upd_same zero_map)
+          hence "\<tau> (next_time time (\<tau>_res(time := 0))) A \<noteq> None \<or> \<tau> (next_time time (\<tau>_res(time := 0))) B \<noteq> None"
+            by (metis \<open>\<And>thesis. (\<And>x. \<lbrakk>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x;
+            trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> sig.distinct(3)
+            sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+          thus "False"
+            using inf_time_someE[OF \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close>]
+            using inf_time_someE[OF \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close>]
+            \<open>time = max time1 time2\<close> \<open>time < next_time time (\<tau>_res(time:= 0))\<close> \<open>next_time time (\<tau>_res(time := 0)) < Suc i\<close>
+            by (metis domIff max_less_iff_conj not_le not_less_eq_eq to_trans_raw_sig_def)          
+        qed
+        have "(\<tau>_res (next_time time \<tau>_res := 0)) = 0 \<Longrightarrow> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) \<le> Suc i"
+          unfolding `next_time time \<tau>_res = time` using `time < Suc i` by auto
+        have "(\<tau>_res (next_time time \<tau>_res := 0)) = 0 \<or> (\<tau>_res (next_time time \<tau>_res := 0)) \<noteq> 0"
+          by auto
+        moreover
+        { assume "(\<tau>_res (next_time time \<tau>_res := 0)) = 0"
+          hence " next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) \<le> Suc i"
+            using \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0 \<Longrightarrow> next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) \<le> Suc i\<close> by blast
+          hence bigstep4: " Suc i, next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) , 
+                                   next_state (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                   next_event (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                   Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def, def \<turnstile> 
+                                    <nand4 , (\<tau>_res (next_time time \<tau>_res := 0)) (next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) := 0)> \<leadsto> res"
+            using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` 
+            by (smt \<open>C \<in> next_event time \<tau>_res (get_state res')\<close> \<open>next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c \<tau>_res (next_time time \<tau>_res := 0)\<close> bigstep3 case_bau empty_iff quiet_def)
+          have "next_event (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) = {}"
+            unfolding `(\<tau>_res (next_time time \<tau>_res := 0)) = 0` next_event_alt_def  next_state_def
+            Let_def zero_fun_def zero_option_def 
+            by (smt \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0\<close> domIff empty_Collect_eq fun_upd_apply override_on_apply_notin zero_fun_def zero_map)
+          have " (\<tau>_res (next_time time \<tau>_res := 0)) (next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) := 0) = 0"
+            using `(\<tau>_res (next_time time \<tau>_res := 0)) = 0`  by (simp add: fun_upd_idem_iff zero_fun_def)
+          have "next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) < Suc i \<or> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) = Suc i"
+            using \<open>next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) \<le> Suc i\<close> le_imp_less_or_eq by blast
+          moreover
+          { assume "next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) = Suc i"
+            hence "res =
+     (Suc i, next_state (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+      next_event (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+      Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+       (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def,
+      \<tau>_res(next_time time \<tau>_res := 0, next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) := 0))"
+              using bau[OF bigstep4] by auto
+            hence gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+              by auto } 
+          moreover
+          { assume "next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) < Suc i"
+            hence "res =
+     (Suc i, next_state (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+      next_event (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+      Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+       (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def,
+      0)"
+              using bau[OF bigstep4] 
+              by (smt \<open>\<tau>_res (next_time time \<tau>_res := 0, next_time (next_time time \<tau>_res)
+              (\<tau>_res(next_time time \<tau>_res := 0)) := 0) = 0\<close> \<open>next_event (next_time time \<tau>_res)
+              (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) = {}\<close>
+              quiet_def)
+            hence "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+       (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+              by auto }
+          ultimately have gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+            by auto
+          have " (next_time time \<tau>_res) \<le> i"
+            using \<open>next_time time \<tau>_res < Suc i\<close> less_Suc_eq_le by blast
+          have "signal_of (def C) (get_beh res) C i = (next_state time \<tau>_res (get_state res')) C"
+            unfolding gb_res
+            apply (intro signal_of_add_to_beh2'[OF `next_time time \<tau>_res \<le> i`] )
+            by (smt Femto_VHDL_raw.add_to_beh2_def \<open>next_time time \<tau>_res = time\<close> b_simulate_fin_preserves_hist bigstep2_pre fun_upd_other nat_neq_iff trans_removal zero_fun_def)
+          also have "... = the (\<tau>_res time C)"
+            unfolding next_state_def `next_time time \<tau>_res = time` Let_def 
+            by (metis \<open>\<tau>_res time C \<noteq> 0\<close> comp_apply domIff override_on_apply_in zero_option_def)
+          also have "... = x'"
+            by (simp add: \<open>\<tau>_res time C = Some x'\<close>)
+          finally have "signal_of (def C) (get_beh res) C i = x'"
+            by auto
+          have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+            using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+            using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+          also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+            by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+          also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+            by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+          also have "... = signal_of (get_state res' A) (get_trans res') A i"
+            using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` _ trans_removal] `time < Suc i`
+            using less_Suc_eq_le by blast
+          also have "... = get_state res' A"
+            by (metis (mono_tags, lifting) \<open>A \<notin> set (signals_from nand4)\<close> \<open>\<tau>_res time A = 0\<close>
+            \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0\<close> \<open>next_time time \<tau>_res = time\<close> \<open>time , get_state
+            res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close>
+            b_conc_exec_modifies_local_strongest fun_upd_def signal_of_def zero_fun_def)
+          finally have "signal_of (def A) \<tau> A i = get_state res' A"
+            by auto
+          have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+            using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+            using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+          also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+            by (metis \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply inf_time_trans_post option.simps(5) sig.distinct(5) to_signal_def)
+          also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+            by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+          also have "... = signal_of (get_state res' B) (get_trans res') B i"
+            using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` _ trans_removal] `time < Suc i`
+            using less_Suc_eq_le by blast
+          also have "... = get_state res' B"
+            by (metis (mono_tags, lifting) \<open>B \<notin> set (signals_from nand4)\<close> \<open>\<tau>_res time B = 0\<close>
+            \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0\<close> \<open>next_time time \<tau>_res = time\<close> \<open>time , get_state
+            res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close>
+            b_conc_exec_modifies_local_strongest fun_upd_def signal_of_def zero_fun_def)
+          finally have "signal_of (def B) \<tau> B i = get_state res' B"
+            by auto
+          have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+            by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+            get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+            beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+            styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+          moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+            by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+            \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+            (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+            val.distinct(1) val.exhaust_sel)
+          ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+            using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+            by (smt beval_cases(1) val.distinct(1))
+          hence ?thesis
+            using \<open>signal_of (def A) \<tau> A i = get_state res' A\<close> \<open>signal_of (def B) \<tau> B i = get_state res' B\<close> \<open>signal_of (def C) (get_beh res) C i = x'\<close> 
+            by auto }
+        moreover
+        { assume " (\<tau>_res (next_time time \<tau>_res := 0)) \<noteq> 0"
+          hence "Suc i \<le> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+            using \<open>\<tau>_res(next_time time \<tau>_res := 0) \<noteq> 0 \<Longrightarrow> Suc i \<le> next_time (next_time time \<tau>_res)
+            (\<tau>_res(next_time time \<tau>_res := 0))\<close> by blast
+          hence "Suc i < next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) \<or> Suc i = next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"        
+            by auto
+          moreover
+          { assume "Suc i = next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+            hence bigstep4: " Suc i, next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) , 
+                                     next_state (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                     next_event (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                     Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def, def \<turnstile> 
+                                      <nand4 , (\<tau>_res (next_time time \<tau>_res := 0)) (next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) := 0)> \<leadsto> res"
+              using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` 
+              by (smt \<open>Suc i \<le> next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0))\<close> \<open>\<tau>_res(next_time time \<tau>_res := 0) \<noteq> 0\<close> \<open>next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c \<tau>_res (next_time time \<tau>_res := 0)\<close> bigstep3 case_bau quiet_def)
+            hence "res =
+     (Suc i, next_state (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+      next_event (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+      Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+       (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def,
+      \<tau>_res(next_time time \<tau>_res := 0, next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) := 0))"
+              using bau[OF bigstep4] 
+              using \<open>Suc i = next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0))\<close> by fastforce
+            hence "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+              by auto }
+          moreover
+          { assume "Suc i < next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+            hence "res =
+           (Suc i, next_state time \<tau>_res (get_state res'), {},
+            Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+             (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def, \<tau>_res (next_time time \<tau>_res := 0))"
+              using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` \<open> \<not> quiet (\<tau>_res(next_time time \<tau>_res := 0)) (next_event time \<tau>_res (get_state res'))\<close>
+              \<open>next_time time
+            \<tau>_res , next_state time \<tau>_res
+                     (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def  \<turnstile> <nand4 , \<tau>_res
+           (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c  \<tau>_res (next_time time \<tau>_res := 0)\<close> 
+              by (smt b_conc_exec_deterministic less_le_not_le)
+            hence "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+              by auto }
+          ultimately have gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+              by auto
+          have " (next_time time \<tau>_res) \<le> i"
+            using \<open>next_time time \<tau>_res < Suc i\<close> less_Suc_eq_le by blast
+          have "signal_of (def C) (get_beh res) C i = (next_state time \<tau>_res (get_state res')) C"
+            unfolding gb_res
+            apply (intro signal_of_add_to_beh2'[OF `next_time time \<tau>_res \<le> i`] )
+            by (smt Femto_VHDL_raw.add_to_beh2_def \<open>next_time time \<tau>_res = time\<close> b_simulate_fin_preserves_hist bigstep2_pre fun_upd_other nat_neq_iff trans_removal zero_fun_def)
+          also have "... = the (\<tau>_res time C)"
+            unfolding next_state_def `next_time time \<tau>_res = time` Let_def 
+            by (metis \<open>\<tau>_res time C \<noteq> 0\<close> comp_apply domIff override_on_apply_in zero_option_def)
+          also have "... = x'"
+            by (simp add: \<open>\<tau>_res time C = Some x'\<close>)
+          finally have "signal_of (def C) (get_beh res) C i = x'"
+            by auto
+          have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+            using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+            using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+          also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+            by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time1\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+          also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+            by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+          also have "... = signal_of (get_state res' A) (get_trans res') A i"
+            using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` _ trans_removal] `time < Suc i`
+            using less_Suc_eq_le by blast
+          also have "... = get_state res' A"
+            by (smt \<open>A \<notin> set (signals_from nand4)\<close> \<open>Suc i \<le> next_time (next_time time \<tau>_res)
+            (\<tau>_res(next_time time \<tau>_res := 0))\<close> \<open>\<tau>_res time A = 0\<close> \<open>get_trans res' time = 0\<close>
+            \<open>next_time time \<tau>_res = time\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def
+            \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> antisym_conv2 b_conc_exec_modifies_local_strongest
+            dual_order.strict_trans2 fun_upd_other lessI next_time_at_least2 signal_of_def
+            signal_of_suc_sig)
+          finally have "signal_of (def A) \<tau> A i = get_state res' A"
+            by auto
+          have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+            using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+            using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+          also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+            by (metis \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time2\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply inf_time_trans_post option.simps(5) sig.distinct(5) to_signal_def)
+          also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+            by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+          also have "... = signal_of (get_state res' B) (get_trans res') B i"
+            using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` _ trans_removal] `time < Suc i`
+            using less_Suc_eq_le by blast
+          also have "... = get_state res' B"
+            by (smt \<open>B \<notin> set (signals_from nand4)\<close> \<open>Suc i \<le> next_time (next_time time \<tau>_res)
+            (\<tau>_res(next_time time \<tau>_res := 0))\<close> \<open>\<tau>_res time B = 0\<close> \<open>get_trans res' time = 0\<close>
+            \<open>next_time time \<tau>_res = time\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def
+            \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> antisym_conv2 b_conc_exec_modifies_local_strongest
+            dual_order.strict_trans2 fun_upd_other le_Suc_eq less_Suc_eq_le next_time_at_least2
+            signal_of_def)
+          finally have "signal_of (def B) \<tau> B i = get_state res' B"
+            by auto
+          have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+            by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+            get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+            beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+            styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+          moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+            by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+            \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+            (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+            val.distinct(1) val.exhaust_sel)
+          ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+            using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+            by (smt beval_cases(1) val.distinct(1))
+          hence ?thesis
+            using \<open>signal_of (def A) \<tau> A i = get_state res' A\<close> \<open>signal_of (def B) \<tau> B i = get_state res' B\<close> \<open>signal_of (def C) (get_beh res) C i = x'\<close> 
+            by auto }
+        ultimately have ?thesis
+          by auto }
+      ultimately have ?thesis
+        by auto }
+    ultimately show ?thesis
+      using nat_less_le by blast
+  next
+    case either
+    moreover
+    { assume "inf_time (to_trans_raw_sig \<tau>) A i \<noteq> None \<and> inf_time (to_trans_raw_sig \<tau>) B i = None"
+      then obtain time where "inf_time (to_trans_raw_sig \<tau>) A i = Some time" and "inf_time (to_trans_raw_sig \<tau>) B i = None"
+        by blast
+      have "next_time 0 \<tau>' \<le> time"
+      proof -
+        have "next_time 0 \<tau>' = (LEAST n. dom (\<tau>' n) \<noteq> {})"
+          unfolding next_time_def using \<open>\<tau>' \<noteq> 0\<close> by auto
+        have "\<exists>n. dom (\<tau>' n) \<noteq> {}"
+          using \<open>\<tau>' \<noteq> 0\<close> unfolding dom_def zero_fun_def zero_option_def 
+          by fastforce
+        have "inf_time (to_trans_raw_sig \<tau>) A i = inf_time (to_trans_raw_sig \<tau>') A i"
+          using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> inf_time_trans_post by fastforce
+        hence "dom (\<tau>' time) \<noteq> {}"
+          using \<open>inf_time (to_trans_raw_sig \<tau>) A i  = Some time\<close> unfolding dom_def 
+        proof -
+          have "\<exists>s. to_trans_raw_sig \<tau>' s time \<noteq> None"
+            by (metis Femto_VHDL_raw.keys_def \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>inf_time (to_trans_raw_sig \<tau>) A i = inf_time (to_trans_raw_sig \<tau>') A i\<close> domIff dom_def inf_time_some_exists zero_option_def)
+          then show "{s. \<tau>' time s \<noteq> None} \<noteq> {}"
+            by (simp add: to_trans_raw_sig_def)
+        qed
+        hence "(LEAST n. dom (\<tau>' n) \<noteq> {}) \<le> time"
+          using Least_le by auto
+        thus "next_time 0 \<tau>' \<le> time"
+          using \<open>next_time 0 \<tau>' = (LEAST n. dom (\<tau>' n) \<noteq> {})\<close> by linarith
+      qed    
+      have "time < Suc i"
+        using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close>  inf_time_at_most by fastforce    
+      have "\<exists>res'. time, t' , \<sigma>' , \<gamma>' , 0, def \<turnstile> <nand4 , \<tau>'(t' := 0)> \<leadsto> res' \<and> Suc i, time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<leadsto> res"
+        using split_b_simulate_fin[OF bigstep \<open>next_time 0 \<tau>' \<le>time\<close>[unfolded \<open>next_time 0 \<tau>' = t'\<close>] _ trans_removal conc_stmt_wf_nand4]  \<open>time < Suc i\<close>
+        by (meson less_or_eq_imp_le zero_fun_def)
+      then obtain res' where bigstep2_pre: "time, t' , \<sigma>' , \<gamma>' , 0, def \<turnstile> <nand4 , \<tau>'(t' := 0)> \<leadsto> res'"
+        and bigstep2: "Suc i, time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<leadsto> res"
+        by auto
+      have "A \<notin> set (signals_from nand4)" and "B \<notin> set (signals_from nand4)"
+        unfolding nand4_def by auto
+      have "t' < time \<or> t' = time"
+        using bau bigstep2_pre by blast
+      moreover 
+      { assume "t' < time"
+        moreover have "\<tau>' time A = \<tau> time A" and "\<tau>' time B = \<tau> time B"
+          unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def by auto
+        moreover have "\<tau> time A \<noteq> 0 \<and> \<tau> time B = 0"
+          using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close>  \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close>
+          by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_noneE2 inf_time_some_exists
+          to_trans_raw_sig_def zero_option_def)
+        ultimately have "(\<tau>'(t' := 0)) time A \<noteq> 0 \<and> (\<tau>'(t' := 0)) time B = 0"
+          by auto
+        hence "A \<notin> set (signals_from nand4)"
+          unfolding nand4_def by auto
+        have "non_stuttering (to_trans_raw_sig \<tau>') def A"
+          using init'_preserves_non_stuttering[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` _ _ conc_stmt_wf_nand4] assms(7)
+          by blast
+        hence "non_stuttering (to_trans_raw_sig (\<tau>'(t' := 0))) \<sigma>' A"
+          using non_stuttering_next \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> by fastforce
+        hence "get_event res' \<noteq>  {}"
+          using get_event_never_empty'[OF bigstep2_pre \<open>A \<notin> set (signals_from nand4)\<close> _ _ _ trans_removal conc_stmt_wf_nand4]
+          \<open>t' < time\<close> \<open>(\<tau>'(t' := 0)) time A \<noteq> 0 \<and> (\<tau>'(t' := 0)) time B = 0\<close> by blast
+        have "\<not> disjnt {A, B} (get_event res')"
+          using get_event_never_empty[OF bigstep2_pre \<open>A \<notin> set (signals_from nand4)\<close> _ _ _ trans_removal conc_stmt_wf_nand4]
+          using \<open>t' < time\<close> \<open>non_stuttering (to_trans_raw_sig (\<tau>'(t' := 0))) \<sigma>' A\<close>  
+          using \<open>(\<tau>'(t' := 0)) time A \<noteq> 0 \<and> (\<tau>'(t' := 0)) time B = 0\<close> by fastforce
+        hence "get_event res' \<noteq>  {} \<and> \<not> disjnt {A, B} (get_event res')"
+          by auto }
+      moreover 
+      { assume "t' = time"
+        hence "res' = (time, \<sigma>', \<gamma>', 0, \<tau>'(t' := 0))"
+          using bau[OF bigstep2_pre] by auto
+        hence "get_event res' = \<gamma>'"
+          by auto
+        also have "... = next_event 0 \<tau>' def"
+          using \<open>next_event 0 \<tau>' def = \<gamma>'\<close> by auto
+        also have "... = {sig. def sig \<noteq> next_state 0 \<tau>' def sig} "
+          unfolding next_event_alt_def by auto
+        also have "... \<noteq> {}"
+        proof -
+          have "\<tau>' time A = \<tau> time A" and "\<tau>' time B = \<tau> time B"
+            unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def by auto
+          moreover have "\<tau> time A \<noteq> 0 \<and> \<tau> time B = 0"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> 
+            by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_noneE2 inf_time_some_exists
+            to_trans_raw_sig_def zero_option_def)
+          ultimately have "\<tau>' time A \<noteq> 0" and " \<tau>' time B =0"
+            by auto
+          have  "Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A) \<noteq> {}"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> inf_time_some_exists by force
+          moreover have *: "(LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A)) = time"
+          proof (rule Least_equality)
+            show " time \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A)"
+              by (meson \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> inf_time_some_exists)
+          next
+            { fix y 
+              assume "y < time"
+              assume "y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A)"
+              hence "\<tau> y A \<noteq> 0"
+                unfolding Femto_VHDL_raw.keys_def to_trans_raw_sig_def by auto
+              hence "\<tau>' y A \<noteq> 0"
+                by (metis \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> sig.distinct(3) sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+              with `y < time` have False
+                unfolding `t' = time`[THEN sym] `next_time  0 \<tau>' = t'`[THEN sym] 
+                by (simp add: next_time_at_least2 zero_fun_def) }
+            thus "\<And>y. y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A) \<Longrightarrow> time \<le> y"
+              using not_less by blast
+          qed
+          moreover have "the (to_trans_raw_sig \<tau> A (LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A))) = next_state 0 \<tau>' def A"
+            unfolding * next_state_def 
+            by (metis \<open>\<tau>' time A = \<tau> time A\<close> \<open>\<tau>' time A \<noteq> 0\<close> \<open>next_time 0 \<tau>' = t'\<close> \<open>t' = time\<close> comp_apply domIff override_on_apply_in to_trans_raw_sig_def zero_option_def) 
+          ultimately show ?thesis
+            using assms(7)[unfolded non_stuttering_def] by auto
+        qed
+        finally have "get_event res' \<noteq>  {}"
+          by auto
+        have "\<not> disjnt {A, B} (get_event res')"
+        proof -
+          have "\<tau>' time A = \<tau> time A" and "\<tau>' time B = \<tau> time B"
+            unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def by auto
+          moreover have "\<tau> time A \<noteq> 0 \<and> \<tau> time B = 0"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> 
+            by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_noneE2 inf_time_some_exists to_trans_raw_sig_def zero_option_def)
+          ultimately have "\<tau>' time A \<noteq> 0 " and " \<tau>' time B = 0"
+            by auto
+          moreover have "\<tau>' time A = \<tau> time A"
+            using \<open>\<tau>' time A = \<tau> time A\<close> \<open>\<tau>' time B = \<tau> time B\<close> calculation(2) by blast
+          moreover have  "Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A) \<noteq> {}"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> calculation(2) inf_time_some_exists by force
+          moreover have *: "(LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A)) = time"
+          proof (rule Least_equality)
+            show " time \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A)"
+              by (metis Femto_VHDL_raw.keys_def calculation(1) calculation(3) domIff dom_def to_trans_raw_sig_def zero_option_def)
+          next
+            { fix y 
+              assume "y < time"
+              assume "y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A)"
+              hence "\<tau> y A \<noteq> 0"
+                unfolding Femto_VHDL_raw.keys_def to_trans_raw_sig_def by auto
+              hence "\<tau>' y A \<noteq> 0"
+                by (metis \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> calculation(2) sig.distinct(3) sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+              with `y < time` have False
+                unfolding `t' = time`[THEN sym] `next_time  0 \<tau>' = t'`[THEN sym] 
+                by (simp add: next_time_at_least2 zero_fun_def) }
+            thus "\<And>y. y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A) \<Longrightarrow> time \<le> y"
+              using not_less by blast
+          qed
+          moreover have "the (to_trans_raw_sig \<tau> A (LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> A))) = next_state 0 \<tau>' def A"
+            unfolding * next_state_def 
+            by (metis \<open>next_time 0 \<tau>' = t'\<close> \<open>t' = time\<close> calculation(1) calculation(3) comp_apply domIff override_on_apply_in to_trans_raw_sig_def zero_option_def) 
+          ultimately show ?thesis
+            by (metis (full_types) \<open>get_beh' res' = \<gamma>'\<close> \<open>next_event 0 \<tau>' def = \<gamma>'\<close> assms(7) disjnt_insert1 next_state_fixed_point non_stuttering_def)
+        qed 
+        hence "get_event res' \<noteq> {} \<and> \<not> disjnt {A, B} (get_event res')"
+          using \<open>get_beh' res' \<noteq> {}\<close> by blast }
+      ultimately have "get_event res' \<noteq> {} \<and> \<not> disjnt {A, B} (get_event res')"
+        by auto
+      hence " \<not> quiet (get_trans res') (get_event res')" and "\<not> disjnt {A, B} (get_event res')"
+        by (simp add: quiet_def)+
+      then obtain \<tau>_res where "time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res"
+        using bau[OF bigstep2]  using \<open>time < Suc i\<close> by force
+      have "next_time time \<tau>_res \<le> Suc i \<or> Suc i < next_time time \<tau>_res"
+        by auto
+      moreover
+      { assume "Suc i < next_time time \<tau>_res"
+        hence " res = (Suc i, get_state res', {}, Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, \<tau>_res) "
+          using bau[OF bigstep2] `\<not> quiet (get_trans res') (get_event res')` `time < Suc i` 
+          by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans
+          res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_deterministic less_irrefl_nat not_le)
+        hence gb_res: "get_beh res =  Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def"
+          by auto
+        have "time \<le> i"
+          using \<open>time < Suc i\<close> less_Suc_eq_le by blast
+        have "\<forall>n>time. get_beh res' n C = 0"
+          by (metis b_simulate_fin_preserves_hist bigstep2_pre trans_removal zero_fun_def)
+        hence "signal_of (def C) (get_beh res) C i = get_state res' C"
+          using signal_of_add_to_beh2'[OF `time \<le> i` ] unfolding gb_res by auto
+        have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+          using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+          using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+        also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+          by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+        also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+          by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+        also have "... = signal_of (get_state res' A) (get_trans res') A i"
+          using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+          by blast
+        also have "... = get_state res' A"
+          by (rule signal_of_def)
+             (metis (no_types, lifting) Suc_lessD \<open>A \<notin> set (signals_from nand4)\<close> \<open>Suc i < next_time
+             time \<tau>_res\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 ,
+             get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> antisym_conv2 b_conc_exec_modifies_local_strongest
+             dual_order.strict_trans next_time_at_least2 zero_fun_def)
+        finally have "signal_of (def A) \<tau> A i = get_state res' A"
+          by auto
+        have "signal_of (def B) \<tau> B i  = def B"
+          using `inf_time (to_trans_raw_sig \<tau>) B i = None` 
+          by (simp add: to_signal_def)
+        also have "... = \<sigma>' B"
+        proof -
+          have "B \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close>
+            using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+            by (metis \<open>\<And>thesis. (\<And>time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) A i = Some time; inf_time
+            (to_trans_raw_sig \<tau>) B i = None\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> \<open>next_time 0 \<tau>' = t'\<close> \<open>t' < time \<or> t'
+            = time\<close> \<open>time \<le> i\<close> domIff dom_def inf_time_noneE2 not_le order.strict_trans
+            to_trans_raw_sig_def zero_option_def)
+          thus ?thesis
+            unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+        qed
+        also have "... = get_state res' B"
+        proof -
+          have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) B time = None"
+            unfolding inf_time_none_iff[THEN sym]
+          proof 
+            { fix x 
+              assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B)"
+              hence "(\<tau>'(t' := 0)) x B \<noteq> None"
+                unfolding dom_def to_trans_raw_sig_def by auto
+              hence "x \<noteq> t'"
+                unfolding fun_upd_def zero_fun_def zero_option_def by auto
+              assume "x \<le> time"
+              have "(\<tau>'(t' := 0)) x B = \<tau>' x B"
+                using `x \<noteq> t'` by auto
+              also have "... = \<tau> x B"
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+                by auto
+              also have "... = None"
+                using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> \<open>time \<le> i\<close> 
+                by (metis \<open>x \<le> time\<close> inf_time_noneE2 le_less_trans not_le to_trans_raw_sig_def zero_option_def) 
+              finally have "False"
+                using \<open>(\<tau>'(t' := 0)) x B \<noteq> None\<close> by blast }
+            thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B) \<Longrightarrow> time < x"
+              using le_less_linear by blast
+          qed
+          thus ?thesis
+            using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `B \<notin> set (signals_from nand4)`] 
+            by auto
+        qed
+        finally have "signal_of (def B) \<tau> B i = get_state res' B"
+          by auto
+        have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+          using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+          `\<not> disjnt {A, B} (get_event res')` by auto
+        obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+          \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+          using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+          by blast
+        have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+          by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+          get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+          beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+          styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+        moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+          by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+          \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+          (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+          val.distinct(1) val.exhaust_sel)
+        ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+          using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+          by (smt beval_cases(1) val.distinct(1))
+        have "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+        proof (rule ccontr)
+          assume "\<not> \<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+          hence "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+            by auto
+          hence "\<tau>_res time C = post_raw C x' (get_trans res') (time + 0) time C"
+            unfolding \<tau>_res_def[THEN sym] trans_post_raw_def by auto
+          hence "next_time time \<tau>_res = time"
+            by (metis (no_types, lifting) \<open>Suc i < next_time time \<tau>_res\<close> \<open>time < Suc i\<close>
+            add.right_neutral dual_order.strict_trans fun_upd_same next_time_at_least2
+            option.distinct(1) post_raw_def zero_fun_def zero_option_def)
+          thus "False"
+            using `Suc i < next_time time \<tau>_res`  using \<open>time < Suc i\<close> by linarith
+        qed
+        moreover have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+          using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+          by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+          b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+          diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+          option.distinct(1) snd_conv zero_fun_def zero_option_def)
+        ultimately have "x' = get_state res' C"
+          unfolding post_necessary_raw_correctness by blast
+        hence "bval_of (get_state res' C) \<longleftrightarrow> \<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B))"
+          using `x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))`
+          using val.sel(1) by presburger
+        hence ?thesis
+          using `signal_of (def A) \<tau> A i = get_state res' A` `signal_of (def B) \<tau> B i = get_state res' B`
+          `signal_of (def C) (get_beh res) C i = get_state res' C` by auto }
+      moreover
+      { assume "next_time time \<tau>_res = Suc i"
+        hence bigstep3: "Suc i, next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<leadsto> res"
+          using bau[OF bigstep2] 
+          by (smt \<open>\<not> quiet (get_trans res') (get_beh' res')\<close> \<open>time , get_state res' , get_beh' res' ,
+          get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> \<open>time < Suc i\<close> bigstep2
+          calculation(1) case_bau less_irrefl_nat)
+        have "res = (Suc i, next_state time \<tau>_res (get_state res'), next_event time \<tau>_res (get_state res'), Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, \<tau>_res (next_time time \<tau>_res := 0))"
+          using bau[OF bigstep3] `next_time time \<tau>_res = Suc i` by auto
+        hence gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def"
+          by auto
+        have "time \<le> i"
+          using \<open>time < Suc i\<close> less_Suc_eq_le by blast
+        have "\<forall>n>time. get_beh res' n C = 0"
+          by (metis b_simulate_fin_preserves_hist bigstep2_pre trans_removal zero_fun_def)
+        hence "signal_of (def C) (get_beh res) C i = get_state res' C"
+          using signal_of_add_to_beh2'[OF `time \<le> i` ] unfolding gb_res by auto
+        have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+          using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+          using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+        also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+          by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+        also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+          by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+        also have "... = signal_of (get_state res' A) (get_trans res') A i"
+          using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+          by blast
+        also have "... = get_state res' A"
+          by (metis (no_types, lifting) \<open>A \<notin> set (signals_from nand4)\<close> \<open>next_time time \<tau>_res = Suc i\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest dual_order.strict_trans2 lessI next_time_at_least2 signal_of_def zero_fun_def)
+        finally have "signal_of (def A) \<tau> A i = get_state res' A"
+          by auto
+        have "signal_of (def B) \<tau> B i  = def B"
+          using `inf_time (to_trans_raw_sig \<tau>) B i = None` 
+          by (simp add: to_signal_def)
+        also have "... = \<sigma>' B"
+        proof -
+          have "B \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close>
+            using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+            by (metis \<open>\<And>thesis. (\<And>time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) A i = Some time; inf_time
+            (to_trans_raw_sig \<tau>) B i = None\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> \<open>next_time 0 \<tau>' = t'\<close> \<open>t' < time \<or> t'
+            = time\<close> \<open>time \<le> i\<close> domIff dom_def inf_time_noneE2 not_le order.strict_trans
+            to_trans_raw_sig_def zero_option_def)
+          thus ?thesis
+            unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+        qed
+        also have "... = get_state res' B"
+        proof -
+          have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) B time = None"
+            unfolding inf_time_none_iff[THEN sym]
+          proof 
+            { fix x 
+              assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B)"
+              hence "(\<tau>'(t' := 0)) x B \<noteq> None"
+                unfolding dom_def to_trans_raw_sig_def by auto
+              hence "x \<noteq> t'"
+                unfolding fun_upd_def zero_fun_def zero_option_def by auto
+              assume "x \<le> time"
+              have "(\<tau>'(t' := 0)) x B = \<tau>' x B"
+                using `x \<noteq> t'` by auto
+              also have "... = \<tau> x B"
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+                by auto
+              also have "... = None"
+                using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> \<open>time \<le> i\<close> 
+                by (metis \<open>x \<le> time\<close> inf_time_noneE2 le_less_trans not_le to_trans_raw_sig_def zero_option_def) 
+              finally have "False"
+                using \<open>(\<tau>'(t' := 0)) x B \<noteq> None\<close> by blast }
+            thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B) \<Longrightarrow> time < x"
+              using le_less_linear by blast
+          qed
+          thus ?thesis
+            using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `B \<notin> set (signals_from nand4)`] 
+            by auto
+        qed
+        finally have "signal_of (def B) \<tau> B i = get_state res' B"
+          by auto
+        have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+          using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+          `\<not> disjnt {A, B} (get_event res')` by auto
+        obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+          \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+          using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+          by blast
+        have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+          by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+          get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+          beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+          styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+        moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+          by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+          \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+          (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+          val.distinct(1) val.exhaust_sel)
+        ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+          using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+          by (smt beval_cases(1) val.distinct(1))
+        have "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+        proof (rule ccontr)
+          assume "\<not> \<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+          hence "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+            by auto
+          hence "\<tau>_res time C = post_raw C x' (get_trans res') (time + 0) time C"
+            unfolding \<tau>_res_def[THEN sym] trans_post_raw_def by auto
+          hence "next_time time \<tau>_res = time"
+            by (metis (no_types, lifting) \<open> next_time time \<tau>_res = Suc i\<close> \<open>time < Suc i\<close>
+            add.right_neutral dual_order.strict_trans fun_upd_same next_time_at_least2
+            option.distinct(1) post_raw_def zero_fun_def zero_option_def)
+          thus "False"
+            using `next_time time \<tau>_res = Suc i`  using \<open>time < Suc i\<close> by linarith
+        qed
+        moreover have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+          using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+          by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+          b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+          diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+          option.distinct(1) snd_conv zero_fun_def zero_option_def)
+        ultimately have "x' = get_state res' C"
+          unfolding post_necessary_raw_correctness by blast
+        hence "bval_of (get_state res' C) \<longleftrightarrow> \<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B))"
+          using `x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))`
+          using val.sel(1) by presburger
+        hence ?thesis
+          using `signal_of (def A) \<tau> A i = get_state res' A` `signal_of (def B) \<tau> B i = get_state res' B`
+          `signal_of (def C) (get_beh res) C i = get_state res' C` by auto }
+        moreover
+        { assume "next_time time \<tau>_res < Suc i"
+          hence bigstep3: "Suc i, next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<leadsto> res"
+            using bau[OF bigstep2] 
+            by (smt \<open>\<not> quiet (get_trans res') (get_beh' res')\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> \<open>time < Suc i\<close> bigstep2 case_bau nat_less_le)
+          have "\<tau>_res = 0 \<or> \<tau>_res \<noteq> 0"
+            by auto
+          moreover
+          { assume "\<tau>_res = 0"
+            hence "next_event time \<tau>_res (get_state res') = {}"
+            proof -
+              have "next_state time \<tau>_res (get_state res') = get_state res'"
+                using `\<tau>_res = 0` unfolding next_state_def Let_def  by (simp add: zero_fun_def zero_option_def)
+              thus ?thesis
+                unfolding next_event_alt_def  by auto
+            qed
+            hence "quiet (\<tau>_res (next_time time \<tau>_res := 0)) (next_event time \<tau>_res (get_state res'))"
+              using `\<tau>_res = 0`  by (simp add: fun_upd_idem_iff quiet_def zero_fun_def)
+            hence "res = (Suc i, next_state time \<tau>_res (get_state res'), next_event time \<tau>_res (get_state res'), Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, 0)"
+              using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` by auto
+            hence gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def"
+              by auto
+            have "time \<le> i"
+              using \<open>time < Suc i\<close> less_Suc_eq_le by blast
+            have "\<forall>n>time. get_beh res' n C = 0"
+              by (metis b_simulate_fin_preserves_hist bigstep2_pre trans_removal zero_fun_def)
+            hence "signal_of (def C) (get_beh res) C i = get_state res' C"
+              using signal_of_add_to_beh2'[OF `time \<le> i` ] unfolding gb_res by auto
+            have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+              using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+              using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+            also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+              by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+            also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+              by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+            also have "... = signal_of (get_state res' A) (get_trans res') A i"
+              using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+              by blast
+            also have "... = get_state res' A"
+              by (metis (no_types, hide_lams) \<open>A \<notin> set (signals_from nand4)\<close> \<open>\<tau>_res = 0\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest signal_of_def zero_fun_def)
+            finally have "signal_of (def A) \<tau> A i = get_state res' A"
+              by auto
+            have "signal_of (def B) \<tau> B i  = def B"
+              using `inf_time (to_trans_raw_sig \<tau>) B i = None` 
+              by (simp add: to_signal_def)
+            also have "... = \<sigma>' B"
+            proof -
+              have "B \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+                using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close>
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+                by (metis \<open>\<And>thesis. (\<And>time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) A i = Some time; inf_time
+                (to_trans_raw_sig \<tau>) B i = None\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> \<open>next_time 0 \<tau>' = t'\<close> \<open>t' < time \<or> t'
+                = time\<close> \<open>time \<le> i\<close> domIff dom_def inf_time_noneE2 not_le order.strict_trans
+                to_trans_raw_sig_def zero_option_def)
+              thus ?thesis
+                unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+            qed
+            also have "... = get_state res' B"
+            proof -
+              have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) B time = None"
+                unfolding inf_time_none_iff[THEN sym]
+              proof 
+                { fix x 
+                  assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B)"
+                  hence "(\<tau>'(t' := 0)) x B \<noteq> None"
+                    unfolding dom_def to_trans_raw_sig_def by auto
+                  hence "x \<noteq> t'"
+                    unfolding fun_upd_def zero_fun_def zero_option_def by auto
+                  assume "x \<le> time"
+                  have "(\<tau>'(t' := 0)) x B = \<tau>' x B"
+                    using `x \<noteq> t'` by auto
+                  also have "... = \<tau> x B"
+                    using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+                    by auto
+                  also have "... = None"
+                    using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> \<open>time \<le> i\<close> 
+                    by (metis \<open>x \<le> time\<close> inf_time_noneE2 le_less_trans not_le to_trans_raw_sig_def zero_option_def) 
+                  finally have "False"
+                    using \<open>(\<tau>'(t' := 0)) x B \<noteq> None\<close> by blast }
+                thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B) \<Longrightarrow> time < x"
+                  using le_less_linear by blast
+              qed
+              thus ?thesis
+                using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `B \<notin> set (signals_from nand4)`] 
+                by auto
+            qed
+            finally have "signal_of (def B) \<tau> B i = get_state res' B"
+              by auto
+            have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+              using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+              `\<not> disjnt {A, B} (get_event res')` by auto
+            obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+              \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+              using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+              by blast
+            have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+              by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+              get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+              beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+              styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+            moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+              by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+              \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+              (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+              val.distinct(1) val.exhaust_sel)
+            ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+              using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+              by (smt beval_cases(1) val.distinct(1))
+            have "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+            proof (rule ccontr)
+              assume "\<not> \<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+              hence "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+                by auto
+              hence "\<tau>_res time C = post_raw C x' (get_trans res') (time + 0) time C"
+                unfolding \<tau>_res_def[THEN sym] trans_post_raw_def by auto
+              hence "next_time time \<tau>_res = time"
+                by (simp add: \<open>\<tau>_res = 0\<close> post_raw_def zero_fun_def zero_option_def)
+              thus "False"
+                using `next_time time \<tau>_res < Suc i`  using \<open>time < Suc i\<close> 
+                by (simp add: \<open>\<tau>_res = 0\<close>)
+            qed
+            moreover have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+              using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+              by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+              b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+              diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+              option.distinct(1) snd_conv zero_fun_def zero_option_def)
+            ultimately have "x' = get_state res' C"
+              unfolding post_necessary_raw_correctness by blast
+            hence "bval_of (get_state res' C) \<longleftrightarrow> \<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B))"
+              using `x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))`
+              using val.sel(1) by presburger
+            hence ?thesis
+              using `signal_of (def A) \<tau> A i = get_state res' A` `signal_of (def B) \<tau> B i = get_state res' B`
+              `signal_of (def C) (get_beh res) C i = get_state res' C` by auto }
+          moreover
+          { assume "\<tau>_res \<noteq> 0"
+            have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+              using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+              `\<not> disjnt {A, B} (get_event res')` by auto
+            obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+              \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+              using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+              by blast
+            have "\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0"
+              using b_conc_exec_preserve_trans_removal[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`]
+              b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] by auto
+            have "next_time time \<tau>_res = time"
+            proof (rule ccontr)
+              assume "next_time time \<tau>_res \<noteq> time" 
+              hence "time < next_time time \<tau>_res"
+                by (metis \<open>\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0\<close> nat_less_le next_time_at_least)
+              hence "\<tau>_res (next_time time \<tau>_res) C = None"
+                unfolding \<tau>_res_def[THEN sym] trans_post_raw_def preempt_raw_def post_raw_def
+                by (smt add.right_neutral dual_order.strict_implies_order fun_upd_eqD fun_upd_triv nat_neq_iff)
+              have "next_time time \<tau>_res = (LEAST n. dom (\<tau>_res n) \<noteq> {})"
+                using `\<tau>_res \<noteq> 0` unfolding next_time_def by auto
+              hence "\<tau>_res time = 0"
+                using `time < next_time time \<tau>_res`  using next_time_at_least2 by blast
+              have "\<exists>n. dom (\<tau>_res n) \<noteq> {}"
+                using `\<tau>_res \<noteq> 0` unfolding dom_def zero_fun_def zero_option_def by fastforce
+              have "\<tau>_res (next_time time \<tau>_res) \<noteq> 0"
+                by (metis (mono_tags, lifting) LeastI \<open>\<exists>n. dom (\<tau>_res n) \<noteq> {}\<close> \<open>next_time time \<tau>_res = (LEAST n. dom (\<tau>_res n) \<noteq> {})\<close> dom_eq_empty_conv zero_map)
+              hence "\<tau>_res (next_time time \<tau>_res) A \<noteq> None \<or> \<tau>_res (next_time time \<tau>_res) B \<noteq> None "
+                using `\<tau>_res (next_time time \<tau>_res) C = None` unfolding zero_fun_def zero_option_def 
+                by (metis sig.exhaust)
+              hence "get_trans res' (next_time time \<tau>_res) A \<noteq> None \<or> get_trans res' (next_time time \<tau>_res) B \<noteq> None"
+                using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`]
+                by (simp add: \<open>A \<notin> set (signals_from nand4)\<close> \<open>B \<notin> set (signals_from nand4)\<close>)
+              hence "(\<tau>'(t' := 0)) (next_time time \<tau>_res) A \<noteq> None \<or> (\<tau>'(t' := 0)) (next_time time \<tau>_res) B \<noteq> None"
+                using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `A \<notin> set (signals_from nand4)`]
+                using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `B \<notin> set (signals_from nand4)`]
+                by (simp add: \<open>time < next_time time \<tau>_res\<close>)
+              hence "\<tau>' (next_time time \<tau>_res) A \<noteq> None \<or> \<tau>' (next_time time \<tau>_res) B \<noteq> None"
+                by (metis \<open>\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0\<close> \<open>\<tau>_res (next_time time \<tau>_res) \<noteq> 0\<close> \<open>next_time time \<tau>_res \<noteq> time\<close> \<open>t' < time \<or> t' = time\<close> fun_upd_other)
+              hence "\<tau> (next_time time \<tau>_res) A \<noteq> None \<or> \<tau> (next_time time \<tau>_res) B \<noteq> None"
+                by (metis \<open>\<And>thesis. (\<And>x. \<lbrakk>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x;
+                trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> sig.distinct(3)
+                sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+              thus "False"
+                using inf_time_someE[OF \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close>]
+                \<open>time < next_time time \<tau>_res\<close> \<open>next_time time \<tau>_res < Suc i\<close>
+                by (metis \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> domIff inf_time_noneE2 less_Suc_eq_le not_le to_trans_raw_sig_def zero_option_def)
+            qed
+            hence "\<tau>_res time \<noteq> 0"
+              using `\<tau>_res \<noteq> 0` unfolding zero_fun_def zero_option_def next_time_def 
+              by (metis (mono_tags, lifting) LeastI_ex dom_eq_empty_conv)
+            have " get_trans res' time = 0"
+              using get_trans_res_maxtime[OF bigstep2_pre ] by auto          
+            hence "\<tau>_res time A = 0" and "\<tau>_res time B = 0"
+              using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `A \<notin> set (signals_from nand4)`]
+              using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `B \<notin> set (signals_from nand4)`]
+              by (metis zero_fun_def)+
+            hence " A \<notin> next_event time \<tau>_res (get_state res')" and " B \<notin> next_event time \<tau>_res (get_state res')"
+              unfolding next_event_alt_def next_state_def \<open>next_time time \<tau>_res = time\<close> 
+              by (smt domIff mem_Collect_eq override_on_def zero_option_def)+
+            hence "disjnt {A, B} (next_event time \<tau>_res (get_state res'))"
+              by auto
+            have "\<tau>_res time C \<noteq> 0"
+            proof (rule ccontr)
+              assume "\<not> \<tau>_res time C \<noteq> 0" hence "\<tau>_res time C = 0" by auto
+              hence "\<tau>_res time = 0"
+                using `\<tau>_res time A = 0` `\<tau>_res time B = 0` 
+                unfolding zero_fun_def zero_option_def  by (metis sig.exhaust)
+              with `\<tau>_res time \<noteq> 0` show False 
+                by auto
+            qed
+            have "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+            proof (rule ccontr)
+              assume "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+              hence "\<tau>_res time C = 0"
+                unfolding \<tau>_res_def[THEN sym] trans_post_raw_def preempt_raw_def by (auto simp add: zero_option_def)
+              with `\<tau>_res time C \<noteq> 0` show False
+                by auto
+            qed
+            hence "\<tau>_res time C = Some x'"
+              unfolding \<tau>_res_def[THEN sym] trans_post_raw_def post_raw_def by auto
+            have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+              using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+              by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+              b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+              diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+              option.distinct(1) snd_conv zero_fun_def zero_option_def)
+            hence "get_state res' C \<noteq> x'"
+              using `post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)`
+              unfolding post_necessary_raw_correctness2 
+              by (metis (no_types, lifting) Suc_diff_1 \<open>next_time time \<tau>_res = time\<close> \<open>post_necessary_raw
+              0 (get_trans res') time C x' (get_state res' C)\<close> \<tau>_res_def add.right_neutral
+              le_imp_less_Suc next_time_at_least2 option.distinct(1) order.asym post_raw_def
+              trans_post_raw_def zero_fun_def zero_option_def)
+            hence "get_state res'  C \<noteq> the (\<tau>_res time C)"
+              by (simp add: \<open>\<tau>_res time C = Some x'\<close>)
+            hence "C \<in> (next_event time \<tau>_res (get_state res'))" 
+              unfolding next_event_alt_def next_state_def 
+              by (smt \<open>\<tau>_res time C \<noteq> 0\<close> \<open>next_time time \<tau>_res = time\<close> comp_def domIff mem_Collect_eq override_on_apply_in zero_option_def)
+            hence "next_time time
+                \<tau>_res , next_state time \<tau>_res
+                         (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def  \<turnstile> <nand4 , \<tau>_res
+               (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c  \<tau>_res (next_time time \<tau>_res := 0)"
+              using `disjnt {A, B} (next_event time \<tau>_res (get_state res'))` 
+              unfolding nand4_def by (intro b_conc_exec.intros(1))
+            have " \<not> quiet (\<tau>_res(next_time time \<tau>_res := 0)) (next_event time \<tau>_res (get_state res'))"
+              by (metis \<open>C \<in> next_event time \<tau>_res (get_state res')\<close> empty_iff quiet_def)
+    
+            have "(\<tau>_res (next_time time \<tau>_res := 0)) \<noteq> 0 \<Longrightarrow> Suc i \<le> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+              unfolding `next_time time \<tau>_res = time`
+            proof (rule ccontr)
+              assume " \<tau>_res(time := 0) \<noteq> 0"
+              assume "\<not> Suc i \<le> next_time time (\<tau>_res (time := 0))"
+              hence "next_time time (\<tau>_res (time := 0)) < Suc i"
+                by auto
+              have "to_trans_raw_sig (\<tau>_res (time := 0)) C = 0"
+                using `\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0`
+                using `post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)`
+                unfolding to_trans_raw_sig_def \<tau>_res_def[THEN sym] trans_post_raw_def post_raw_def
+                zero_fun_def zero_option_def 
+                by (intro ext) auto
+              have tr: "\<And>n. n < time \<Longrightarrow> (\<tau>_res (time := 0)) n = 0"
+                using `\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0` by auto
+              have "time \<le> next_time time (\<tau>_res (time := 0))"
+                by (intro next_time_at_least[OF tr] )
+              moreover have "time \<noteq> next_time time (\<tau>_res (time := 0))"
+                by (smt Suc_eq_plus1 Suc_n_not_le_n fun_upd_same less_Suc_eq next_time_at_least next_time_def tr)
+              ultimately have "time < next_time time (\<tau>_res (time := 0))"
+                by auto
+              have "(\<tau>_res(time := 0)) (next_time time (\<tau>_res (time := 0))) \<noteq> 0"
+                using `\<tau>_res (time := 0) \<noteq> 0` unfolding next_time_def zero_fun_def zero_option_def
+              proof -
+                assume a1: "\<tau>_res(time := Map.empty) \<noteq> (\<lambda>x. Map.empty)"
+                have f2: "\<And>n. {s. (\<tau>_res(time := Map.empty)) n s \<noteq> None} = {} \<or> dom ((\<tau>_res(time := Map.empty)) (LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {})) \<noteq> {}"
+                  by (metis (mono_tags, lifting) LeastI_ex a1 dom_eq_empty_conv) 
+                obtain nn :: nat and ss :: sig where f3: "(\<tau>_res(time := Map.empty)) nn ss \<noteq> None"
+                  using a1 by meson
+                obtain ssa :: "(sig \<Rightarrow> val option) \<Rightarrow> sig" where f4: "\<And>f s fa. (dom f \<noteq> {} \<or> f (s::sig) = (None::val option)) \<and> (fa (ssa fa) \<noteq> None \<or> dom fa = {})"
+                  by (metis (no_types) dom_eq_empty_conv)
+                then have "{s. (\<tau>_res(time := Map.empty)) (LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) s \<noteq> None} \<noteq> {}"
+                  using f3 f2 by (metis (no_types) dom_def)
+                then have "{s. (\<tau>_res(time := Map.empty)) (if \<forall>n s. (\<tau>_res(time := Map.empty)) n s = None then Suc time else LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) s \<noteq> None} = {} \<longrightarrow> (\<forall>n s. (\<tau>_res(time := Map.empty)) n s = None)"
+                  by presburger
+                then have "\<exists>s. (\<tau>_res(time := Map.empty)) (if \<forall>n s. (\<tau>_res(time := Map.empty)) n s = None then Suc time else LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) s \<noteq> None"
+                  using f4 f3 by blast
+                then show "(\<tau>_res(time := Map.empty)) (if \<tau>_res(time := Map.empty) = (\<lambda>n. Map.empty) then time + 1 else LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) \<noteq> Map.empty"
+                  by (metis Suc_eq_plus1)
+              qed
+              hence "(\<tau>_res(time := 0)) (next_time time (\<tau>_res (time := 0))) A \<noteq> 0 \<or> 
+                    (\<tau>_res(time := 0)) (next_time time (\<tau>_res (time := 0))) B \<noteq> 0" 
+                using `to_trans_raw_sig (\<tau>_res (time := 0)) C = 0` unfolding to_trans_raw_sig_def
+              proof -
+                assume a1: "(\<lambda>n. (\<tau>_res(time := 0)) n C) = 0"
+                obtain ss :: "sig set \<Rightarrow> sig set \<Rightarrow> sig" where
+                  "\<forall>x0 x1. (\<exists>v2. v2 \<in> x1 \<and> v2 \<notin> x0) = (ss x0 x1 \<in> x1 \<and> ss x0 x1 \<notin> x0)"
+                  by moura
+                then have f2: "\<forall>S Sa. ss Sa S \<in> S \<and> ss Sa S \<notin> Sa \<or> S \<subseteq> Sa"
+                  by (meson subsetI)
+                then have "dom (0::sig \<Rightarrow> val option) \<subseteq> {}"
+                  by (meson domIff zero_map)
+                then have f3: "\<not> dom ((\<tau>_res(time := 0)) (next_time time (\<tau>_res(time := 0)))) \<subseteq> {}"
+                  using \<open>(\<tau>_res(time := 0)) (next_time time (\<tau>_res(time := 0))) \<noteq> 0\<close> by auto
+                have "(\<tau>_res(time := 0)) (next_time time (\<tau>_res(time := 0))) C = None"
+                  using a1 by (metis (no_types) zero_map)
+                then show ?thesis
+                  using f3 f2 by (metis (full_types) domIff sig.exhaust zero_option_def)
+              qed
+              hence "get_trans res' (next_time time (\<tau>_res (time := 0))) A \<noteq> 0 \<or> 
+                     get_trans res' (next_time time (\<tau>_res (time := 0))) B \<noteq> 0"
+                using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `A \<notin> set (signals_from nand4)`]
+                using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `A \<notin> set (signals_from nand4)`]
+                using `time < next_time time (\<tau>_res (time := 0))` 
+                using \<open>B \<notin> set (signals_from nand4)\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest by fastforce
+              hence "(\<tau>'(t' := 0)) (next_time time (\<tau>_res(time := 0))) A \<noteq> None \<or> (\<tau>'(t' := 0)) (next_time time (\<tau>_res(time := 0))) B \<noteq> None"
+                using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `A \<notin> set (signals_from nand4)`]
+                using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `B \<notin> set (signals_from nand4)`]
+                by (simp add: \<open>time < next_time time (\<tau>_res(time := 0))\<close> zero_option_def)
+              hence "\<tau>' (next_time time (\<tau>_res(time := 0))) A \<noteq> None \<or> \<tau>' (next_time time (\<tau>_res(time := 0))) B \<noteq> None"
+                by (metis fun_upd_other fun_upd_same zero_map)
+              hence "\<tau> (next_time time (\<tau>_res(time := 0))) A \<noteq> None \<or> \<tau> (next_time time (\<tau>_res(time := 0))) B \<noteq> None"
+                by (metis \<open>\<And>thesis. (\<And>x. \<lbrakk>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x;
+                trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> sig.distinct(3)
+                sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+              thus "False"
+                using inf_time_someE[OF \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close>]
+                \<open>time < next_time time (\<tau>_res(time:= 0))\<close> \<open>next_time time (\<tau>_res(time := 0)) < Suc i\<close>
+                by (metis Suc_leI \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> domIff inf_time_noneE2 not_less_eq_eq to_trans_raw_sig_def zero_option_def)
+            qed
+            have "(\<tau>_res (next_time time \<tau>_res := 0)) = 0 \<Longrightarrow> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) \<le> Suc i"
+              unfolding `next_time time \<tau>_res = time` using `time < Suc i` by auto
+            have "(\<tau>_res (next_time time \<tau>_res := 0)) = 0 \<or> (\<tau>_res (next_time time \<tau>_res := 0)) \<noteq> 0"
+              by auto
+            moreover
+            { assume "(\<tau>_res (next_time time \<tau>_res := 0)) = 0"
+              hence " next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) \<le> Suc i"
+                using \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0 \<Longrightarrow> next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) \<le> Suc i\<close> by blast
+              hence bigstep4: " Suc i, next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) , 
+                                       next_state (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                       next_event (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                       Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def, def \<turnstile> 
+                                        <nand4 , (\<tau>_res (next_time time \<tau>_res := 0)) (next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) := 0)> \<leadsto> res"
+                using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` 
+                by (smt \<open>C \<in> next_event time \<tau>_res (get_state res')\<close> \<open>next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c \<tau>_res (next_time time \<tau>_res := 0)\<close> bigstep3 case_bau empty_iff quiet_def)
+              have "next_event (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) = {}"
+                unfolding `(\<tau>_res (next_time time \<tau>_res := 0)) = 0` next_event_alt_def  next_state_def
+                Let_def zero_fun_def zero_option_def 
+                by (smt \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0\<close> domIff empty_Collect_eq fun_upd_apply override_on_apply_notin zero_fun_def zero_map)
+              have " (\<tau>_res (next_time time \<tau>_res := 0)) (next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) := 0) = 0"
+                using `(\<tau>_res (next_time time \<tau>_res := 0)) = 0`  by (simp add: fun_upd_idem_iff zero_fun_def)
+              have "next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) < Suc i \<or> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) = Suc i"
+                using \<open>next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) \<le> Suc i\<close> le_imp_less_or_eq by blast
+              moreover
+              { assume "next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) = Suc i"
+                hence "res =
+         (Suc i, next_state (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          next_event (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+           (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def,
+          \<tau>_res(next_time time \<tau>_res := 0, next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) := 0))"
+                  using bau[OF bigstep4] by auto
+                hence gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto }
+              moreover
+              { assume "next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) < Suc i"
+                hence "res =
+         (Suc i, next_state (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          next_event (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+           (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def,
+          0)"
+                  using bau[OF bigstep4] 
+                  by (smt \<open>\<tau>_res (next_time time \<tau>_res := 0, next_time (next_time time \<tau>_res)
+                  (\<tau>_res(next_time time \<tau>_res := 0)) := 0) = 0\<close> \<open>next_event (next_time time \<tau>_res)
+                  (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) = {}\<close>
+                  quiet_def)
+                hence "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+           (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto }
+              ultimately have gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                by auto
+              have " (next_time time \<tau>_res) \<le> i"
+                using \<open>next_time time \<tau>_res < Suc i\<close> less_Suc_eq_le by blast
+              have "signal_of (def C) (get_beh res) C i = (next_state time \<tau>_res (get_state res')) C"
+                unfolding gb_res
+                apply (intro signal_of_add_to_beh2'[OF `next_time time \<tau>_res \<le> i`] )
+                by (smt Femto_VHDL_raw.add_to_beh2_def \<open>next_time time \<tau>_res = time\<close> b_simulate_fin_preserves_hist bigstep2_pre fun_upd_other nat_neq_iff trans_removal zero_fun_def)
+              also have "... = the (\<tau>_res time C)"
+                unfolding next_state_def `next_time time \<tau>_res = time` Let_def 
+                by (metis \<open>\<tau>_res time C \<noteq> 0\<close> comp_apply domIff override_on_apply_in zero_option_def)
+              also have "... = x'"
+                by (simp add: \<open>\<tau>_res time C = Some x'\<close>)
+              finally have "signal_of (def C) (get_beh res) C i = x'"
+                by auto
+              have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+                using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+              also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+                by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+              also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+                by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+              also have "... = signal_of (get_state res' A) (get_trans res') A i"
+                using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` _ trans_removal] `time < Suc i`
+                using less_Suc_eq_le by blast
+              also have "... = get_state res' A"
+                by (metis (mono_tags, lifting) \<open>A \<notin> set (signals_from nand4)\<close> \<open>\<tau>_res time A = 0\<close>
+                \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0\<close> \<open>next_time time \<tau>_res = time\<close> \<open>time , get_state
+                res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close>
+                b_conc_exec_modifies_local_strongest fun_upd_def signal_of_def zero_fun_def)
+              finally have "signal_of (def A) \<tau> A i = get_state res' A"
+                by auto
+              have "signal_of (def B) \<tau> B i  = def B"
+                using `inf_time (to_trans_raw_sig \<tau>) B i = None` 
+                by (simp add: to_signal_def)
+              also have "... = \<sigma>' B"
+              proof -
+                have "B \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+                  using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close>
+                  using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+                  by (metis \<open>next_time 0 \<tau>' \<le> time\<close> \<open>next_time time \<tau>_res = time\<close> \<open>next_time time \<tau>_res \<le> i\<close> domD domI inf_time_none_iff leD le_trans to_trans_raw_sig_def)
+                thus ?thesis
+                  unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+              qed
+              also have "... = get_state res' B"
+              proof -
+                have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) B time = None"
+                  unfolding inf_time_none_iff[THEN sym]
+                proof 
+                  { fix x 
+                    assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B)"
+                    hence "(\<tau>'(t' := 0)) x B \<noteq> None"
+                      unfolding dom_def to_trans_raw_sig_def by auto
+                    hence "x \<noteq> t'"
+                      unfolding fun_upd_def zero_fun_def zero_option_def by auto
+                    assume "x \<le> time"
+                    have "(\<tau>'(t' := 0)) x B = \<tau>' x B"
+                      using `x \<noteq> t'` by auto
+                    also have "... = \<tau> x B"
+                      using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+                      by auto
+                    also have "... = None"
+                      using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> 
+                      by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>x \<le> time\<close> inf_time_at_most inf_time_noneE2 le_trans to_trans_raw_sig_def zero_option_def) 
+                    finally have "False"
+                      using \<open>(\<tau>'(t' := 0)) x B \<noteq> None\<close> by blast }
+                  thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B) \<Longrightarrow> time < x"
+                    using le_less_linear by blast
+                qed
+                thus ?thesis
+                  using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `B \<notin> set (signals_from nand4)`] 
+                  by auto
+              qed
+              finally have "signal_of (def B) \<tau> B i = get_state res' B"
+                by auto
+              have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+                by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+                get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+                beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+                styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+              moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+                by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+                \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+                (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+                val.distinct(1) val.exhaust_sel)
+              ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+                using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+                by (smt beval_cases(1) val.distinct(1))
+              hence ?thesis
+                using \<open>signal_of (def A) \<tau> A i = get_state res' A\<close> \<open>signal_of (def B) \<tau> B i = get_state res' B\<close> \<open>signal_of (def C) (get_beh res) C i = x'\<close> 
+                by auto }
+            moreover
+            { assume " (\<tau>_res (next_time time \<tau>_res := 0)) \<noteq> 0"
+              hence "Suc i \<le> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+                using \<open>\<tau>_res(next_time time \<tau>_res := 0) \<noteq> 0 \<Longrightarrow> Suc i \<le> next_time (next_time time \<tau>_res)
+                (\<tau>_res(next_time time \<tau>_res := 0))\<close> by metis
+              hence "Suc i < next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) \<or> Suc i = next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"        
+                by auto
+              moreover
+              { assume "Suc i = next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+                hence bigstep4: " Suc i, next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) , 
+                                         next_state (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                         next_event (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                         Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def, def \<turnstile> 
+                                          <nand4 , (\<tau>_res (next_time time \<tau>_res := 0)) (next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) := 0)> \<leadsto> res"
+                  using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` 
+                  by (smt \<open>Suc i \<le> next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0))\<close> \<open>\<tau>_res(next_time time \<tau>_res := 0) \<noteq> 0\<close> \<open>next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c \<tau>_res (next_time time \<tau>_res := 0)\<close> bigstep3 case_bau quiet_def)
+                hence "res =
+         (Suc i, next_state (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          next_event (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+           (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def,
+          \<tau>_res(next_time time \<tau>_res := 0, next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) := 0))"
+                  using bau[OF bigstep4] 
+                  using \<open>Suc i = next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0))\<close> by fastforce
+                hence "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto }
+              moreover
+              { assume "Suc i < next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+                hence "res =
+               (Suc i, next_state time \<tau>_res (get_state res'), {},
+                Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+                 (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def, \<tau>_res (next_time time \<tau>_res := 0))"
+                  using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` \<open> \<not> quiet (\<tau>_res(next_time time \<tau>_res := 0)) (next_event time \<tau>_res (get_state res'))\<close>
+                  \<open>next_time time
+                \<tau>_res , next_state time \<tau>_res
+                         (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def  \<turnstile> <nand4 , \<tau>_res
+               (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c  \<tau>_res (next_time time \<tau>_res := 0)\<close> 
+                  by (smt b_conc_exec_deterministic less_le_not_le)
+                hence "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto }
+              ultimately have gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto
+              have " (next_time time \<tau>_res) \<le> i"
+                using \<open>next_time time \<tau>_res < Suc i\<close> less_Suc_eq_le by blast
+              have "signal_of (def C) (get_beh res) C i = (next_state time \<tau>_res (get_state res')) C"
+                unfolding gb_res
+                apply (intro signal_of_add_to_beh2'[OF `next_time time \<tau>_res \<le> i`] )
+                by (smt Femto_VHDL_raw.add_to_beh2_def \<open>next_time time \<tau>_res = time\<close> b_simulate_fin_preserves_hist bigstep2_pre fun_upd_other nat_neq_iff trans_removal zero_fun_def)
+              also have "... = the (\<tau>_res time C)"
+                unfolding next_state_def `next_time time \<tau>_res = time` Let_def 
+                by (metis \<open>\<tau>_res time C \<noteq> 0\<close> comp_apply domIff override_on_apply_in zero_option_def)
+              also have "... = x'"
+                by (simp add: \<open>\<tau>_res time C = Some x'\<close>)
+              finally have "signal_of (def C) (get_beh res) C i = x'"
+                by auto
+              have "signal_of (def A) \<tau> A i  = signal_of (def A) \<tau>' A i"
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]
+                using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+              also have "... = signal_of (\<sigma>' A) \<tau>' A i"
+                by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = Some time\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(3) signal_of_trans_post to_signal_def)
+              also have "... = signal_of (\<sigma>' A) (\<tau>'(t':=0)) A i"
+                by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+              also have "... = signal_of (get_state res' A) (get_trans res') A i"
+                using bau_signal_of[OF bigstep2_pre `A \<notin> set (signals_from nand4)` _ trans_removal] `time < Suc i`
+                using less_Suc_eq_le by blast
+              also have "... = get_state res' A"
+                by (smt \<open>A \<notin> set (signals_from nand4)\<close> \<open>Suc i \<le> next_time (next_time time \<tau>_res)
+                (\<tau>_res(next_time time \<tau>_res := 0))\<close> \<open>\<tau>_res time A = 0\<close> \<open>get_trans res' time = 0\<close>
+                \<open>next_time time \<tau>_res = time\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def
+                \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> antisym_conv2 b_conc_exec_modifies_local_strongest
+                dual_order.strict_trans2 fun_upd_other lessI next_time_at_least2 signal_of_def
+                signal_of_suc_sig)
+              finally have "signal_of (def A) \<tau> A i = get_state res' A"
+                by auto
+              have "signal_of (def B) \<tau> B i  = def B"
+                using `inf_time (to_trans_raw_sig \<tau>) B i = None` 
+                by (simp add: to_signal_def)
+              also have "... = \<sigma>' B"
+              proof -
+                have "B \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+                  using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close>
+                  using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+                  by (metis \<open>next_time 0 \<tau>' \<le> time\<close> \<open>next_time time \<tau>_res = time\<close> \<open>next_time time
+                  \<tau>_res \<le> i\<close> domD domI inf_time_none_iff leD order.trans to_trans_raw_sig_def)
+                thus ?thesis
+                  unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+              qed
+              also have "... = get_state res' B"
+              proof -
+                have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) B time = None"
+                  unfolding inf_time_none_iff[THEN sym]
+                proof 
+                  { fix x 
+                    assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B)"
+                    hence "(\<tau>'(t' := 0)) x B \<noteq> None"
+                      unfolding dom_def to_trans_raw_sig_def by auto
+                    hence "x \<noteq> t'"
+                      unfolding fun_upd_def zero_fun_def zero_option_def by auto
+                    assume "x \<le> time"
+                    have "(\<tau>'(t' := 0)) x B = \<tau>' x B"
+                      using `x \<noteq> t'` by auto
+                    also have "... = \<tau> x B"
+                      using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]          
+                      by auto
+                    also have "... = None"
+                      using \<open>inf_time (to_trans_raw_sig \<tau>) B i = None\<close> \<open>time < Suc i\<close> 
+                      by (metis \<open>next_time time \<tau>_res = time\<close> \<open>next_time time \<tau>_res \<le> i\<close> \<open>x \<le> time\<close>
+                      inf_time_noneE2 le_trans to_trans_raw_sig_def zero_option_def)
+                    finally have "False"
+                      using \<open>(\<tau>'(t' := 0)) x B \<noteq> None\<close> by blast }
+                  thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) B) \<Longrightarrow> time < x"
+                    using le_less_linear by blast
+                qed
+                thus ?thesis
+                  using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `B \<notin> set (signals_from nand4)`] 
+                  by auto
+              qed
+              finally have "signal_of (def B) \<tau> B i = get_state res' B"
+                by auto
+              have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+                by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def A) \<tau> A i =
+                get_state res' A\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+                beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+                styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+              moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+                by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+                \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of
+                (get_state res' A))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+                val.distinct(1) val.exhaust_sel)
+              ultimately have "x' = Bv (\<not> (bval_of (get_state res' A) \<and> bval_of (get_state res' B)))"
+                using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+                by (smt beval_cases(1) val.distinct(1))
+              hence ?thesis
+                using \<open>signal_of (def A) \<tau> A i = get_state res' A\<close> \<open>signal_of (def B) \<tau> B i = get_state res' B\<close> \<open>signal_of (def C) (get_beh res) C i = x'\<close> 
+                by auto }
+            ultimately have ?thesis
+              by auto }
+          ultimately have ?thesis
+            by auto }
+        ultimately have ?thesis
+          using nat_neq_iff by blast }
+    moreover
+    { assume "inf_time (to_trans_raw_sig \<tau>) B i \<noteq> None \<and> inf_time (to_trans_raw_sig \<tau>) A i = None"
+      then obtain time where "inf_time (to_trans_raw_sig \<tau>) B i = Some time" and "inf_time (to_trans_raw_sig \<tau>) A i = None"
+        by blast
+      have "next_time 0 \<tau>' \<le> time"
+      proof -
+        have "next_time 0 \<tau>' = (LEAST n. dom (\<tau>' n) \<noteq> {})"
+          unfolding next_time_def using \<open>\<tau>' \<noteq> 0\<close> by auto
+        have "\<exists>n. dom (\<tau>' n) \<noteq> {}"
+          using \<open>\<tau>' \<noteq> 0\<close> unfolding dom_def zero_fun_def zero_option_def 
+          by fastforce
+        have "inf_time (to_trans_raw_sig \<tau>) B i = inf_time (to_trans_raw_sig \<tau>') B i"
+          using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> inf_time_trans_post by fastforce
+        hence "dom (\<tau>' time) \<noteq> {}"
+          using \<open>inf_time (to_trans_raw_sig \<tau>) B i  = Some time\<close> unfolding dom_def 
+        proof -
+          have "\<exists>s. to_trans_raw_sig \<tau>' s time \<noteq> None"
+            by (metis Femto_VHDL_raw.keys_def \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> \<open>inf_time (to_trans_raw_sig \<tau>) B i = inf_time (to_trans_raw_sig \<tau>') B i\<close> domIff dom_def inf_time_some_exists zero_option_def)
+          then show "{s. \<tau>' time s \<noteq> None} \<noteq> {}"
+            by (simp add: to_trans_raw_sig_def)
+        qed
+        hence "(LEAST n. dom (\<tau>' n) \<noteq> {}) \<le> time"
+          using Least_le by auto
+        thus "next_time 0 \<tau>' \<le> time"
+          using \<open>next_time 0 \<tau>' = (LEAST n. dom (\<tau>' n) \<noteq> {})\<close> by linarith
+      qed    
+      have "time < Suc i"
+        using \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close>  inf_time_at_most by fastforce    
+      have "\<exists>res'. time, t' , \<sigma>' , \<gamma>' , 0, def \<turnstile> <nand4 , \<tau>'(t' := 0)> \<leadsto> res' \<and> Suc i, time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<leadsto> res"
+        using split_b_simulate_fin[OF bigstep \<open>next_time 0 \<tau>' \<le>time\<close>[unfolded \<open>next_time 0 \<tau>' = t'\<close>] _ trans_removal conc_stmt_wf_nand4]  \<open>time < Suc i\<close>
+        by (meson less_or_eq_imp_le zero_fun_def)
+      then obtain res' where bigstep2_pre: "time, t' , \<sigma>' , \<gamma>' , 0, def \<turnstile> <nand4 , \<tau>'(t' := 0)> \<leadsto> res'"
+        and bigstep2: "Suc i, time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<leadsto> res"
+        by auto
+      have "B \<notin> set (signals_from nand4)" and "A \<notin> set (signals_from nand4)"
+        unfolding nand4_def by auto
+      have "t' < time \<or> t' = time"
+        using bau bigstep2_pre by blast
+      moreover 
+      { assume "t' < time"
+        moreover have "\<tau>' time B = \<tau> time B" and "\<tau>' time A = \<tau> time A"
+          unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def by auto
+        moreover have "\<tau> time B \<noteq> 0 \<and> \<tau> time A = 0"
+          using \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close>  \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close>
+          by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_noneE2 inf_time_some_exists
+          to_trans_raw_sig_def zero_option_def)
+        ultimately have "(\<tau>'(t' := 0)) time B \<noteq> 0 \<and> (\<tau>'(t' := 0)) time A = 0"
+          by auto
+        hence "B \<notin> set (signals_from nand4)"
+          unfolding nand4_def by auto
+        have "non_stuttering (to_trans_raw_sig \<tau>') def B"
+          using init'_preserves_non_stuttering[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` _ _ conc_stmt_wf_nand4] assms(7)
+          by blast
+        hence "non_stuttering (to_trans_raw_sig (\<tau>'(t' := 0))) \<sigma>' B"
+          using non_stuttering_next \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> by fastforce
+        hence "get_event res' \<noteq>  {}"
+          using get_event_never_empty'[OF bigstep2_pre \<open>B \<notin> set (signals_from nand4)\<close> _ _ _ trans_removal conc_stmt_wf_nand4]
+          \<open>t' < time\<close> \<open>(\<tau>'(t' := 0)) time B \<noteq> 0 \<and> (\<tau>'(t' := 0)) time A = 0\<close> by blast
+        have "\<not> disjnt {B, A} (get_event res')"
+          using get_event_never_empty[OF bigstep2_pre \<open>B \<notin> set (signals_from nand4)\<close> _ _ _ trans_removal conc_stmt_wf_nand4]
+          using \<open>t' < time\<close> \<open>non_stuttering (to_trans_raw_sig (\<tau>'(t' := 0))) \<sigma>' B\<close>  
+          using \<open>(\<tau>'(t' := 0)) time B \<noteq> 0 \<and> (\<tau>'(t' := 0)) time A = 0\<close> by fastforce
+        hence "get_event res' \<noteq>  {} \<and> \<not> disjnt {B, A} (get_event res')"
+          by auto }
+      moreover 
+      { assume "t' = time"
+        hence "res' = (time, \<sigma>', \<gamma>', 0, \<tau>'(t' := 0))"
+          using bau[OF bigstep2_pre] by auto
+        hence "get_event res' = \<gamma>'"
+          by auto
+        also have "... = next_event 0 \<tau>' def"
+          using \<open>next_event 0 \<tau>' def = \<gamma>'\<close> by auto
+        also have "... = {sig. def sig \<noteq> next_state 0 \<tau>' def sig} "
+          unfolding next_event_alt_def by auto
+        also have "... \<noteq> {}"
+        proof -
+          have "\<tau>' time B = \<tau> time B" and "\<tau>' time A = \<tau> time A"
+            unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def by auto
+          moreover have "\<tau> time B \<noteq> 0 \<and> \<tau> time A = 0"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> 
+            by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_noneE2 inf_time_some_exists
+            to_trans_raw_sig_def zero_option_def)
+          ultimately have "\<tau>' time B \<noteq> 0" and " \<tau>' time A =0"
+            by auto
+          have  "Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B) \<noteq> {}"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> inf_time_some_exists by force
+          moreover have *: "(LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B)) = time"
+          proof (rule Least_equality)
+            show " time \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B)"
+              by (meson \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> inf_time_some_exists)
+          next
+            { fix y 
+              assume "y < time"
+              assume "y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B)"
+              hence "\<tau> y B \<noteq> 0"
+                unfolding Femto_VHDL_raw.keys_def to_trans_raw_sig_def by auto
+              hence "\<tau>' y B \<noteq> 0"
+                by (metis \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> sig.distinct(3) sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+              with `y < time` have False
+                unfolding `t' = time`[THEN sym] `next_time  0 \<tau>' = t'`[THEN sym] 
+                by (simp add: next_time_at_least2 zero_fun_def) }
+            thus "\<And>y. y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B) \<Longrightarrow> time \<le> y"
+              using not_less by blast
+          qed
+          moreover have "the (to_trans_raw_sig \<tau> B (LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B))) = next_state 0 \<tau>' def B"
+            unfolding * next_state_def 
+            by (metis \<open>\<tau>' time B = \<tau> time B\<close> \<open>\<tau>' time B \<noteq> 0\<close> \<open>next_time 0 \<tau>' = t'\<close> \<open>t' = time\<close> comp_apply domIff override_on_apply_in to_trans_raw_sig_def zero_option_def) 
+          ultimately show ?thesis
+            using assms(7)[unfolded non_stuttering_def] by auto
+        qed
+        finally have "get_event res' \<noteq>  {}"
+          by auto
+        have "\<not> disjnt {B, A} (get_event res')"
+        proof -
+          have "\<tau>' time B = \<tau> time B" and "\<tau>' time A = \<tau> time A"
+            unfolding \<tau>'_def trans_post_raw_def post_raw_def preempt_raw_def by auto
+          moreover have "\<tau> time B \<noteq> 0 \<and> \<tau> time A = 0"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> 
+            by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_noneE2 inf_time_some_exists to_trans_raw_sig_def zero_option_def)
+          ultimately have "\<tau>' time B \<noteq> 0 " and " \<tau>' time A = 0"
+            by auto
+          moreover have "\<tau>' time B = \<tau> time B"
+            using \<open>\<tau>' time B = \<tau> time B\<close> \<open>\<tau>' time A = \<tau> time A\<close> calculation(2) by blast
+          moreover have  "Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B) \<noteq> {}"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> calculation(2) inf_time_some_exists by force
+          moreover have *: "(LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B)) = time"
+          proof (rule Least_equality)
+            show " time \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B)"
+              by (metis Femto_VHDL_raw.keys_def calculation(1) calculation(3) domIff dom_def to_trans_raw_sig_def zero_option_def)
+          next
+            { fix y 
+              assume "y < time"
+              assume "y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B)"
+              hence "\<tau> y B \<noteq> 0"
+                unfolding Femto_VHDL_raw.keys_def to_trans_raw_sig_def by auto
+              hence "\<tau>' y B \<noteq> 0"
+                by (metis \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> calculation(2) sig.distinct(3) sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+              with `y < time` have False
+                unfolding `t' = time`[THEN sym] `next_time  0 \<tau>' = t'`[THEN sym] 
+                by (simp add: next_time_at_least2 zero_fun_def) }
+            thus "\<And>y. y \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B) \<Longrightarrow> time \<le> y"
+              using not_less by blast
+          qed
+          moreover have "the (to_trans_raw_sig \<tau> B (LEAST k. k \<in> Femto_VHDL_raw.keys (to_trans_raw_sig \<tau> B))) = next_state 0 \<tau>' def B"
+            unfolding * next_state_def 
+            by (metis \<open>next_time 0 \<tau>' = t'\<close> \<open>t' = time\<close> calculation(1) calculation(3) comp_apply domIff override_on_apply_in to_trans_raw_sig_def zero_option_def) 
+          ultimately show ?thesis
+            by (metis (full_types) \<open>get_beh' res' = \<gamma>'\<close> \<open>next_event 0 \<tau>' def = \<gamma>'\<close> assms(7) disjnt_insert1 next_state_fixed_point non_stuttering_def)
+        qed 
+        hence "get_event res' \<noteq> {} \<and> \<not> disjnt {B, A} (get_event res')"
+          using \<open>get_beh' res' \<noteq> {}\<close> by blast }
+      ultimately have "get_event res' \<noteq> {} \<and> \<not> disjnt {B, A} (get_event res')"
+        by auto
+      hence " \<not> quiet (get_trans res') (get_event res')" and "\<not> disjnt {B, A} (get_event res')"
+        by (simp add: quiet_def)+
+      then obtain \<tau>_res where "time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res"
+        using bau[OF bigstep2]  using \<open>time < Suc i\<close> by force
+      have "next_time time \<tau>_res \<le> Suc i \<or> Suc i < next_time time \<tau>_res"
+        by auto
+      moreover
+      { assume "Suc i < next_time time \<tau>_res"
+        hence " res = (Suc i, get_state res', {}, Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, \<tau>_res) "
+          using bau[OF bigstep2] `\<not> quiet (get_trans res') (get_event res')` `time < Suc i` 
+          by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans
+          res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_deterministic less_irrefl_nat not_le)
+        hence gb_res: "get_beh res =  Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def"
+          by auto
+        have "time \<le> i"
+          using \<open>time < Suc i\<close> less_Suc_eq_le by blast
+        have "\<forall>n>time. get_beh res' n C = 0"
+          by (metis b_simulate_fin_preserves_hist bigstep2_pre trans_removal zero_fun_def)
+        hence "signal_of (def C) (get_beh res) C i = get_state res' C"
+          using signal_of_add_to_beh2'[OF `time \<le> i` ] unfolding gb_res by auto
+        have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+          using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+          using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+        also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+          by (metis \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(5) signal_of_trans_post to_signal_def)
+        also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+          by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+        also have "... = signal_of (get_state res' B) (get_trans res') B i"
+          using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+          by blast
+        also have "... = get_state res' B"
+          by (rule signal_of_def)
+             (metis (no_types, lifting) Suc_lessD \<open>B \<notin> set (signals_from nand4)\<close> \<open>Suc i < next_time
+             time \<tau>_res\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 ,
+             get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> antisym_conv2 b_conc_exec_modifies_local_strongest
+             dual_order.strict_trans next_time_at_least2 zero_fun_def)
+        finally have "signal_of (def B) \<tau> B i = get_state res' B"
+          by auto
+        have "signal_of (def A) \<tau> A i  = def A"
+          using `inf_time (to_trans_raw_sig \<tau>) A i = None` 
+          by (simp add: to_signal_def)
+        also have "... = \<sigma>' A"
+        proof -
+          have "A \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close>
+            using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+            by (metis \<open>\<And>thesis. (\<And>time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) B i = Some time; inf_time
+            (to_trans_raw_sig \<tau>) A i = None\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> \<open>next_time 0 \<tau>' = t'\<close> \<open>t' < time \<or> t'
+            = time\<close> \<open>time \<le> i\<close> domIff dom_def inf_time_noneE2 not_le order.strict_trans
+            to_trans_raw_sig_def zero_option_def)
+          thus ?thesis
+            unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+        qed
+        also have "... = get_state res' A"
+        proof -
+          have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) A time = None"
+            unfolding inf_time_none_iff[THEN sym]
+          proof 
+            { fix x 
+              assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A)"
+              hence "(\<tau>'(t' := 0)) x A \<noteq> None"
+                unfolding dom_def to_trans_raw_sig_def by auto
+              hence "x \<noteq> t'"
+                unfolding fun_upd_def zero_fun_def zero_option_def by auto
+              assume "x \<le> time"
+              have "(\<tau>'(t' := 0)) x A = \<tau>' x A"
+                using `x \<noteq> t'` by auto
+              also have "... = \<tau> x A"
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+                by auto
+              also have "... = None"
+                using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> \<open>time \<le> i\<close> 
+                by (metis \<open>x \<le> time\<close> inf_time_noneE2 le_less_trans not_le to_trans_raw_sig_def zero_option_def) 
+              finally have "False"
+                using \<open>(\<tau>'(t' := 0)) x A \<noteq> None\<close> by blast }
+            thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A) \<Longrightarrow> time < x"
+              using le_less_linear by blast
+          qed
+          thus ?thesis
+            using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `A \<notin> set (signals_from nand4)`] 
+            by auto
+        qed
+        finally have "signal_of (def A) \<tau> A i = get_state res' A"
+          by auto
+        have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+          using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+          `\<not> disjnt {B, A} (get_event res')` by auto
+        obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+          \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+          using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+          by blast
+        have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+          by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def B) \<tau> B i =
+          get_state res' B\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+          beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+          styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+        moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+          by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+          \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of
+          (get_state res' B))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+          val.distinct(1) val.exhaust_sel)
+        ultimately have "x' = Bv (\<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A)))"
+          using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+          by (smt beval_cases(1) val.distinct(1))
+        have "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+        proof (rule ccontr)
+          assume "\<not> \<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+          hence "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+            by auto
+          hence "\<tau>_res time C = post_raw C x' (get_trans res') (time + 0) time C"
+            unfolding \<tau>_res_def[THEN sym] trans_post_raw_def by auto
+          hence "next_time time \<tau>_res = time"
+            by (metis (no_types, lifting) \<open>Suc i < next_time time \<tau>_res\<close> \<open>time < Suc i\<close>
+            add.right_neutral dual_order.strict_trans fun_upd_same next_time_at_least2
+            option.distinct(1) post_raw_def zero_fun_def zero_option_def)
+          thus "False"
+            using `Suc i < next_time time \<tau>_res`  using \<open>time < Suc i\<close> by linarith
+        qed
+        moreover have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+          using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+          by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+          b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+          diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+          option.distinct(1) snd_conv zero_fun_def zero_option_def)
+        ultimately have "x' = get_state res' C"
+          unfolding post_necessary_raw_correctness by blast
+        hence "bval_of (get_state res' C) \<longleftrightarrow> \<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A))"
+          using `x' = Bv (\<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A)))`
+          using val.sel(1) by presburger
+        hence ?thesis
+          using `signal_of (def B) \<tau> B i = get_state res' B` `signal_of (def A) \<tau> A i = get_state res' A`
+          `signal_of (def C) (get_beh res) C i = get_state res' C` by auto }
+      moreover
+      { assume "next_time time \<tau>_res = Suc i"
+        hence bigstep3: "Suc i, next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<leadsto> res"
+          using bau[OF bigstep2] 
+          by (smt \<open>\<not> quiet (get_trans res') (get_beh' res')\<close> \<open>time , get_state res' , get_beh' res' ,
+          get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> \<open>time < Suc i\<close> bigstep2
+          calculation(1) case_bau less_irrefl_nat)
+        have "res = (Suc i, next_state time \<tau>_res (get_state res'), next_event time \<tau>_res (get_state res'), Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, \<tau>_res (next_time time \<tau>_res := 0))"
+          using bau[OF bigstep3] `next_time time \<tau>_res = Suc i` by auto
+        hence gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def"
+          by auto
+        have "time \<le> i"
+          using \<open>time < Suc i\<close> less_Suc_eq_le by blast
+        have "\<forall>n>time. get_beh res' n C = 0"
+          by (metis b_simulate_fin_preserves_hist bigstep2_pre trans_removal zero_fun_def)
+        hence "signal_of (def C) (get_beh res) C i = get_state res' C"
+          using signal_of_add_to_beh2'[OF `time \<le> i` ] unfolding gb_res by auto
+        have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+          using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+          using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+        also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+          by (metis \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.simps(6) signal_of_trans_post to_signal_def)
+        also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+          by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+        also have "... = signal_of (get_state res' B) (get_trans res') B i"
+          using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+          by blast
+        also have "... = get_state res' B"
+          by (metis (no_types, lifting) \<open>B \<notin> set (signals_from nand4)\<close> \<open>next_time time \<tau>_res = Suc i\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest dual_order.strict_trans2 lessI next_time_at_least2 signal_of_def zero_fun_def)
+        finally have "signal_of (def B) \<tau> B i = get_state res' B"
+          by auto
+        have "signal_of (def A) \<tau> A i  = def A"
+          using `inf_time (to_trans_raw_sig \<tau>) A i = None` 
+          by (simp add: to_signal_def)
+        also have "... = \<sigma>' A"
+        proof -
+          have "A \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+            using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close>
+            using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+            by (metis \<open>\<And>thesis. (\<And>time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) B i = Some time; inf_time
+            (to_trans_raw_sig \<tau>) A i = None\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> \<open>next_time 0 \<tau>' = t'\<close> \<open>t' < time \<or> t'
+            = time\<close> \<open>time \<le> i\<close> domIff dom_def inf_time_noneE2 not_le order.strict_trans
+            to_trans_raw_sig_def zero_option_def)
+          thus ?thesis
+            unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+        qed
+        also have "... = get_state res' A"
+        proof -
+          have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) A time = None"
+            unfolding inf_time_none_iff[THEN sym]
+          proof 
+            { fix x 
+              assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A)"
+              hence "(\<tau>'(t' := 0)) x A \<noteq> None"
+                unfolding dom_def to_trans_raw_sig_def by auto
+              hence "x \<noteq> t'"
+                unfolding fun_upd_def zero_fun_def zero_option_def by auto
+              assume "x \<le> time"
+              have "(\<tau>'(t' := 0)) x A = \<tau>' x A"
+                using `x \<noteq> t'` by auto
+              also have "... = \<tau> x A"
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+                by auto
+              also have "... = None"
+                using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> \<open>time \<le> i\<close> 
+                by (metis \<open>x \<le> time\<close> inf_time_noneE2 le_less_trans not_le to_trans_raw_sig_def zero_option_def) 
+              finally have "False"
+                using \<open>(\<tau>'(t' := 0)) x A \<noteq> None\<close> by blast }
+            thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A) \<Longrightarrow> time < x"
+              using le_less_linear by blast
+          qed
+          thus ?thesis
+            using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `A \<notin> set (signals_from nand4)`] 
+            by auto
+        qed
+        finally have "signal_of (def A) \<tau> A i = get_state res' A"
+          by auto
+        have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+          using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+          `\<not> disjnt {B, A} (get_event res')` by auto
+        obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+          \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+          using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+          by blast
+        have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+          by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def B) \<tau> B i =
+          get_state res' B\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+          beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+          styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+        moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+          by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+          \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of
+          (get_state res' B))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+          val.distinct(1) val.exhaust_sel)
+        ultimately have "x' = Bv (\<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A)))"
+          using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+          by (smt beval_cases(1) val.distinct(1))
+        have "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+        proof (rule ccontr)
+          assume "\<not> \<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+          hence "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+            by auto
+          hence "\<tau>_res time C = post_raw C x' (get_trans res') (time + 0) time C"
+            unfolding \<tau>_res_def[THEN sym] trans_post_raw_def by auto
+          hence "next_time time \<tau>_res = time"
+            by (metis (no_types, lifting) \<open> next_time time \<tau>_res = Suc i\<close> \<open>time < Suc i\<close>
+            add.right_neutral dual_order.strict_trans fun_upd_same next_time_at_least2
+            option.distinct(1) post_raw_def zero_fun_def zero_option_def)
+          thus "False"
+            using `next_time time \<tau>_res = Suc i`  using \<open>time < Suc i\<close> by linarith
+        qed
+        moreover have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+          using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+          by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+          b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+          diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+          option.distinct(1) snd_conv zero_fun_def zero_option_def)
+        ultimately have "x' = get_state res' C"
+          unfolding post_necessary_raw_correctness by blast
+        hence "bval_of (get_state res' C) \<longleftrightarrow> \<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A))"
+          using `x' = Bv (\<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A)))`
+          using val.sel(1) by presburger
+        hence ?thesis
+          using `signal_of (def B) \<tau> B i = get_state res' B` `signal_of (def A) \<tau> A i = get_state res' A`
+          `signal_of (def C) (get_beh res) C i = get_state res' C` by auto }
+        moreover
+        { assume "next_time time \<tau>_res < Suc i"
+          hence bigstep3: "Suc i, next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<leadsto> res"
+            using bau[OF bigstep2] 
+            by (smt \<open>\<not> quiet (get_trans res') (get_beh' res')\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> \<open>time < Suc i\<close> bigstep2 case_bau nat_less_le)
+          have "\<tau>_res = 0 \<or> \<tau>_res \<noteq> 0"
+            by auto
+          moreover
+          { assume "\<tau>_res = 0"
+            hence "next_event time \<tau>_res (get_state res') = {}"
+            proof -
+              have "next_state time \<tau>_res (get_state res') = get_state res'"
+                using `\<tau>_res = 0` unfolding next_state_def Let_def  by (simp add: zero_fun_def zero_option_def)
+              thus ?thesis
+                unfolding next_event_alt_def  by auto
+            qed
+            hence "quiet (\<tau>_res (next_time time \<tau>_res := 0)) (next_event time \<tau>_res (get_state res'))"
+              using `\<tau>_res = 0`  by (simp add: fun_upd_idem_iff quiet_def zero_fun_def)
+            hence "res = (Suc i, next_state time \<tau>_res (get_state res'), next_event time \<tau>_res (get_state res'), Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, 0)"
+              using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` by auto
+            hence gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def"
+              by auto
+            have "time \<le> i"
+              using \<open>time < Suc i\<close> less_Suc_eq_le by blast
+            have "\<forall>n>time. get_beh res' n C = 0"
+              by (metis b_simulate_fin_preserves_hist bigstep2_pre trans_removal zero_fun_def)
+            hence "signal_of (def C) (get_beh res) C i = get_state res' C"
+              using signal_of_add_to_beh2'[OF `time \<le> i` ] unfolding gb_res by auto
+            have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+              using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+              using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+            also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+              by (metis \<open>\<And>thesis. (\<And>time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) B i = Some time; inf_time (to_trans_raw_sig \<tau>) A i = None\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.simps(6) signal_of_trans_post to_signal_def)
+            also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+              by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+            also have "... = signal_of (get_state res' B) (get_trans res') B i"
+              using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` `time \<le> i` trans_removal]
+              by blast
+            also have "... = get_state res' B"
+              by (metis (no_types, hide_lams) \<open>B \<notin> set (signals_from nand4)\<close> \<open>\<tau>_res = 0\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest signal_of_def zero_fun_def)
+            finally have "signal_of (def B) \<tau> B i = get_state res' B"
+              by auto
+            have "signal_of (def A) \<tau> A i  = def A"
+              using `inf_time (to_trans_raw_sig \<tau>) A i = None` 
+              by (simp add: to_signal_def)
+            also have "... = \<sigma>' A"
+            proof -
+              have "A \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+                using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close>
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+                by (metis \<open>\<And>thesis. (\<And>time. \<lbrakk>inf_time (to_trans_raw_sig \<tau>) B i = Some time; inf_time
+                (to_trans_raw_sig \<tau>) A i = None\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> \<open>next_time 0 \<tau>' = t'\<close> \<open>t' < time \<or> t'
+                = time\<close> \<open>time \<le> i\<close> domIff dom_def inf_time_noneE2 not_le order.strict_trans
+                to_trans_raw_sig_def zero_option_def)
+              thus ?thesis
+                unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+            qed
+            also have "... = get_state res' A"
+            proof -
+              have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) A time = None"
+                unfolding inf_time_none_iff[THEN sym]
+              proof 
+                { fix x 
+                  assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A)"
+                  hence "(\<tau>'(t' := 0)) x A \<noteq> None"
+                    unfolding dom_def to_trans_raw_sig_def by auto
+                  hence "x \<noteq> t'"
+                    unfolding fun_upd_def zero_fun_def zero_option_def by auto
+                  assume "x \<le> time"
+                  have "(\<tau>'(t' := 0)) x A = \<tau>' x A"
+                    using `x \<noteq> t'` by auto
+                  also have "... = \<tau> x A"
+                    using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+                    by auto
+                  also have "... = None"
+                    using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> \<open>time \<le> i\<close> 
+                    by (metis \<open>x \<le> time\<close> inf_time_noneE2 le_less_trans not_le to_trans_raw_sig_def zero_option_def) 
+                  finally have "False"
+                    using \<open>(\<tau>'(t' := 0)) x A \<noteq> None\<close> by blast }
+                thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A) \<Longrightarrow> time < x"
+                  using le_less_linear by blast
+              qed
+              thus ?thesis
+                using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `A \<notin> set (signals_from nand4)`] 
+                by auto
+            qed
+            finally have "signal_of (def A) \<tau> A i = get_state res' A"
+              by auto
+            have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+              using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+              `\<not> disjnt {B, A} (get_event res')` by auto
+            obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+              \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+              using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+              by blast
+            have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+              by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def B) \<tau> B i =
+              get_state res' B\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+              beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+              styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+            moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+              by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+              \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of
+              (get_state res' B))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+              val.distinct(1) val.exhaust_sel)
+            ultimately have "x' = Bv (\<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A)))"
+              using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+              by (smt beval_cases(1) val.distinct(1))
+            have "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+            proof (rule ccontr)
+              assume "\<not> \<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+              hence "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+                by auto
+              hence "\<tau>_res time C = post_raw C x' (get_trans res') (time + 0) time C"
+                unfolding \<tau>_res_def[THEN sym] trans_post_raw_def by auto
+              hence "next_time time \<tau>_res = time"
+                by (simp add: \<open>\<tau>_res = 0\<close> post_raw_def zero_fun_def zero_option_def)
+              thus "False"
+                using `next_time time \<tau>_res < Suc i`  using \<open>time < Suc i\<close> 
+                by (simp add: \<open>\<tau>_res = 0\<close>)
+            qed
+            moreover have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+              using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+              by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+              b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+              diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+              option.distinct(1) snd_conv zero_fun_def zero_option_def)
+            ultimately have "x' = get_state res' C"
+              unfolding post_necessary_raw_correctness by blast
+            hence "bval_of (get_state res' C) \<longleftrightarrow> \<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A))"
+              using `x' = Bv (\<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A)))`
+              using val.sel(1) by presburger
+            hence ?thesis
+              using `signal_of (def B) \<tau> B i = get_state res' B` `signal_of (def A) \<tau> A i = get_state res' A`
+              `signal_of (def C) (get_beh res) C i = get_state res' C` by auto }
+          moreover
+          { assume "\<tau>_res \<noteq> 0"
+            have "time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res"
+              using conc_cases(1)[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`[unfolded nand4_def]]
+              `\<not> disjnt {B, A} (get_event res')` by auto
+            obtain x' where " time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'" and 
+              \<tau>_res_def: " trans_post_raw C x' (get_state res' C) (get_trans res') time 0 = \<tau>_res"
+              using seq_cases_trans[OF `time , get_state res' , get_event res' , get_beh res', def  \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 0 , get_trans res'> \<longrightarrow>\<^sub>s \<tau>_res`]
+              by blast
+            have "\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0"
+              using b_conc_exec_preserve_trans_removal[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`]
+              b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] by auto
+            have "next_time time \<tau>_res = time"
+            proof (rule ccontr)
+              assume "next_time time \<tau>_res \<noteq> time" 
+              hence "time < next_time time \<tau>_res"
+                by (metis \<open>\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0\<close> nat_less_le next_time_at_least)
+              hence "\<tau>_res (next_time time \<tau>_res) C = None"
+                unfolding \<tau>_res_def[THEN sym] trans_post_raw_def preempt_raw_def post_raw_def
+                by (smt add.right_neutral dual_order.strict_implies_order fun_upd_eqD fun_upd_triv nat_neq_iff)
+              have "next_time time \<tau>_res = (LEAST n. dom (\<tau>_res n) \<noteq> {})"
+                using `\<tau>_res \<noteq> 0` unfolding next_time_def by auto
+              hence "\<tau>_res time = 0"
+                using `time < next_time time \<tau>_res`  using next_time_at_least2 by blast
+              have "\<exists>n. dom (\<tau>_res n) \<noteq> {}"
+                using `\<tau>_res \<noteq> 0` unfolding dom_def zero_fun_def zero_option_def by fastforce
+              have "\<tau>_res (next_time time \<tau>_res) \<noteq> 0"
+                by (metis (mono_tags, lifting) LeastI \<open>\<exists>n. dom (\<tau>_res n) \<noteq> {}\<close> \<open>next_time time \<tau>_res = (LEAST n. dom (\<tau>_res n) \<noteq> {})\<close> dom_eq_empty_conv zero_map)
+              hence "\<tau>_res (next_time time \<tau>_res) B \<noteq> None \<or> \<tau>_res (next_time time \<tau>_res) A \<noteq> None "
+                using `\<tau>_res (next_time time \<tau>_res) C = None` unfolding zero_fun_def zero_option_def 
+                by (metis sig.exhaust)
+              hence "get_trans res' (next_time time \<tau>_res) B \<noteq> None \<or> get_trans res' (next_time time \<tau>_res) A \<noteq> None"
+                using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res`]
+                by (simp add: \<open>B \<notin> set (signals_from nand4)\<close> \<open>A \<notin> set (signals_from nand4)\<close>)
+              hence "(\<tau>'(t' := 0)) (next_time time \<tau>_res) B \<noteq> None \<or> (\<tau>'(t' := 0)) (next_time time \<tau>_res) A \<noteq> None"
+                using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `B \<notin> set (signals_from nand4)`]
+                using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `A \<notin> set (signals_from nand4)`]
+                by (simp add: \<open>time < next_time time \<tau>_res\<close>)
+              hence "\<tau>' (next_time time \<tau>_res) B \<noteq> None \<or> \<tau>' (next_time time \<tau>_res) A \<noteq> None"
+                by (metis \<open>\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0\<close> \<open>\<tau>_res (next_time time \<tau>_res) \<noteq> 0\<close> \<open>next_time time \<tau>_res \<noteq> time\<close> \<open>t' < time \<or> t' = time\<close> fun_upd_other)
+              hence "\<tau> (next_time time \<tau>_res) B \<noteq> None \<or> \<tau> (next_time time \<tau>_res) A \<noteq> None"
+                by (metis \<open>\<And>thesis. (\<And>x. \<lbrakk>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x;
+                trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> sig.distinct(3)
+                sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+              thus "False"
+                using inf_time_someE[OF \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close>]
+                \<open>time < next_time time \<tau>_res\<close> \<open>next_time time \<tau>_res < Suc i\<close>
+                by (metis \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> domIff inf_time_noneE2 less_Suc_eq_le not_le to_trans_raw_sig_def zero_option_def)
+            qed
+            hence "\<tau>_res time \<noteq> 0"
+              using `\<tau>_res \<noteq> 0` unfolding zero_fun_def zero_option_def next_time_def 
+              by (metis (mono_tags, lifting) LeastI_ex dom_eq_empty_conv)
+            have " get_trans res' time = 0"
+              using get_trans_res_maxtime[OF bigstep2_pre ] by auto          
+            hence "\<tau>_res time B = 0" and "\<tau>_res time A = 0"
+              using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `B \<notin> set (signals_from nand4)`]
+              using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `A \<notin> set (signals_from nand4)`]
+              by (metis zero_fun_def)+
+            hence " B \<notin> next_event time \<tau>_res (get_state res')" and " A \<notin> next_event time \<tau>_res (get_state res')"
+              unfolding next_event_alt_def next_state_def \<open>next_time time \<tau>_res = time\<close> 
+              by (smt domIff mem_Collect_eq override_on_def zero_option_def)+
+            hence "disjnt {B, A} (next_event time \<tau>_res (get_state res'))"
+              by auto
+            have "\<tau>_res time C \<noteq> 0"
+            proof (rule ccontr)
+              assume "\<not> \<tau>_res time C \<noteq> 0" hence "\<tau>_res time C = 0" by auto
+              hence "\<tau>_res time = 0"
+                using `\<tau>_res time B = 0` `\<tau>_res time A = 0` 
+                unfolding zero_fun_def zero_option_def  by (metis sig.exhaust)
+              with `\<tau>_res time \<noteq> 0` show False 
+                by auto
+            qed
+            have "post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+            proof (rule ccontr)
+              assume "\<not> post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)"
+              hence "\<tau>_res time C = 0"
+                unfolding \<tau>_res_def[THEN sym] trans_post_raw_def preempt_raw_def by (auto simp add: zero_option_def)
+              with `\<tau>_res time C \<noteq> 0` show False
+                by auto
+            qed
+            hence "\<tau>_res time C = Some x'"
+              unfolding \<tau>_res_def[THEN sym] trans_post_raw_def post_raw_def by auto
+            have "\<not> (\<exists>i\<le>time + 0 - 1. get_trans res' i C = Some x')"
+              using b_simulate_fin_preserve_trans_removal[OF bigstep2_pre trans_removal] 
+              by (metis (no_types, hide_lams) Suc_diff_1 \<open>t' < time \<or> t' = time\<close> add.right_neutral
+              b_simulate_fin.intros(4) b_simulate_fin_deterministic bigstep2_pre comp_eq_dest_lhs
+              diff_le_self fun_upd_same le_imp_less_Suc not_gr_zero not_le not_less_zero
+              option.distinct(1) snd_conv zero_fun_def zero_option_def)
+            hence "get_state res' C \<noteq> x'"
+              using `post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)`
+              unfolding post_necessary_raw_correctness2 
+              by (metis (no_types, lifting) Suc_diff_1 \<open>next_time time \<tau>_res = time\<close> \<open>post_necessary_raw
+              0 (get_trans res') time C x' (get_state res' C)\<close> \<tau>_res_def add.right_neutral
+              le_imp_less_Suc next_time_at_least2 option.distinct(1) order.asym post_raw_def
+              trans_post_raw_def zero_fun_def zero_option_def)
+            hence "get_state res'  C \<noteq> the (\<tau>_res time C)"
+              by (simp add: \<open>\<tau>_res time C = Some x'\<close>)
+            hence "C \<in> (next_event time \<tau>_res (get_state res'))" 
+              unfolding next_event_alt_def next_state_def 
+              by (smt \<open>\<tau>_res time C \<noteq> 0\<close> \<open>next_time time \<tau>_res = time\<close> comp_def domIff mem_Collect_eq override_on_apply_in zero_option_def)
+            hence "next_time time
+                \<tau>_res , next_state time \<tau>_res
+                         (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def  \<turnstile> <nand4 , \<tau>_res
+               (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c  \<tau>_res (next_time time \<tau>_res := 0)"
+              using `disjnt {B, A} (next_event time \<tau>_res (get_state res'))` 
+              unfolding nand4_def  by (simp add: b_conc_exec.intros(1))
+            have " \<not> quiet (\<tau>_res(next_time time \<tau>_res := 0)) (next_event time \<tau>_res (get_state res'))"
+              by (metis \<open>C \<in> next_event time \<tau>_res (get_state res')\<close> empty_iff quiet_def)
+            have "(\<tau>_res (next_time time \<tau>_res := 0)) \<noteq> 0 \<Longrightarrow> Suc i \<le> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+              unfolding `next_time time \<tau>_res = time`
+            proof (rule ccontr)
+              assume " \<tau>_res(time := 0) \<noteq> 0"
+              assume "\<not> Suc i \<le> next_time time (\<tau>_res (time := 0))"
+              hence "next_time time (\<tau>_res (time := 0)) < Suc i"
+                by auto
+              have "to_trans_raw_sig (\<tau>_res (time := 0)) C = 0"
+                using `\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0`
+                using `post_necessary_raw 0 (get_trans res') time C x' (get_state res' C)`
+                unfolding to_trans_raw_sig_def \<tau>_res_def[THEN sym] trans_post_raw_def post_raw_def
+                zero_fun_def zero_option_def 
+                by (intro ext) auto
+              have tr: "\<And>n. n < time \<Longrightarrow> (\<tau>_res (time := 0)) n = 0"
+                using `\<And>n. n < time \<Longrightarrow> \<tau>_res n = 0` by auto
+              have "time \<le> next_time time (\<tau>_res (time := 0))"
+                by (intro next_time_at_least[OF tr] )
+              moreover have "time \<noteq> next_time time (\<tau>_res (time := 0))"
+                by (smt Suc_eq_plus1 Suc_n_not_le_n fun_upd_same less_Suc_eq next_time_at_least next_time_def tr)
+              ultimately have "time < next_time time (\<tau>_res (time := 0))"
+                by auto
+              have "(\<tau>_res(time := 0)) (next_time time (\<tau>_res (time := 0))) \<noteq> 0"
+                using `\<tau>_res (time := 0) \<noteq> 0` unfolding next_time_def zero_fun_def zero_option_def
+              proof -
+                assume a1: "\<tau>_res(time := Map.empty) \<noteq> (\<lambda>x. Map.empty)"
+                have f2: "\<And>n. {s. (\<tau>_res(time := Map.empty)) n s \<noteq> None} = {} \<or> dom ((\<tau>_res(time := Map.empty)) (LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {})) \<noteq> {}"
+                  by (metis (mono_tags, lifting) LeastI_ex a1 dom_eq_empty_conv) 
+                obtain nn :: nat and ss :: sig where f3: "(\<tau>_res(time := Map.empty)) nn ss \<noteq> None"
+                  using a1 by meson
+                obtain ssa :: "(sig \<Rightarrow> val option) \<Rightarrow> sig" where f4: "\<And>f s fa. (dom f \<noteq> {} \<or> f (s::sig) = (None::val option)) \<and> (fa (ssa fa) \<noteq> None \<or> dom fa = {})"
+                  by (metis (no_types) dom_eq_empty_conv)
+                then have "{s. (\<tau>_res(time := Map.empty)) (LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) s \<noteq> None} \<noteq> {}"
+                  using f3 f2 by (metis (no_types) dom_def)
+                then have "{s. (\<tau>_res(time := Map.empty)) (if \<forall>n s. (\<tau>_res(time := Map.empty)) n s = None then Suc time else LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) s \<noteq> None} = {} \<longrightarrow> (\<forall>n s. (\<tau>_res(time := Map.empty)) n s = None)"
+                  by presburger
+                then have "\<exists>s. (\<tau>_res(time := Map.empty)) (if \<forall>n s. (\<tau>_res(time := Map.empty)) n s = None then Suc time else LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) s \<noteq> None"
+                  using f4 f3 by blast
+                then show "(\<tau>_res(time := Map.empty)) (if \<tau>_res(time := Map.empty) = (\<lambda>n. Map.empty) then time + 1 else LEAST n. dom ((\<tau>_res(time := Map.empty)) n) \<noteq> {}) \<noteq> Map.empty"
+                  by (metis Suc_eq_plus1)
+              qed
+              hence "(\<tau>_res(time := 0)) (next_time time (\<tau>_res (time := 0))) B \<noteq> 0 \<or> 
+                    (\<tau>_res(time := 0)) (next_time time (\<tau>_res (time := 0))) A \<noteq> 0" 
+                using `to_trans_raw_sig (\<tau>_res (time := 0)) C = 0` unfolding to_trans_raw_sig_def
+              proof -
+                assume a1: "(\<lambda>n. (\<tau>_res(time := 0)) n C) = 0"
+                obtain ss :: "sig set \<Rightarrow> sig set \<Rightarrow> sig" where
+                  "\<forall>x0 x1. (\<exists>v2. v2 \<in> x1 \<and> v2 \<notin> x0) = (ss x0 x1 \<in> x1 \<and> ss x0 x1 \<notin> x0)"
+                  by moura
+                then have f2: "\<forall>S Sa. ss Sa S \<in> S \<and> ss Sa S \<notin> Sa \<or> S \<subseteq> Sa"
+                  by (meson subsetI)
+                then have "dom (0::sig \<Rightarrow> val option) \<subseteq> {}"
+                  by (meson domIff zero_map)
+                then have f3: "\<not> dom ((\<tau>_res(time := 0)) (next_time time (\<tau>_res(time := 0)))) \<subseteq> {}"
+                  using \<open>(\<tau>_res(time := 0)) (next_time time (\<tau>_res(time := 0))) \<noteq> 0\<close> by auto
+                have "(\<tau>_res(time := 0)) (next_time time (\<tau>_res(time := 0))) C = None"
+                  using a1 by (metis (no_types) zero_map)
+                then show ?thesis
+                  using f3 f2 by (metis (full_types) domIff sig.exhaust zero_option_def)
+              qed
+              hence "get_trans res' (next_time time (\<tau>_res (time := 0))) B \<noteq> 0 \<or> 
+                     get_trans res' (next_time time (\<tau>_res (time := 0))) A \<noteq> 0"
+                using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `B \<notin> set (signals_from nand4)`]
+                using b_conc_exec_modifies_local_strongest[OF `time, get_state res', get_event res', get_beh res', def \<turnstile> <nand4, get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res` `B \<notin> set (signals_from nand4)`]
+                using `time < next_time time (\<tau>_res (time := 0))` 
+                using \<open>A \<notin> set (signals_from nand4)\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> b_conc_exec_modifies_local_strongest by fastforce
+              hence "(\<tau>'(t' := 0)) (next_time time (\<tau>_res(time := 0))) B \<noteq> None \<or> (\<tau>'(t' := 0)) (next_time time (\<tau>_res(time := 0))) A \<noteq> None"
+                using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `B \<notin> set (signals_from nand4)`]
+                using b_simulate_fin_get_trans_gt_maxtime[OF bigstep2_pre `A \<notin> set (signals_from nand4)`]
+                by (simp add: \<open>time < next_time time (\<tau>_res(time := 0))\<close> zero_option_def)
+              hence "\<tau>' (next_time time (\<tau>_res(time := 0))) B \<noteq> None \<or> \<tau>' (next_time time (\<tau>_res(time := 0))) A \<noteq> None"
+                by (metis fun_upd_other fun_upd_same zero_map)
+              hence "\<tau> (next_time time (\<tau>_res(time := 0))) B \<noteq> None \<or> \<tau> (next_time time (\<tau>_res(time := 0))) A \<noteq> None"
+                by (metis \<open>\<And>thesis. (\<And>x. \<lbrakk>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x;
+                trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<rbrakk> \<Longrightarrow> thesis) \<Longrightarrow> thesis\<close> sig.distinct(3)
+                sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
+              thus "False"
+                using inf_time_someE[OF \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close>]
+                \<open>time < next_time time (\<tau>_res(time:= 0))\<close> \<open>next_time time (\<tau>_res(time := 0)) < Suc i\<close>
+                by (metis Suc_leI \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> domIff inf_time_noneE2 not_less_eq_eq to_trans_raw_sig_def zero_option_def)
+            qed
+            have "(\<tau>_res (next_time time \<tau>_res := 0)) = 0 \<Longrightarrow> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) \<le> Suc i"
+              unfolding `next_time time \<tau>_res = time` using `time < Suc i` by auto
+            have "(\<tau>_res (next_time time \<tau>_res := 0)) = 0 \<or> (\<tau>_res (next_time time \<tau>_res := 0)) \<noteq> 0"
+              by auto
+            moreover
+            { assume "(\<tau>_res (next_time time \<tau>_res := 0)) = 0"
+              hence " next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) \<le> Suc i"
+                using \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0 \<Longrightarrow> next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) \<le> Suc i\<close> by blast
+              hence bigstep4: " Suc i, next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) , 
+                                       next_state (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                       next_event (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                       Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def, def \<turnstile> 
+                                        <nand4 , (\<tau>_res (next_time time \<tau>_res := 0)) (next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) := 0)> \<leadsto> res"
+                using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` 
+                by (smt \<open>C \<in> next_event time \<tau>_res (get_state res')\<close> \<open>next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c \<tau>_res (next_time time \<tau>_res := 0)\<close> bigstep3 case_bau empty_iff quiet_def)
+              have "next_event (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) = {}"
+                unfolding `(\<tau>_res (next_time time \<tau>_res := 0)) = 0` next_event_alt_def  next_state_def
+                Let_def zero_fun_def zero_option_def 
+                by (smt \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0\<close> domIff empty_Collect_eq fun_upd_apply override_on_apply_notin zero_fun_def zero_map)
+              have " (\<tau>_res (next_time time \<tau>_res := 0)) (next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) := 0) = 0"
+                using `(\<tau>_res (next_time time \<tau>_res := 0)) = 0`  by (simp add: fun_upd_idem_iff zero_fun_def)
+              have "next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) < Suc i \<or> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) = Suc i"
+                using \<open>next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) \<le> Suc i\<close> le_imp_less_or_eq by blast
+              moreover
+              { assume "next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) = Suc i"
+                hence "res =
+         (Suc i, next_state (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          next_event (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+           (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def,
+          \<tau>_res(next_time time \<tau>_res := 0, next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) := 0))"
+                  using bau[OF bigstep4] by auto
+                hence gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto }
+              moreover
+              { assume "next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) < Suc i"
+                hence "res =
+         (Suc i, next_state (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          next_event (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+           (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def,
+          0)"
+                  using bau[OF bigstep4] 
+                  by (smt \<open>\<tau>_res (next_time time \<tau>_res := 0, next_time (next_time time \<tau>_res)
+                  (\<tau>_res(next_time time \<tau>_res := 0)) := 0) = 0\<close> \<open>next_event (next_time time \<tau>_res)
+                  (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) = {}\<close>
+                  quiet_def)
+                hence "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+           (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto }
+              ultimately have gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                by auto
+              have " (next_time time \<tau>_res) \<le> i"
+                using \<open>next_time time \<tau>_res < Suc i\<close> less_Suc_eq_le by blast
+              have "signal_of (def C) (get_beh res) C i = (next_state time \<tau>_res (get_state res')) C"
+                unfolding gb_res
+                apply (intro signal_of_add_to_beh2'[OF `next_time time \<tau>_res \<le> i`] )
+                by (smt Femto_VHDL_raw.add_to_beh2_def \<open>next_time time \<tau>_res = time\<close> b_simulate_fin_preserves_hist bigstep2_pre fun_upd_other nat_neq_iff trans_removal zero_fun_def)
+              also have "... = the (\<tau>_res time C)"
+                unfolding next_state_def `next_time time \<tau>_res = time` Let_def 
+                by (metis \<open>\<tau>_res time C \<noteq> 0\<close> comp_apply domIff override_on_apply_in zero_option_def)
+              also have "... = x'"
+                by (simp add: \<open>\<tau>_res time C = Some x'\<close>)
+              finally have "signal_of (def C) (get_beh res) C i = x'"
+                by auto
+              have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+                using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+              also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+                by (metis \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> comp_apply option.simps(5) sig.distinct(5) signal_of_trans_post to_signal_def)
+              also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+                by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+              also have "... = signal_of (get_state res' B) (get_trans res') B i"
+                using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` _ trans_removal] `time < Suc i`
+                using less_Suc_eq_le by blast
+              also have "... = get_state res' B"
+                by (metis (mono_tags, lifting) \<open>B \<notin> set (signals_from nand4)\<close> \<open>\<tau>_res time B = 0\<close>
+                \<open>\<tau>_res(next_time time \<tau>_res := 0) = 0\<close> \<open>next_time time \<tau>_res = time\<close> \<open>time , get_state
+                res' , get_beh' res' , get_beh res', def \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close>
+                b_conc_exec_modifies_local_strongest fun_upd_def signal_of_def zero_fun_def)
+              finally have "signal_of (def B) \<tau> B i = get_state res' B"
+                by auto
+              have "signal_of (def A) \<tau> A i  = def A"
+                using `inf_time (to_trans_raw_sig \<tau>) A i = None` 
+                by (simp add: to_signal_def)
+              also have "... = \<sigma>' A"
+              proof -
+                have "A \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+                  using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close>
+                  using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+                  by (metis \<open>next_time 0 \<tau>' \<le> time\<close> \<open>next_time time \<tau>_res = time\<close> \<open>next_time time \<tau>_res \<le> i\<close> domD domI inf_time_none_iff leD le_trans to_trans_raw_sig_def)
+                thus ?thesis
+                  unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+              qed
+              also have "... = get_state res' A"
+              proof -
+                have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) A time = None"
+                  unfolding inf_time_none_iff[THEN sym]
+                proof 
+                  { fix x 
+                    assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A)"
+                    hence "(\<tau>'(t' := 0)) x A \<noteq> None"
+                      unfolding dom_def to_trans_raw_sig_def by auto
+                    hence "x \<noteq> t'"
+                      unfolding fun_upd_def zero_fun_def zero_option_def by auto
+                    assume "x \<le> time"
+                    have "(\<tau>'(t' := 0)) x A = \<tau>' x A"
+                      using `x \<noteq> t'` by auto
+                    also have "... = \<tau> x A"
+                      using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+                      by auto
+                    also have "... = None"
+                      using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> 
+                      by (metis \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> \<open>x \<le> time\<close> inf_time_at_most inf_time_noneE2 le_trans to_trans_raw_sig_def zero_option_def) 
+                    finally have "False"
+                      using \<open>(\<tau>'(t' := 0)) x A \<noteq> None\<close> by blast }
+                  thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A) \<Longrightarrow> time < x"
+                    using le_less_linear by blast
+                qed
+                thus ?thesis
+                  using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `A \<notin> set (signals_from nand4)`] 
+                  by auto
+              qed
+              finally have "signal_of (def A) \<tau> A i = get_state res' A"
+                by auto
+              have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+                by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def B) \<tau> B i =
+                get_state res' B\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+                beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+                styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+              moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+                by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+                \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of
+                (get_state res' B))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+                val.distinct(1) val.exhaust_sel)
+              ultimately have "x' = Bv (\<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A)))"
+                using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+                by (smt beval_cases(1) val.distinct(1))
+              hence ?thesis
+                using \<open>signal_of (def B) \<tau> B i = get_state res' B\<close> \<open>signal_of (def A) \<tau> A i = get_state res' A\<close> \<open>signal_of (def C) (get_beh res) C i = x'\<close> 
+                by auto }
+            moreover
+            { assume " (\<tau>_res (next_time time \<tau>_res := 0)) \<noteq> 0"
+              hence "Suc i \<le> next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+                using \<open>\<tau>_res(next_time time \<tau>_res := 0) \<noteq> 0 \<Longrightarrow> Suc i \<le> next_time (next_time time \<tau>_res)
+                (\<tau>_res(next_time time \<tau>_res := 0))\<close> by metis
+              hence "Suc i < next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) \<or> Suc i = next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"        
+                by auto
+              moreover
+              { assume "Suc i = next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+                hence bigstep4: " Suc i, next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) , 
+                                         next_state (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                         next_event (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')) , 
+                                         Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def, def \<turnstile> 
+                                          <nand4 , (\<tau>_res (next_time time \<tau>_res := 0)) (next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0)) := 0)> \<leadsto> res"
+                  using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` 
+                  by (smt \<open>Suc i \<le> next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0))\<close> \<open>\<tau>_res(next_time time \<tau>_res := 0) \<noteq> 0\<close> \<open>next_time time \<tau>_res , next_state time \<tau>_res (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def \<turnstile> <nand4 , \<tau>_res (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c \<tau>_res (next_time time \<tau>_res := 0)\<close> bigstep3 case_bau quiet_def)
+                hence "res =
+         (Suc i, next_state (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          next_event (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) (next_state time \<tau>_res (get_state res')),
+          Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+           (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def,
+          \<tau>_res(next_time time \<tau>_res := 0, next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0)) := 0))"
+                  using bau[OF bigstep4] 
+                  using \<open>Suc i = next_time (next_time time \<tau>_res) (\<tau>_res(next_time time \<tau>_res := 0))\<close> by fastforce
+                hence "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto }
+              moreover
+              { assume "Suc i < next_time (next_time time \<tau>_res) (\<tau>_res (next_time time \<tau>_res := 0))"
+                hence "res =
+               (Suc i, next_state time \<tau>_res (get_state res'), {},
+                Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res'))
+                 (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def, \<tau>_res (next_time time \<tau>_res := 0))"
+                  using bau[OF bigstep3] `next_time time \<tau>_res < Suc i` \<open> \<not> quiet (\<tau>_res(next_time time \<tau>_res := 0)) (next_event time \<tau>_res (get_state res'))\<close>
+                  \<open>next_time time
+                \<tau>_res , next_state time \<tau>_res
+                         (get_state res') , next_event time \<tau>_res (get_state res') , Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def, def  \<turnstile> <nand4 , \<tau>_res
+               (next_time time \<tau>_res := 0)> \<longrightarrow>\<^sub>c  \<tau>_res (next_time time \<tau>_res := 0)\<close> 
+                  by (smt b_conc_exec_deterministic less_le_not_le)
+                hence "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto }
+              ultimately have gb_res: "get_beh res = Femto_VHDL_raw.add_to_beh2 (next_state time \<tau>_res (get_state res')) (Femto_VHDL_raw.add_to_beh2 (get_state res') (get_beh res') time def) (next_time time \<tau>_res) def"
+                  by auto
+              have " (next_time time \<tau>_res) \<le> i"
+                using \<open>next_time time \<tau>_res < Suc i\<close> less_Suc_eq_le by blast
+              have "signal_of (def C) (get_beh res) C i = (next_state time \<tau>_res (get_state res')) C"
+                unfolding gb_res
+                apply (intro signal_of_add_to_beh2'[OF `next_time time \<tau>_res \<le> i`] )
+                by (smt Femto_VHDL_raw.add_to_beh2_def \<open>next_time time \<tau>_res = time\<close> b_simulate_fin_preserves_hist bigstep2_pre fun_upd_other nat_neq_iff trans_removal zero_fun_def)
+              also have "... = the (\<tau>_res time C)"
+                unfolding next_state_def `next_time time \<tau>_res = time` Let_def 
+                by (metis \<open>\<tau>_res time C \<noteq> 0\<close> comp_apply domIff override_on_apply_in zero_option_def)
+              also have "... = x'"
+                by (simp add: \<open>\<tau>_res time C = Some x'\<close>)
+              finally have "signal_of (def C) (get_beh res) C i = x'"
+                by auto
+              have "signal_of (def B) \<tau> B i  = signal_of (def B) \<tau>' B i"
+                using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `B \<notin> set (signals_from nand4)`]
+                using \<open>trans_post_raw C x (def C) \<tau> 0 0 = \<tau>'\<close> signal_of_trans_post by fastforce
+              also have "... = signal_of (\<sigma>' B) \<tau>' B i"
+                by (metis \<open>inf_time (to_trans_raw_sig \<tau>) B i = Some time\<close> \<tau>'_def comp_def option.simps(5) sig.simps(6) signal_of_trans_post to_signal_def)
+              also have "... = signal_of (\<sigma>' B) (\<tau>'(t':=0)) B i"
+                by (smt \<open>next_state 0 \<tau>' def = \<sigma>'\<close> \<open>next_time 0 \<tau>' = t'\<close> comp_apply next_state_def next_time_at_least2 override_on_apply_in signal_of_rem_curr_trans_at_t)
+              also have "... = signal_of (get_state res' B) (get_trans res') B i"
+                using bau_signal_of[OF bigstep2_pre `B \<notin> set (signals_from nand4)` _ trans_removal] `time < Suc i`
+                using less_Suc_eq_le by blast
+              also have "... = get_state res' B"
+                by (smt \<open>B \<notin> set (signals_from nand4)\<close> \<open>Suc i \<le> next_time (next_time time \<tau>_res)
+                (\<tau>_res(next_time time \<tau>_res := 0))\<close> \<open>\<tau>_res time B = 0\<close> \<open>get_trans res' time = 0\<close>
+                \<open>next_time time \<tau>_res = time\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def
+                \<turnstile> <nand4 , get_trans res'> \<longrightarrow>\<^sub>c \<tau>_res\<close> antisym_conv2 b_conc_exec_modifies_local_strongest
+                dual_order.strict_trans2 fun_upd_other lessI next_time_at_least2 signal_of_def
+                signal_of_suc_sig)
+              finally have "signal_of (def B) \<tau> B i = get_state res' B"
+                by auto
+              have "signal_of (def A) \<tau> A i  = def A"
+                using `inf_time (to_trans_raw_sig \<tau>) A i = None` 
+                by (simp add: to_signal_def)
+              also have "... = \<sigma>' A"
+              proof -
+                have "A \<notin> (dom (\<tau>' (next_time 0 \<tau>')))"
+                  using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close>
+                  using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+                  by (metis \<open>next_time 0 \<tau>' \<le> time\<close> \<open>next_time time \<tau>_res = time\<close> \<open>next_time time
+                  \<tau>_res \<le> i\<close> domD domI inf_time_none_iff leD order.trans to_trans_raw_sig_def)
+                thus ?thesis
+                  unfolding `next_state 0 \<tau>' def = \<sigma>'`[THEN sym] next_state_def Let_def  by simp
+              qed
+              also have "... = get_state res' A"
+              proof -
+                have "inf_time (to_trans_raw_sig (\<tau>'(t' := 0))) A time = None"
+                  unfolding inf_time_none_iff[THEN sym]
+                proof 
+                  { fix x 
+                    assume " x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A)"
+                    hence "(\<tau>'(t' := 0)) x A \<noteq> None"
+                      unfolding dom_def to_trans_raw_sig_def by auto
+                    hence "x \<noteq> t'"
+                      unfolding fun_upd_def zero_fun_def zero_option_def by auto
+                    assume "x \<le> time"
+                    have "(\<tau>'(t' := 0)) x A = \<tau>' x A"
+                      using `x \<noteq> t'` by auto
+                    also have "... = \<tau> x A"
+                      using init'_modifies_local_strongest[OF `init' 0 def {} 0 def nand4 \<tau> \<tau>'` `A \<notin> set (signals_from nand4)`]          
+                      by auto
+                    also have "... = None"
+                      using \<open>inf_time (to_trans_raw_sig \<tau>) A i = None\<close> \<open>time < Suc i\<close> 
+                      by (metis \<open>next_time time \<tau>_res = time\<close> \<open>next_time time \<tau>_res \<le> i\<close> \<open>x \<le> time\<close>
+                      inf_time_noneE2 le_trans to_trans_raw_sig_def zero_option_def)
+                    finally have "False"
+                      using \<open>(\<tau>'(t' := 0)) x A \<noteq> None\<close> by blast }
+                  thus "\<And>x. x \<in> dom (to_trans_raw_sig (\<tau>'(t' := 0)) A) \<Longrightarrow> time < x"
+                    using le_less_linear by blast
+                qed
+                thus ?thesis
+                  using get_state_b_simulate_fin_inf_none[OF bigstep2_pre `A \<notin> set (signals_from nand4)`] 
+                  by auto
+              qed
+              finally have "signal_of (def A) \<tau> A i = get_state res' A"
+                by auto
+              have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' B))"
+                by (smt \<open>0 , def , {} , 0, def \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x\<close> \<open>signal_of (def B) \<tau> B i =
+                get_state res' B\<close> \<open>x = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))\<close> assms(4) assms(6)
+                beval_cases(1) beval_cases(9) beval_raw.intros(1) signal_of_preserve_well_typedness
+                styping_def ty.simps(3) type_of.simps(1) type_of.simps(2) val.exhaust_sel)
+              moreover have "time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (get_state res' A))"
+                by (smt \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bnand (Bsig A) (Bsig B)
+                \<longrightarrow>\<^sub>b x'\<close> \<open>time , get_state res' , get_beh' res' , get_beh res', def \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of
+                (get_state res' B))\<close> beval_cases(9) beval_raw.intros(1) beval_raw_deterministic
+                val.distinct(1) val.exhaust_sel)
+              ultimately have "x' = Bv (\<not> (bval_of (get_state res' B) \<and> bval_of (get_state res' A)))"
+                using beval_cases(9)[OF `time , get_state res' , get_beh' res' , get_beh res', def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b x'`]
+                by (smt beval_cases(1) val.distinct(1))
+              hence ?thesis
+                using \<open>signal_of (def B) \<tau> B i = get_state res' B\<close> \<open>signal_of (def A) \<tau> A i = get_state res' A\<close> \<open>signal_of (def C) (get_beh res) C i = x'\<close> 
+                by auto }
+            ultimately have ?thesis
+              by auto }
+          ultimately have ?thesis
+            by auto }
+        ultimately have ?thesis
+          using nat_neq_iff by blast }
+    ultimately show ?thesis
+      by auto
+  qed
 qed
 
 lemma signal_of2_cong_neq_none_at_0:
@@ -1554,1679 +4863,6 @@ proof -
   qed
   thus ?thesis
     unfolding to_signal_def comp_def by auto
-qed
-
-theorem nand3_correctness:
-  assumes "b_simulate (Suc i) def nand3 \<tau> res"
-  assumes "to_trans_raw_sig \<tau> C = 0"
-  assumes "conc_wt \<Gamma> nand3" and "styping \<Gamma> def" and "\<Gamma> C = Bty" and "ttyping \<Gamma> \<tau>"
-  shows "bval_of (get_state res C) \<longleftrightarrow>
-          \<not> (bval_of (signal_of (def A) \<tau> A i) \<and> bval_of (signal_of (def B) \<tau> B i))"
-proof (cases " \<tau> 0 = 0")
-  case True
-  have "seq_wt \<Gamma> (get_seq nand3)"
-    using `conc_wt \<Gamma> nand3`
-    by (metis conc_stmt.distinct(1) conc_stmt.sel(4) conc_wt.cases nand3_def)
-  hence "bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)"
-    using seq_wt_cases(4)  by (metis conc_stmt.sel(4) nand3_def)
-  hence "\<Gamma> A = Bty" and "\<Gamma> B = Bty"
-    using bexp_wt_cases  
-    by (metis assms(5) bexp_wt_cases_slice(2))
-       (metis \<open>bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)\<close> assms(5) bexp_wt_cases(4) bexp_wt_cases_slice(2))
-  hence "is_Bv (def A)" and "is_Bv (def B)"
-    by (metis assms(4) styping_def ty.simps(3) type_of.simps(2) val.collapse(2))+
-  hence "0 , def , {} , 0, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (def A))" and
-        "0 , def , {} , 0, def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (def B))"
-    by (auto intro!: beval_raw.intros)
-  hence "0 , def , {} , 0, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b (Bv (\<not> (bval_of (def A) \<and> bval_of (def B))))" (is "_, _, _, _, _ \<turnstile> _ \<longrightarrow>\<^sub>b ?x")
-    by (intro beval_raw.intros)
-  hence "0, def, {}, 0, def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1, \<tau>> \<longrightarrow>\<^sub>s trans_post_raw C ?x (def C) \<tau> 0 1"
-    by (simp add: b_seq_exec.intros(5))
-  let ?\<tau>' = "trans_post_raw C ?x (def C) \<tau> 0 1"
-  have "init' 0 def {} 0 def nand3 \<tau> ?\<tau>'"
-    unfolding nand3_def
-    by (meson \<open>0 , def , {} , 0 , def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 , \<tau>> \<longrightarrow>\<^sub>s
-    trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1\<close> init'.intros(1))
-  have "ttyping \<Gamma> ?\<tau>'"
-    using trans_post_preserve_type_correctness[OF _ `ttyping \<Gamma> \<tau>`]
-    by (simp add: assms(5))
-  hence "styping \<Gamma> (next_state 0 ?\<tau>' def)"
-    using next_state_preserve_styping[OF `styping \<Gamma> def`]  by blast
-  have "ttyping \<Gamma> (add_to_beh def 0 0 (next_time 0 ?\<tau>'))"
-    using add_to_beh_preserve_type_correctness[OF `styping \<Gamma> def` `ttyping \<Gamma> ?\<tau>'`]
-    by (metis add_to_beh_preserve_type_correctness assms(4) bot_nat_def domIff ttyping_def
-    zero_fun_def zero_map)
-  have "ttyping \<Gamma> (?\<tau>'(next_time 0 ?\<tau>' := 0)) "
-    using `ttyping \<Gamma> ?\<tau>'`  ttyping_rem_curr_trans by blast
-  have "Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C \<or>
-        Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) = def C"
-    by auto
-  moreover
-  { assume "Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) = def C"
-    hence "?\<tau>' =  preempt_raw C \<tau> 1"
-      unfolding trans_post_raw_def
-      by (metis True add.left_neutral cancel_comm_monoid_add_class.diff_cancel signal_of_zero
-      zero_fun_def)
-    also have "... = \<tau>"
-    proof (rule, rule)
-      fix time sig
-      have "sig = C \<or> sig \<noteq> C"
-        by auto
-      moreover
-      { assume "sig = C"
-        hence "preempt_raw C \<tau> 1 time C = None"
-          unfolding preempt_raw_def using True
-          by (metis (full_types) assms(2) fun_upd_idem_iff to_trans_raw_sig_def zero_fun_def zero_option_def)
-        also have "... = \<tau> time C"
-          using assms(2) unfolding to_trans_raw_sig_def  by (metis zero_map)
-        finally have "preempt_raw C \<tau> 1 time sig = \<tau> time sig"
-          using `sig = C` by auto }
-      moreover
-      { assume "sig \<noteq> C"
-        hence "preempt_raw C \<tau> 1 time sig = \<tau> time sig"
-          unfolding preempt_raw_def by auto }
-      ultimately show "preempt_raw C \<tau> 1 time sig = \<tau> time sig"
-        by auto
-    qed
-    finally have "?\<tau>' = \<tau>"
-      by auto
-    hence bigstep: "(Suc i),
-           next_time 0 \<tau> ,
-           next_state 0 \<tau> def ,
-           next_event 0 \<tau> def ,
-           add_to_beh def 0 0 (next_time 0 \<tau>), def
-        \<turnstile> <nand3 , \<tau>(next_time 0 \<tau> := 0)> \<leadsto> res"
-      using bsimulate_obt_big_step[OF assms(1) `init' 0 def {} 0 def nand3 \<tau> ?\<tau>'`] `?\<tau>' = \<tau>` by auto
-    have s1: "\<And>n. n \<le> next_time 0 \<tau> \<Longrightarrow> (\<tau>(next_time 0 \<tau> := 0)) n = 0"
-      by (simp add: nat_less_le next_time_at_least2)
-    have s2: "\<And>s. s \<in> dom ((\<tau>(next_time 0 \<tau> := 0)) (next_time 0 \<tau>)) \<Longrightarrow>
-                              next_state 0 \<tau> def s = the ((\<tau>(next_time 0 \<tau> := 0)) (next_time 0 \<tau>) s)"
-      by (simp add: zero_fun_def zero_option_def)
-    have s3: "\<And>n. next_time 0 \<tau> \<le> n \<Longrightarrow> add_to_beh def 0 0 (next_time 0 \<tau>) n = 0"
-      by (simp add: add_to_beh_def zero_fun_def)
-    have s4: "A \<notin> next_event 0 \<tau> def \<and> B \<notin> next_event 0 \<tau> def \<Longrightarrow>
-              bval_of (next_state 0 \<tau> def C) = (\<not> (bval_of (next_state 0 \<tau> def A) \<and> bval_of (next_state 0 \<tau> def B)))"
-      by (smt One_nat_def Suc_le_mono True \<open>Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) = def C\<close>
-      \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 = \<tau>\<close>
-      \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 = preempt_raw C \<tau>
-      1\<close> add_diff_cancel_left' domIff fun_upd_same le0 le_Suc_eq next_state_def
-      next_state_fixed_point override_on_def plus_1_eq_Suc preempt_raw_def val.sel(1) zero_fun_def
-      zero_option_def)
-    have s5: "\<And>n. next_time 0 \<tau> < n \<Longrightarrow> to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0)) C n = 0"
-      by (metis assms(2) fun_upd_apply to_trans_raw_sig_def zero_fun_def)
-    have "styping \<Gamma> (next_state 0 \<tau> def)"
-      using \<open>styping \<Gamma> (next_state 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B))))
-      (def C) \<tau> 0 1) def)\<close> \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau>
-      0 1 = \<tau>\<close> by auto
-    have "ttyping \<Gamma> (add_to_beh def 0 0 (next_time 0 \<tau>))"
-      using \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 = \<tau>\<close>
-      \<open>ttyping \<Gamma> (add_to_beh def 0 0 (next_time 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and>
-      bval_of (def B)))) (def C) \<tau> 0 1)))\<close> by auto
-    have "ttyping \<Gamma> (\<tau>(next_time 0 \<tau> := 0))"
-      using \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 = \<tau>\<close>
-      \<open>ttyping \<Gamma> ((trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1)
-      (next_time 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1) :=
-      0))\<close> by auto
-    hence * : "next_time 0 \<tau> \<le> i \<Longrightarrow>
-               bval_of (get_state res C)  =
-           (\<not> (bval_of (signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau> := 0)) A i) \<and>
-               bval_of (signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau> := 0)) B i)))"
-      using nand3_correctness_ind[OF bigstep _ _ s1 s2 s3 _ s4 s5 `conc_wt \<Gamma> nand3` `styping \<Gamma> (next_state 0 \<tau> def)`
-       `ttyping \<Gamma> (add_to_beh def 0 0 (next_time 0 \<tau>))` `ttyping \<Gamma> (\<tau>(next_time 0 \<tau> := 0))` `\<Gamma> C = Bty` `styping \<Gamma> def`]
-      by metis
-    moreover have "next_time 0 \<tau> \<le> i \<Longrightarrow> signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau> := 0)) A i = signal_of (def A) \<tau> A i"
-    proof (cases "inf_time (to_trans_raw_sig \<tau>) A i = None")
-      assume "next_time 0 \<tau> \<le> i"
-      case True
-      hence "signal_of (def A) \<tau> A i = def A"
-        by (metis inf_time_noneE2 signal_of_def to_trans_raw_sig_def)
-      have "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) A i= None"
-        using True  by (metis inf_time_rem_curr_trans option.simps(3) rem_curr_trans_to_trans_raw_sig)
-      hence "signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau>:= 0)) A i = next_state 0 \<tau> def A"
-        by (metis inf_time_noneE2 signal_of_def to_trans_raw_sig_def)
-      have "\<tau> (next_time 0 \<tau>) A = None"
-        using True `next_time 0 \<tau> \<le> i`
-        by (metis inf_time_noneE2 to_trans_raw_sig_def zero_option_def)
-      hence "next_state 0 \<tau> def A = def A"
-        unfolding next_state_def Let_def
-        by (simp add: domIff)
-      thus ?thesis
-        using \<open>signal_of (def A) \<tau> A i = def A\<close> \<open>signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau>
-        := 0)) A i = next_state 0 \<tau> def A\<close> by auto
-    next
-      assume "next_time 0 \<tau> \<le> i"
-      case False
-      then obtain ta where infA: "inf_time (to_trans_raw_sig \<tau>) A i = Some ta"
-        by auto
-      hence "\<tau> ta A \<noteq> None"
-        by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_some_exists to_trans_raw_sig_def
-        zero_option_def)
-      hence "next_time 0 \<tau> \<le> ta"
-        by (metis next_time_at_least2 not_le zero_map)
-      have "signal_of (def A) \<tau> A i = the (\<tau> ta A)"
-        using infA unfolding to_signal_def comp_def to_trans_raw_sig_def by auto
-      have "next_time 0 \<tau> = ta \<or> next_time 0 \<tau> < ta"
-        using `next_time 0 \<tau> \<le> ta` by auto
-      moreover
-      { assume "next_time 0 \<tau> = ta"
-        hence "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) A i = None"
-          using infA
-          by (metis inf_time_rem_curr_trans_at_t next_time_at_least2 rem_curr_trans_to_trans_raw_sig
-          to_trans_raw_sig_def zero_fun_def zero_option_def)
-        hence "signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau> := 0)) A i = next_state 0 \<tau> def A"
-          unfolding to_signal_def comp_def by auto
-        also have "... = the (\<tau> ta A)"
-          unfolding next_state_def Let_def comp_def `next_time 0 \<tau> = ta`
-          by (simp add: \<open>\<tau> ta A \<noteq> None\<close> domIff)
-        also have "... = signal_of (def A) \<tau> A i"
-          using \<open>signal_of (def A) \<tau> A i = the (\<tau> ta A)\<close> by auto
-        finally have ?thesis
-          by auto }
-      moreover
-      { assume "next_time 0 \<tau> < ta"
-        hence "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) A i = Some ta"
-          using infA
-          by (metis inf_time_rem_curr_trans nat_less_le option.inject rem_curr_trans_to_trans_raw_sig)
-        hence ?thesis
-          by (metis \<open>signal_of (def A) \<tau> A i = the (\<tau> ta A)\<close> calculation(2) fun_upd_apply o_def
-          option.case(2) to_signal_def to_trans_raw_sig_def) }
-      ultimately show ?thesis
-        by auto
-    qed
-    moreover have "next_time 0 \<tau> \<le> i \<Longrightarrow> signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau> := 0)) B i = signal_of (def B) \<tau> B i"
-    proof (cases "inf_time (to_trans_raw_sig \<tau>) B i = None")
-      assume "next_time 0 \<tau> \<le> i"
-      case True
-      hence "signal_of (def B) \<tau> B i = def B"
-        by (metis inf_time_noneE2 signal_of_def to_trans_raw_sig_def)
-      have "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) B i= None"
-        using True  by (metis inf_time_rem_curr_trans option.simps(3) rem_curr_trans_to_trans_raw_sig)
-      hence "signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau>:= 0)) B i = next_state 0 \<tau> def B"
-        by (metis inf_time_noneE2 signal_of_def to_trans_raw_sig_def)
-      have "\<tau> (next_time 0 \<tau>) B = None"
-        using True `next_time 0 \<tau> \<le> i`
-        by (metis inf_time_noneE2 to_trans_raw_sig_def zero_option_def)
-      hence "next_state 0 \<tau> def B = def B"
-        unfolding next_state_def Let_def
-        by (simp add: domIff)
-      thus ?thesis
-        using \<open>signal_of (def B) \<tau> B i = def B\<close> \<open>signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau>
-        := 0)) B i = next_state 0 \<tau> def B\<close> by auto
-    next
-      assume "next_time 0 \<tau> \<le> i"
-      case False
-      then obtain ta where infB: "inf_time (to_trans_raw_sig \<tau>) B i = Some ta"
-        by auto
-      hence "\<tau> ta B \<noteq> None"
-        by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_some_exists to_trans_raw_sig_def
-        zero_option_def)
-      hence "next_time 0 \<tau> \<le> ta"
-        by (metis next_time_at_least2 not_le zero_map)
-      have "signal_of (def B) \<tau> B i = the (\<tau> ta B)"
-        using infB unfolding to_signal_def comp_def to_trans_raw_sig_def by auto
-      have "next_time 0 \<tau> = ta \<or> next_time 0 \<tau> < ta"
-        using `next_time 0 \<tau> \<le> ta` by auto
-      moreover
-      { assume "next_time 0 \<tau> = ta"
-        hence "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) B i = None"
-          using infB
-          by (metis inf_time_rem_curr_trans_at_t next_time_at_least2 rem_curr_trans_to_trans_raw_sig
-          to_trans_raw_sig_def zero_fun_def zero_option_def)
-        hence "signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau> := 0)) B i = next_state 0 \<tau> def B"
-          unfolding to_signal_def comp_def by auto
-        also have "... = the (\<tau> ta B)"
-          unfolding next_state_def Let_def comp_def `next_time 0 \<tau> = ta`
-          by (simp add: \<open>\<tau> ta B \<noteq> None\<close> domIff)
-        also have "... = signal_of (def B) \<tau> B i"
-          using \<open>signal_of (def B) \<tau> B i = the (\<tau> ta B)\<close> by auto
-        finally have ?thesis
-          by auto }
-      moreover
-      { assume "next_time 0 \<tau> < ta"
-        hence "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) B i = Some ta"
-          using infB
-          by (metis inf_time_rem_curr_trans nat_less_le option.inject rem_curr_trans_to_trans_raw_sig)
-        hence ?thesis
-          by (metis \<open>signal_of (def B) \<tau> B i = the (\<tau> ta B)\<close> calculation(2) fun_upd_apply o_def
-          option.case(2) to_signal_def to_trans_raw_sig_def) }
-      ultimately show ?thesis
-        by auto
-    qed
-    ultimately have IR: "next_time 0 \<tau> \<le> i \<Longrightarrow>  bval_of (get_state res C) =
-           (\<not> (bval_of (signal_of (def A) \<tau> A i) \<and>  bval_of (signal_of (def B) \<tau> B i)))"
-      by auto
-    { assume "i < next_time 0 \<tau>"
-      hence "signal_of (def A) \<tau> A i = def A" and "signal_of (def B) \<tau> B i = def B"
-        by (metis dual_order.strict_trans2 next_time_at_least2 signal_of_def zero_fun_def)+
-      have "\<And>n. n < next_time 0 \<tau> \<Longrightarrow> get_beh res n = ((add_to_beh def 0 0 (next_time 0 \<tau>))(next_time 0 \<tau> := Some \<circ> next_state 0 \<tau> def)) n"
-      proof -
-        fix n :: nat
-        assume a1: "n < next_time 0 \<tau>"
-        then have f2: "\<forall>f fa. f(0 := Some \<circ> (fa::sig \<Rightarrow> val)) = add_to_beh fa f 0 (next_time 0 \<tau>)"
-          by (simp add: add_to_beh_def)
-        then have f3: "Suc i, next_time 0 \<tau> , next_state 0 \<tau> def , {s. def s \<noteq> next_state 0 \<tau> def s} , 0 (0 := Some \<circ> def), def \<turnstile> <nand3 , \<tau> (next_time 0 \<tau> := 0)> \<leadsto> res"
-          by (metis bigstep next_event_alt_def)
-        then have "next_time 0 \<tau> < Suc i \<or> next_time 0 \<tau> = Suc i"
-          using bau by blast
-        then show "get_beh res n = ((add_to_beh def 0 0 (next_time 0 \<tau>)) (next_time 0 \<tau> := Some \<circ> next_state 0 \<tau> def)) n"
-          using f3 f2 a1 \<open>i < next_time 0 \<tau>\<close> maxtime_maxtime_bigstep by auto
-      qed
-      have "0 < next_time 0 \<tau>"
-        using `i < next_time 0 \<tau>` by auto
-      have "Suc i < next_time 0 \<tau> \<or> Suc i = next_time 0 \<tau>"
-        using `i < next_time 0 \<tau>` by auto
-      moreover
-      { assume "Suc i < next_time 0 \<tau>"
-        have "False"
-        proof -
-          have "\<not> next_time 0 \<tau> < Suc i"
-            by (simp add: \<open>Suc i < next_time 0 \<tau>\<close> leD le_less)
-          then have "next_time 0 \<tau> = Suc i"
-            using bau bigstep by blast
-          then show ?thesis
-            using \<open>Suc i < next_time 0 \<tau>\<close> by linarith
-        qed }
-      ultimately have "Suc i = next_time 0 \<tau>"
-        by auto
-      hence bigstep': "Suc i, Suc i , next_state 0 \<tau> def , next_event 0 \<tau> def , add_to_beh def 0 0 (next_time 0 \<tau>), def \<turnstile> <nand3 , \<tau>(next_time 0 \<tau> := 0)> \<leadsto> res"
-        using bigstep by auto
-      have "get_beh res = (add_to_beh def 0 0 (next_time 0 \<tau>))"
-        using maxtime_maxtime_bigstep[OF bigstep'] by auto
-      have "get_state res = next_state 0 \<tau> def"
-      proof -
-        have "(Suc i, next_state 0 \<tau> def, add_to_beh def 0 0 (next_time 0 \<tau>), \<tau>(next_time 0 \<tau> := 0)) = res"
-          using bau bigstep' by blast
-        then show ?thesis
-          by force
-      qed
-      hence " bval_of (get_state res C)  =
-         (\<not> (bval_of (signal_of (def A) \<tau> A i) \<and>  bval_of (signal_of (def B) \<tau> B i)))"
-        by (metis One_nat_def Suc_leI \<open>0 < next_time 0 \<tau>\<close> \<open>Bv (\<not> (bval_of (def A) \<and> bval_of (def
-        B))) = def C\<close> \<open>signal_of (def A) \<tau> A i = def A\<close> \<open>signal_of (def B) \<tau> B i = def B\<close>
-        \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 = \<tau>\<close>
-        \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 = preempt_raw
-        C \<tau> 1\<close> domIff fun_upd_same next_state_def override_on_apply_notin preempt_raw_def
-        val.sel(1)) }
-    hence ?thesis
-      using IR  le_less_linear by blast }
-  moreover
-  { assume "Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C"
-    hence ntime: "next_time 0 ?\<tau>' = 1"
-    proof -
-      have "?\<tau>' \<noteq> 0"
-      proof (intro trans_post_raw_imply_neq_map_empty[where sig="C" and def="def C" and \<tau>="\<tau>" and t="0" and dly="1"])
-        show "trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 = trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1"
-          by auto
-      next
-        show "\<forall>i\<le>0 + (1 - 1). \<tau> i C = None \<Longrightarrow> Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C"
-          using True `Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C`
-          by auto
-      qed (auto)
-      hence "next_time 0 ?\<tau>' = (LEAST n. dom ( ?\<tau>' n) \<noteq> {})"
-        unfolding next_time_def by auto
-      also have "... = 1"
-      proof (rule Least_equality)
-        show "dom ( ?\<tau>' 1) \<noteq> {}"
-          using True `Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C`
-          by (smt add.commute add.right_neutral cancel_comm_monoid_add_class.diff_cancel
-          dom_eq_empty_conv fun_upd_same option.simps(3) post_raw_def signal_of_zero
-          trans_post_raw_def zero_fun_def)
-      next
-        { fix y :: nat
-          assume "y < 1"
-          hence "dom ( ?\<tau>' y) = {}"
-            using True by (metis dom_eq_empty_conv le_zero_eq less_one
-            trans_post_preserve_trans_removal_nonstrict zero_fun_def zero_option_def) }
-        thus "\<And>y. dom (?\<tau>' y) \<noteq> {} \<Longrightarrow> 1 \<le> y"
-          using le_less_linear by auto
-      qed
-      finally show "next_time 0 ?\<tau>' = 1"
-        by auto
-    qed
-    have ind1: "\<And>n. n < next_time 0 ?\<tau>' \<Longrightarrow>  ?\<tau>' n = 0"
-      using True unfolding `next_time 0 ?\<tau>' = 1`
-      by (auto simp add: trans_post_raw_def preempt_raw_def post_raw_def)
-    hence ind1': "\<And>n. n \<le> next_time 0 ?\<tau>' \<Longrightarrow>  (?\<tau>'(next_time 0 ?\<tau>' := 0)) n = 0"
-      by simp
-    have ind2: "\<And>s. s \<in> dom ( ?\<tau>' (next_time 0 ?\<tau>')) \<Longrightarrow>
-                          next_state 0 ?\<tau>' def s = the ( ?\<tau>' (next_time 0 ?\<tau>') s)"
-      unfolding next_state_def `next_time 0 ?\<tau>' = 1` Let_def by auto
-    have ind2': "\<And>s. s \<in> dom ( (?\<tau>'(next_time 0 ?\<tau>' := 0)) (next_time 0 ?\<tau>')) \<Longrightarrow>
-                          next_state 0 ?\<tau>' def s = the ( (?\<tau>'(next_time 0 ?\<tau>' := 0)) (next_time 0 ?\<tau>') s)"
-      by (simp add: zero_fun_def zero_option_def)
-    have ind3: "\<And>n. next_time 0 ?\<tau>' \<le> n \<Longrightarrow>  (add_to_beh def 0 0 (next_time 0 ?\<tau>')) n = 0"
-      unfolding ntime add_to_beh_def by (auto simp add: zero_map zero_option_def zero_fun_def)
-    have Cin: "C \<in> dom ( ?\<tau>' (next_time 0 ?\<tau>'))"
-      using True unfolding `next_time 0 ?\<tau>' = 1`  `Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C`
-      by (metis (no_types, lifting) \<open>Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C\<close> add.commute
-      add_cancel_right_right add_diff_cancel_left' domIff fun_upd_same option.simps(3) post_raw_def
-      signal_of_zero trans_post_raw_def zero_fun_def)
-    { assume "A \<notin> next_event 0 ?\<tau>' def \<and> B \<notin> next_event 0 ?\<tau>' def"
-      hence "A \<notin> dom ( ?\<tau>' (next_time 0 ?\<tau>')) \<or> the ( ?\<tau>' (next_time 0 ?\<tau>') A) = (def A)"
-        and "B \<notin> dom ( ?\<tau>' (next_time 0 ?\<tau>')) \<or> the ( ?\<tau>' (next_time 0 ?\<tau>') B) = (def B)"
-        unfolding next_event_def ntime Let_def by auto
-      moreover have "next_state 0 ?\<tau>' def C = Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))"
-        using Cin unfolding next_state_def ntime Let_def
-        by (auto simp add: trans_post_raw_def preempt_raw_def post_raw_def)
-      ultimately have "bval_of (next_state 0 ?\<tau>' def C) \<longleftrightarrow>
-                                       \<not> (bval_of (next_state 0 ?\<tau>' def A) \<and> bval_of (next_state 0 ?\<tau>' def B))"
-        by (metis \<open>A \<notin> next_event 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B))))
-        (def C) \<tau> 0 1) def \<and> B \<notin> next_event 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def
-        B)))) (def C) \<tau> 0 1) def\<close> next_state_fixed_point val.sel(1)) }
-    note ind4 = this
-    have ind5: "\<And>n. next_time 0 ?\<tau>' < n \<Longrightarrow>  (to_trans_raw_sig ?\<tau>' C) n = 0"
-      unfolding ntime by (auto simp add: trans_post_raw_def to_trans_raw_sig_def zero_option_def
-      preempt_raw_def post_raw_def)
-    have ind5': "\<And>n. next_time 0 ?\<tau>' < n \<Longrightarrow>  (to_trans_raw_sig (?\<tau>'(next_time 0 ?\<tau>' := 0)) C) n = 0"
-      by (metis ind5 less_numeral_extra(4) ntime rem_curr_trans_to_trans_raw_sig
-      trans_value_same_except_at_removed)
-    hence bigstep: "(Suc i),
-           next_time 0 ?\<tau>' ,
-           next_state 0 ?\<tau>' def ,
-           next_event 0 ?\<tau>' def ,
-           add_to_beh def 0 0 (next_time 0 ?\<tau>'), def
-        \<turnstile> <nand3 , ?\<tau>'(next_time 0 ?\<tau>' := 0)> \<leadsto> res"
-      using bsimulate_obt_big_step[OF assms(1) `init' 0 def {} 0 def nand3 \<tau> ?\<tau>'`] by auto
-    have *: "1 \<le> i \<Longrightarrow>
-       bval_of (get_state res C) \<longleftrightarrow>
-    \<not> (bval_of (signal_of (next_state 0 ?\<tau>' def A) (?\<tau>'(1:=0)) A i) \<and>
-       bval_of (signal_of (next_state 0 ?\<tau>' def B) (?\<tau>'(1:=0)) B i))"
-      using nand3_correctness_ind[OF bigstep _ _ ind1' ind2' ind3 _ ind4 ind5' `conc_wt \<Gamma> nand3` `styping \<Gamma> (next_state 0 ?\<tau>' def)`
-      `ttyping \<Gamma> (add_to_beh def 0 0 (next_time 0 ?\<tau>'))` `ttyping \<Gamma> (?\<tau>'(next_time 0 ?\<tau>' := 0))` `\<Gamma> C = Bty` `styping \<Gamma> def`]
-      unfolding ntime by auto
-    moreover have "1 \<le> i \<Longrightarrow> signal_of (next_state 0 ?\<tau>' def A) ?\<tau>' A i = signal_of (def A) ?\<tau>' A i"
-    proof (cases "inf_time (to_trans_raw_sig ?\<tau>') A i = None")
-      case True
-      assume "1 \<le> i"
-      have "\<forall>k. k \<le> i \<longrightarrow>  (to_trans_raw_sig ?\<tau>' A) k = 0"
-        using True by (auto dest!: inf_time_noneE2)
-      hence " (to_trans_raw_sig ?\<tau>' A) 1 = 0"
-        using `1 \<le> i` by auto
-      hence "A \<notin> dom ( ?\<tau>' 1)"
-         unfolding trans_post_raw_def to_trans_raw_sig_def
-        by (simp add: domIff zero_option_def)
-      have "signal_of (next_state 0 ?\<tau>' def A) ?\<tau>' A i = next_state 0 ?\<tau>' def A"
-        using True unfolding to_signal_def comp_def by auto
-      also have "... = def A"
-        using `A \<notin> dom ( ?\<tau>' 1)` unfolding next_state_def ntime Let_def by auto
-      finally have 0: "signal_of (next_state 0 ?\<tau>' def A) ?\<tau>' A i = def A"
-        by auto
-      have 1: "signal_of (def A) ?\<tau>' A i = def A"
-        using True unfolding to_signal_def comp_def by auto
-      then show ?thesis
-        using 0 1 by auto
-    next
-      case False
-      then obtain ta where "inf_time (to_trans_raw_sig ?\<tau>') A i = Some ta"
-        by auto
-      then show ?thesis
-        unfolding to_signal_def comp_def by auto
-    qed
-    moreover have "signal_of (next_state 0 ?\<tau>' def A) ?\<tau>' A i =   signal_of (next_state 0 ?\<tau>' def A) (?\<tau>'(1 := 0)) A i"
-      apply (intro sym[OF signal_of_rem_curr_trans_at_t[where \<tau>="?\<tau>'" and \<sigma>="next_state 0 ?\<tau>' def"]])
-      using ind1 ind2 unfolding ntime by auto
-    moreover have "1 \<le> i \<Longrightarrow> signal_of (next_state 0 ?\<tau>' def B) ?\<tau>' B i = signal_of (def B) ?\<tau>' B i"
-    proof (cases "inf_time (to_trans_raw_sig ?\<tau>') B i = None")
-      case True
-      assume "1 \<le> i"
-      have "\<forall>k. k \<le> i \<longrightarrow>  (to_trans_raw_sig ?\<tau>' B) k = 0"
-        using True by (auto dest!: inf_time_noneE2)
-      hence " (to_trans_raw_sig ?\<tau>' B) 1 = 0"
-        using `1 \<le> i` by auto
-      hence "B \<notin> dom ( ?\<tau>' 1)"
-         unfolding trans_post_raw_def to_trans_raw_sig_def by (simp add: domIff zero_option_def)
-      have "signal_of (next_state 0 ?\<tau>' def B) ?\<tau>' B i = next_state 0 ?\<tau>' def B"
-        using True unfolding to_signal_def comp_def by auto
-      also have "... = def B"
-        using `B \<notin> dom ( ?\<tau>' 1)` unfolding next_state_def ntime Let_def by auto
-      finally have 0: "signal_of (next_state 0 ?\<tau>' def B) ?\<tau>' B i = def B"
-        by auto
-      have 1: "signal_of (def B) ?\<tau>' B i = def B"
-        using True unfolding to_signal_def comp_def by auto
-      then show ?thesis
-        using 0 1 by auto
-    next
-      case False
-      then obtain ta where "inf_time (to_trans_raw_sig ?\<tau>') B i = Some ta"
-        by auto
-      then show ?thesis
-        unfolding to_signal_def comp_def by auto
-    qed
-    moreover have "signal_of (next_state 0 ?\<tau>' def B) ?\<tau>' B i = signal_of (next_state 0 ?\<tau>' def B) (?\<tau>'(1:=0)) B i"
-      apply(intro sym[OF signal_of_rem_curr_trans_at_t[where \<sigma>="next_state 0 ?\<tau>' def"]])
-      using ind1 ntime ind2 by auto
-    ultimately have IR: "1 \<le> i \<Longrightarrow> bval_of (get_state res C) \<longleftrightarrow>
-                                              \<not> (bval_of (signal_of (def A) ?\<tau>' A i) \<and> bval_of (signal_of (def B) ?\<tau>' B i))"
-      by auto
-    have " ?\<tau>' 0 = 0"
-      using True by (simp add: trans_post_raw_def post_raw_def preempt_raw_def)
-    have "signal_of (def A) ?\<tau>' A 0 = def A"
-      by (metis \<open>?\<tau>' 0 = 0\<close> signal_of_zero zero_fun_def)
-    have "signal_of (def B) ?\<tau>' B 0 = def B"
-      by (metis \<open>?\<tau>' 0 = 0\<close> signal_of_zero zero_fun_def)
-    have "1 \<le> next_time 0 ?\<tau>'"
-      unfolding ntime by auto
-    have "next_time 0 ?\<tau>' \<le> Suc i"
-      unfolding ntime by auto
-    hence "next_time 0 ?\<tau>' < Suc i \<or> next_time 0 ?\<tau>' = Suc i"
-      by auto
-    moreover
-    { assume "next_time 0 ?\<tau>' < Suc i"
-      have " get_beh res 1 = ((add_to_beh def 0 0 (next_time 0 ?\<tau>')) (next_time 0 ?\<tau>' := Some \<circ> next_state 0 ?\<tau>' def)) 1"
-        using beh_res2[OF bigstep ind1' `next_time 0 ?\<tau>' < Suc i` _ ind3 `1 \<le> next_time 0 ?\<tau>'`]
-        by auto
-      also have "... =  ((add_to_beh def 0 0 1)(1 := (Some o next_state 0 ?\<tau>' def))) 1"
-        unfolding ntime by auto
-      also have "... = Some o next_state 0 ?\<tau>' def"
-        by simp
-      finally have " get_beh res 1  = Some o next_state 0 ?\<tau>' def"
-        by auto
-      hence "signal_of (def C) (get_beh res) C 1 = next_state 0 ?\<tau>' def C"
-        by (meson trans_some_signal_of)
-      also have "... = Bv (\<not> (bval_of (signal_of (def A) ?\<tau>' A 0) \<and> bval_of (signal_of (def B) ?\<tau>' B 0)))"
-        unfolding `signal_of (def A) ?\<tau>' A 0 = def A` `signal_of (def B) ?\<tau>' B 0 = def B`
-        by (smt Cin Suc_eq_plus1 True \<open>Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C\<close>
-        add.right_neutral add_diff_cancel_left' fun_upd_same next_state_def ntime o_apply option.sel
-        override_on_def plus_1_eq_Suc post_raw_def signal_of_zero trans_post_raw_def zero_fun_def)
-      finally have IR0: "bval_of (signal_of (def C) (get_beh res) C 1) \<longleftrightarrow> \<not> (bval_of (signal_of (def A) ?\<tau>' A 0) \<and> bval_of (signal_of (def B) ?\<tau>' B 0))"
-        by auto
-      have "signal_of (def A) ?\<tau>' A i = signal_of (def A) \<tau> A i" and "signal_of (def B) ?\<tau>' B i = signal_of (def B) \<tau> B i"
-        using signal_of_trans_post   by (metis sig.distinct(3))(meson sig.simps(6) signal_of_trans_post)
-      hence ?thesis
-        using IR IR0  using le_less_linear
-        using \<open>next_time 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau>
-        0 1) < Suc i\<close> ntime by auto }
-    moreover
-    { assume "next_time 0 ?\<tau>' = Suc i"
-      hence bigstep': "Suc i, Suc i, next_state 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1)
-                    def , next_event 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1)
-                           def , add_to_beh def 0 0
-                                  (next_time 0
-                                    (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0
-                                      1)), def \<turnstile> <nand3 , (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1)
-        (next_time 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1) := 0)> \<leadsto> res"
-        using bigstep by auto
-      have "get_state res = next_state 0 ?\<tau>' def"
-        by (rule bau[OF bigstep']) auto
-      hence ?thesis
-        by (smt Cin Suc_eq_plus1 True \<open>Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C\<close>
-        \<open>next_time 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1) =
-        Suc i\<close> \<open>styping \<Gamma> (next_state 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def
-        B)))) (def C) \<tau> 0 1) def)\<close> add_cancel_right_right add_diff_cancel_left' assms(5) comp_apply
-        fun_upd_same next_state_def ntime option.sel override_on_def plus_1_eq_Suc post_raw_def
-        signal_of_zero styping_def trans_post_raw_def ty.distinct(1) type_of.simps(2)
-        val.exhaust_sel val.inject(1) zero_fun_def) }
-    ultimately have ?thesis
-      by auto }
-  ultimately show ?thesis
-    by auto
-next
-  case False
-  have "seq_wt \<Gamma> (get_seq nand3)"
-    using `conc_wt \<Gamma> nand3`
-    by (metis conc_stmt.distinct(1) conc_stmt.sel(4) conc_wt.cases nand3_def)
-  hence "bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)"
-    using seq_wt_cases(4)  by (metis conc_stmt.sel(4) nand3_def)
-  hence "\<Gamma> A = Bty" and "\<Gamma> B = Bty"
-    using bexp_wt_cases  
-    by (metis assms(5) bexp_wt_cases_slice(2))
-       (metis \<open>bexp_wt \<Gamma> (Bnand (Bsig A) (Bsig B)) (\<Gamma> C)\<close> assms(5) bexp_wt_cases(4) bexp_wt_cases_slice(2))
-  hence "is_Bv (def A)" and "is_Bv (def B)"
-    by (metis assms(4) styping_def ty.simps(3) type_of.simps(2) val.collapse(2))+
-  hence "0 , def , {} , 0, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (def A))" and
-        "0 , def , {} , 0, def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (def B))"
-    by (auto intro!: beval_raw.intros)
-  hence "0 , def , {} , 0, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b (Bv (\<not> (bval_of (def A) \<and> bval_of (def B))))" (is "_, _, _, _, _ \<turnstile> _ \<longrightarrow>\<^sub>b ?x")
-    by (intro beval_raw.intros)  
-  hence "0, def, {}, 0, def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1, \<tau>> \<longrightarrow>\<^sub>s trans_post_raw C ?x (def C) \<tau> 0 1"
-    by (simp add: b_seq_exec.intros(5))
-  let ?\<tau>' = "trans_post_raw C ?x (def C) \<tau> 0 1"
-  have "init' 0 def {} 0 def nand3 \<tau> ?\<tau>'"
-    unfolding nand3_def
-    by (meson \<open>0 , def , {} , 0 , def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 , \<tau>> \<longrightarrow>\<^sub>s
-    trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1\<close> init'.intros(1))
-  have "Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C \<or>
-        Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) = def C"
-    by auto
-  moreover
-  { assume "Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) \<noteq> def C"
-    hence "post_necessary_raw 0 \<tau> 0 C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C)"
-      by (metis add.left_neutral assms(2) signal_of_zero to_trans_raw_sig_def zero_fun_def)
-    hence " ?\<tau>' 1 C = Some ?x"
-      unfolding trans_post_raw_def
-      by (auto simp add: trans_post_raw_def post_raw_def)
-    hence ntime: "next_time 0 ?\<tau>' = 0"
-    proof -
-      have "?\<tau>' \<noteq> 0"
-        by (metis \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 1 C =
-        Some (Bv (\<not> (bval_of (def A) \<and> bval_of (def B))))\<close> option.simps(3) zero_fun_def
-        zero_option_def)
-      hence "next_time 0 ?\<tau>' = (LEAST n. dom ( ?\<tau>' n) \<noteq> {})"
-        unfolding next_time_def by auto
-      also have "... = 0"
-      proof (rule Least_equality)
-        show "dom (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 0) \<noteq> {}"
-          using False by (auto simp add: trans_post_raw_def zero_fun_def zero_option_def
-          preempt_raw_def post_raw_def)
-      next
-        { fix y :: nat
-          assume "y < 0"
-          hence "False" by auto
-          hence "dom (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 0) = {}"
-            by auto }
-        thus "\<And>y. dom (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 y) \<noteq> {} \<Longrightarrow> 0 \<le> y "
-          using le_less_linear by auto
-      qed
-      finally show "next_time 0 ?\<tau>' = 0"
-        by auto
-    qed
-    have "?\<tau>' = post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 1"
-      using \<open>post_necessary_raw 0 \<tau> 0 C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C)\<close>
-      unfolding trans_post_raw_def by auto
-    define t' where "t' = next_time 0 ?\<tau>'"
-    hence t'_def': "t' = 0"
-      using ntime by auto
-
-    define \<sigma>' where "\<sigma>' = next_state 0 ?\<tau>' def"
-    hence "\<sigma>' C = def C"
-      using assms(2)  unfolding next_state_def `next_time 0 ?\<tau>' = 0`
-      unfolding to_trans_raw_sig_def Let_def trans_post_raw_def preempt_raw_def post_raw_def
-      by (smt One_nat_def add.right_neutral discrete domIff next_time_def not_add_less2
-      override_on_def plus_1_eq_Suc t'_def t'_def' zero_fun_def zero_less_one zero_option_def)      
-    have "styping \<Gamma> \<sigma>'"
-      using next_state_preserve_styping 
-      by (simp add: next_state_preserve_styping \<sigma>'_def assms(4) assms(5) assms(6)
-      trans_post_preserve_type_correctness)
-    define \<gamma>' where "\<gamma>' = next_event 0 ?\<tau>' def"
-    define \<theta>' where "\<theta>' = add_to_beh def (0 :: sig trans_raw) 0 t'"
-    hence "\<theta>' = 0"
-      unfolding t'_def' add_to_beh_def by auto
-    hence bigstep: "(Suc i), t' , \<sigma>' , \<gamma>', \<theta>', def \<turnstile> <nand3 , (?\<tau>' (t':=0))> \<leadsto> res"
-      using bsimulate_obt_big_step[OF assms(1) `init' 0 def {} 0 def nand3 \<tau> ?\<tau>'`]
-      unfolding \<sigma>'_def \<gamma>'_def \<theta>'_def t'_def by auto
-    hence bigstep': "(Suc i), 0 , \<sigma>' , \<gamma>', 0, def \<turnstile> <nand3 , (?\<tau>' (t':=0))> \<leadsto> res"
-      unfolding t'_def' `\<theta>' = 0` by auto
-    have "?\<tau>' (t':=0)\<noteq> 0"
-      by (metis \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 1 C =
-      Some (Bv (\<not> (bval_of (def A) \<and> bval_of (def B))))\<close> fun_upd_apply option.simps(3) t'_def'
-      zero_fun_def zero_neq_one zero_option_def)
-    hence "\<not> quiet (?\<tau>' (t':=0)) \<gamma>'"
-      unfolding quiet_def by auto
-    moreover have "0 < Suc i"
-      by auto
-    obtain \<tau>'' where cyc: "0 , \<sigma>' , \<gamma>' , 0, def \<turnstile> <nand3 , (?\<tau>' (t':=0))> \<longrightarrow>\<^sub>c \<tau>''" 
-      apply (rule bau[OF bigstep'])
-      using calculation by blast+ 
-    have "next_time 0 \<tau>'' \<le> Suc i \<or> Suc i < next_time 0 \<tau>''"
-      by auto
-    moreover
-    { assume "next_time 0 \<tau>'' \<le> Suc i"
-      have bigstep'': "(Suc i), next_time 0 \<tau>'' , next_state 0 \<tau>'' \<sigma>' , next_event 0 \<tau>'' \<sigma>' , add_to_beh \<sigma>' 0 0 (next_time 0 \<tau>''), def \<turnstile>
-                    <nand3 , \<tau>'' (next_time 0 \<tau>'' := 0) > \<leadsto> res"
-        apply (rule bau[OF bigstep'])
-        using `next_time 0 \<tau>'' \<le> Suc i` b_conc_exec_deterministic cyc apply blast
-        using \<open>next_time 0 \<tau>'' \<le> Suc i\<close> bigstep' case_bau cyc less_or_eq_imp_le apply blast
-        using calculation apply blast
-        by blast
-      define \<sigma>'' where "\<sigma>'' = next_state 0 \<tau>'' \<sigma>'"
-      define \<gamma>'' where "\<gamma>'' = next_event 0 \<tau>'' \<sigma>'"
-      define \<theta>'' where "\<theta>'' = add_to_beh \<sigma>' 0 0 (next_time 0 \<tau>'')"
-      have bigstep3 : "(Suc i), next_time 0 \<tau>'' , \<sigma>'' , \<gamma>'' , \<theta>'', def \<turnstile> <nand3 , \<tau>''(next_time 0 \<tau>'' :=0)> \<leadsto> res"
-        using bigstep'' unfolding \<sigma>''_def \<gamma>''_def \<theta>''_def by auto
-      have ind1: "\<And>n. n < next_time 0 ?\<tau>' \<Longrightarrow>  ?\<tau>' n = 0"
-        unfolding `next_time 0 ?\<tau>' = 0` by (auto simp add: trans_post_raw_def)
-      have ind1': "\<And>n. n < next_time 0 \<tau>'' \<Longrightarrow>  \<tau>'' n = 0"
-      proof (cases "\<tau>'' = 0")
-        case True
-        hence "next_time 0 \<tau>'' = 1"
-          by auto
-        then show "\<And>n. n < next_time 0 \<tau>'' \<Longrightarrow>  \<tau>'' n = 0"
-          using Least_le  next_time_at_least2 by blast
-      next
-        case False
-        hence "next_time 0 \<tau>'' = (LEAST n. dom ( \<tau>'' n) \<noteq> {})"
-          unfolding next_time_def by auto
-        then show "\<And>n. n < next_time 0 \<tau>'' \<Longrightarrow>  \<tau>'' n = 0"
-          using Least_le  next_time_at_least2 by blast
-      qed
-      hence ind1'': "\<And>n. n \<le> next_time 0 \<tau>'' \<Longrightarrow>  (\<tau>''(next_time 0 \<tau>'' := 0)) n = 0"
-        by simp
-      have ind2: "\<And>s. s \<in> dom ( ?\<tau>' (next_time 0 ?\<tau>')) \<Longrightarrow>
-                            next_state 0 ?\<tau>' def s = the ( ?\<tau>' (next_time 0 ?\<tau>') s)"
-        unfolding next_state_def `next_time 0 ?\<tau>' = 0` Let_def by auto
-      have ind2': "\<And>s. s \<in> dom ( \<tau>'' (next_time 0 \<tau>'')) \<Longrightarrow>
-                            \<sigma>'' s = the ( \<tau>'' (next_time 0 \<tau>'') s)"
-        unfolding next_state_def Let_def \<sigma>''_def by auto
-      have ind2'': "\<And>s. s \<in> dom ( (\<tau>''(next_time 0 \<tau>'' := 0)) (next_time 0 \<tau>'')) \<Longrightarrow> \<sigma>'' s = the ( (\<tau>''(next_time 0 \<tau>'' := 0)) (next_time 0 \<tau>'') s)"
-        by (simp add: zero_fun_def zero_option_def)
-      have ind3: "\<And>n. next_time 0 ?\<tau>' \<le> n \<Longrightarrow>  (add_to_beh def 0 0 (next_time 0 ?\<tau>')) n = 0"
-        unfolding ntime add_to_beh_def by (auto simp add: zero_fun_def)
-      have ind3': "\<And>n. next_time 0 \<tau>'' \<le> n \<Longrightarrow>  \<theta>'' n = 0"
-        unfolding \<theta>''_def add_to_beh_def by  (auto simp add: zero_fun_def)
-      consider (either) "A \<in> \<gamma>' \<or> B \<in> \<gamma>'" | (none) "A \<notin> \<gamma>' \<and> B \<notin> \<gamma>'"
-        by auto
-      hence ?thesis
-      proof (cases)
-        case either
-        have "styping \<Gamma> (next_state 0 ?\<tau>' def)"
-          by (intro next_state_preserve_styping) (auto simp add: assms(4-6) trans_post_preserve_type_correctness)
-        hence "is_Bv (\<sigma>' A)" and "is_Bv (\<sigma>' B)"
-          using `\<Gamma> A = Bty` `\<Gamma> B = Bty`
-          by (metis \<sigma>'_def styping_def ty.distinct(1) type_of.simps(2) val.collapse(2))+
-        hence "0 , \<sigma>' , \<gamma>' , 0, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b (Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B))))"
-          by (metis beval_raw.intros(1) beval_raw.intros(12) val.collapse(1))
-        hence "0 , \<sigma>' , \<gamma>' , 0 , def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1 , ?\<tau>'(t' := 0)> \<longrightarrow>\<^sub>s
-                                       trans_post_raw C (Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))) (\<sigma>' C) (?\<tau>' (t':=0)) 0 1"
-          by (simp add: b_seq_exec.intros(5))
-        hence  "0 , \<sigma>' , \<gamma>' , 0 , def \<turnstile> <nand3 , ?\<tau>'(t' := 0)> \<longrightarrow>\<^sub>c  trans_post_raw C (Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))) (\<sigma>' C) (?\<tau>' (t':=0)) 0 1"
-          unfolding nand3_def
-          by (simp add: b_conc_exec.intros(2) either)
-        hence \<tau>''_def: "\<tau>'' = trans_post_raw C (Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))) (\<sigma>' C) (?\<tau>' (0:=0)) 0 1"
-          using cyc  by (simp add: b_conc_exec_deterministic t'_def')
-        have "(bval_of (\<sigma>' C) \<longleftrightarrow> \<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B))) \<or>
-              (\<not> bval_of (\<sigma>' C) \<longleftrightarrow> \<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))"
-          by auto
-        moreover
-        { assume "\<not> bval_of (\<sigma>' C) \<longleftrightarrow> \<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B))"
-          hence nec: "post_necessary_raw 0 (?\<tau>' (0:=0)) 0 C (Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))) (\<sigma>' C)"
-            by (metis add.left_neutral fun_upd_same signal_of_zero val.sel(1) zero_fun_def)
-          hence "\<tau>'' \<noteq> 0"
-            by (metis \<tau>''_def add.left_neutral fun_upd_same signal_of_zero trans_post_raw_imply_neq_map_empty zero_fun_def zero_less_one)
-          hence "next_time 0 \<tau>'' = (LEAST n. dom ( \<tau>'' n) \<noteq> {})"
-            unfolding next_time_def by auto
-          also have "... = 1"
-          proof (rule Least_equality)
-            show "dom ( \<tau>'' 1) \<noteq> {}"
-              using nec  unfolding \<tau>''_def   unfolding trans_post_raw_def post_raw_def
-              by (auto simp add: zero_fun_def zero_option_def )
-          next
-            { fix y :: nat
-              assume "y < 1"
-              hence "y = 0" by auto
-              have "dom ( \<tau>'' y) = {}" unfolding `y = 0` \<tau>''_def
-                unfolding trans_post_raw_def  post_raw_def preempt_raw_def
-                by (simp add: dom_def zero_map) }
-            thus "\<And>y. dom ( \<tau>'' y) \<noteq> {} \<Longrightarrow> 1 \<le> y "
-              using le_less_linear by auto
-          qed
-          finally have "next_time 0 \<tau>'' = 1"
-            by auto
-          { assume "A \<notin> next_event 0 \<tau>'' \<sigma>' \<and> B \<notin> next_event 0 \<tau>'' \<sigma>'"
-            hence "A \<notin> dom ( \<tau>'' (next_time 0 \<tau>'')) \<or> the ( \<tau>'' (next_time 0 \<tau>'') A) = \<sigma>' A"
-              and "B \<notin> dom ( \<tau>'' (next_time 0 \<tau>'')) \<or> the ( \<tau>'' (next_time 0 \<tau>'') B) = \<sigma>' B"
-              unfolding next_event_def ntime Let_def by auto
-            hence helper: "\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)) \<longleftrightarrow>  \<not> (bval_of (next_state 0 \<tau>'' \<sigma>' A) \<and> bval_of (next_state 0 \<tau>'' \<sigma>' B))"
-              unfolding next_state_def Let_def  by (simp add: override_on_def)
-            have "next_state 0 \<tau>'' \<sigma>' C = (let m =  \<tau>'' (next_time 0 \<tau>'') in override_on \<sigma>' (the \<circ> m) (dom m)) C"
-              unfolding next_state_def by auto
-            also have "... = (let m =  \<tau>'' 1 in override_on \<sigma>' (the \<circ> m) (dom m)) C"
-              unfolding `next_time 0 \<tau>'' = 1` by auto
-            also have "... = Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))"
-              unfolding \<tau>''_def   unfolding trans_post_raw_def preempt_raw_def Let_def post_raw_def
-              by (smt add.left_neutral cancel_comm_monoid_add_class.diff_cancel comp_apply domIff
-              fun_upd_same nec option.sel option.simps(3) override_on_def signal_of_zero zero_fun_def)
-            finally have "next_state 0 \<tau>'' \<sigma>' C = Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))"
-              by auto
-            hence "next_state 0 \<tau>'' \<sigma>' C = Bv (\<not> (bval_of (next_state 0 \<tau>'' \<sigma>' A) \<and> bval_of (next_state 0 \<tau>'' \<sigma>' B)))"
-              using helper by auto }
-          hence  ind4': "A \<notin> \<gamma>'' \<and> B \<notin> \<gamma>'' \<Longrightarrow> bval_of (\<sigma>'' C) \<longleftrightarrow> (\<not> (bval_of (\<sigma>'' A) \<and> bval_of (\<sigma>'' B)))"
-            unfolding \<gamma>''_def \<sigma>''_def by auto
-          have "\<And>n. 1 < n \<Longrightarrow>  (to_trans_raw_sig \<tau>'' C) n = 0"
-            unfolding \<tau>''_def   unfolding trans_post_raw_def to_trans_raw_sig_def post_raw_def
-            preempt_raw_def by (simp add: zero_option_def )
-          hence ind5': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow>  (to_trans_raw_sig \<tau>'' C) n = 0"
-            unfolding `next_time 0 \<tau>'' = 1` by auto
-          hence ind5'': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow>  (to_trans_raw_sig (\<tau>''(next_time 0 \<tau>'' := 0)) C) n = 0"
-            by (simp add: to_trans_raw_sig_def)
-          have "styping \<Gamma> \<sigma>''"
-            unfolding \<sigma>''_def
-            by (metis \<open>styping \<Gamma> (next_state 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def
-            B)))) (def C) \<tau> 0 1) def)\<close> \<sigma>'_def \<tau>''_def assms(5) assms(6) next_state_preserve_styping
-            trans_post_preserve_type_correctness ttyping_rem_curr_trans type_of.simps(1))
-          have "ttyping \<Gamma> \<theta>''"
-            unfolding \<theta>''_def
-            by (metis \<open>styping \<Gamma> (next_state 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def
-            B)))) (def C) \<tau> 0 1) def)\<close> \<sigma>'_def add_to_beh_preserve_type_correctness dom_eq_empty_conv
-            empty_iff ttyping_def zero_fun_def zero_option_def)
-          have "ttyping \<Gamma> (\<tau>''(next_time 0 \<tau>'' := 0))"
-            by (simp add: \<tau>''_def assms(5) assms(6) trans_post_preserve_type_correctness
-            ttyping_rem_curr_trans)
-          have *: "1 \<le> i \<Longrightarrow>
-             bval_of (get_state res C) =
-         (\<not> (bval_of (signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'' := 0)) A i) \<and> bval_of (signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'' := 0)) B i)))"
-            using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5'' ` conc_wt \<Gamma> nand3` `styping \<Gamma> \<sigma>''`
-                                           `ttyping \<Gamma> \<theta>''` `ttyping \<Gamma> (\<tau>''(next_time 0 \<tau>'' := 0))` `\<Gamma> C = Bty` `styping \<Gamma> def`]
-            unfolding `next_time 0 \<tau>'' = 1` by auto
-          moreover have "1 \<le> i \<Longrightarrow> signal_of (\<sigma>'' A) \<tau>'' A i = signal_of (\<sigma>' A) \<tau>'' A i"
-          proof (cases "inf_time (to_trans_raw_sig \<tau>'') A i = None")
-            case True
-            assume "1 \<le> i"
-            have "\<forall>k. k \<le> i \<longrightarrow>  (to_trans_raw_sig \<tau>'' A) k = 0"
-              using True by (auto dest!: inf_time_noneE2)
-            hence " (to_trans_raw_sig \<tau>'' A) 1 = 0"
-              using `1 \<le> i` by auto
-            hence "A \<notin> dom ( \<tau>'' 1)"
-               unfolding trans_post_raw_def to_trans_raw_sig_def
-              by (simp add: domIff zero_option_def)
-            have "signal_of (\<sigma>'' A) \<tau>'' A i = next_state 0 \<tau>'' \<sigma>' A"
-              using True unfolding to_signal_def comp_def \<tau>''_def  by (simp add: \<sigma>''_def \<tau>''_def)
-            also have "... = \<sigma>' A"
-              using `A \<notin> dom ( \<tau>'' 1)` unfolding next_state_def
-              by (metis \<open>next_time 0 \<tau>'' = 1\<close> override_on_apply_notin)
-            finally have 0: "signal_of (\<sigma>'' A) \<tau>'' A i = \<sigma>' A"
-              by auto
-            have 1: "signal_of (\<sigma>' A) \<tau>'' A i = \<sigma>' A"
-              using True unfolding to_signal_def comp_def by auto
-            then show ?thesis
-              using 0 1 by auto
-          next
-            case False
-            then obtain ta where "inf_time (to_trans_raw_sig \<tau>'') A i = Some ta"
-              by auto
-            then show ?thesis
-              unfolding to_signal_def comp_def by auto
-          qed
-          moreover have "signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'':=0)) A i =
-                         signal_of (\<sigma>'' A) \<tau>'' A i"
-            apply (intro signal_of_rem_curr_trans_at_t) using ind1' ind2' by auto
-          moreover have "1 \<le> i \<Longrightarrow> signal_of (\<sigma>'' B) \<tau>'' B i = signal_of (\<sigma>' B) \<tau>'' B i"
-          proof (cases "inf_time (to_trans_raw_sig \<tau>'') B i = None")
-            case True
-            assume "1 \<le> i"
-            have "\<forall>k. k \<le> i \<longrightarrow>  (to_trans_raw_sig \<tau>'' B) k = 0"
-              using True by (auto dest!: inf_time_noneE2)
-            hence " (to_trans_raw_sig \<tau>'' B) 1 = 0"
-              using `1 \<le> i` by auto
-            hence "B \<notin> dom ( \<tau>'' 1)"
-               unfolding trans_post_raw_def to_trans_raw_sig_def
-              by (simp add: domIff zero_option_def)
-            have "signal_of (\<sigma>'' B) \<tau>'' B i = next_state 0 \<tau>'' \<sigma>' B"
-              using True unfolding to_signal_def comp_def \<tau>''_def  by (simp add: \<sigma>''_def \<tau>''_def)
-            also have "... = \<sigma>' B"
-              using `B \<notin> dom ( \<tau>'' 1)` unfolding next_state_def
-              by (metis \<open>next_time 0 \<tau>'' = 1\<close> override_on_apply_notin)
-            finally have 0: "signal_of (\<sigma>'' B) \<tau>'' B i = \<sigma>' B"
-              by auto
-            have 1: "signal_of (\<sigma>' B) \<tau>'' B i = \<sigma>' B"
-              using True unfolding to_signal_def comp_def by auto
-            then show ?thesis
-              using 0 1 by auto
-          next
-            case False
-            then obtain ta where "inf_time (to_trans_raw_sig \<tau>'') B i = Some ta"
-              by auto
-            then show ?thesis
-              unfolding to_signal_def comp_def by auto
-          qed
-          moreover have "signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'':=0)) B i =
-                         signal_of (\<sigma>'' B) \<tau>'' B i"
-            apply (intro signal_of_rem_curr_trans_at_t) using ind1' ind2' by auto
-          ultimately have IR: "1 \<le> i \<Longrightarrow> bval_of (get_state res C) \<longleftrightarrow>
-                                                \<not> (bval_of (signal_of (\<sigma>' A) \<tau>'' A i) \<and> bval_of (signal_of (\<sigma>' B) \<tau>'' B i))"
-            by auto
-          have " \<tau>'' 0 = 0"
-            unfolding \<tau>''_def  by (auto simp add: trans_post_raw_def preempt_raw_def post_raw_def)
-          have sA: "signal_of (\<sigma>' A) \<tau>'' A 0 = \<sigma>' A"
-            by (metis \<open>\<tau>'' 0 = 0\<close> signal_of_zero zero_fun_def)
-          have sB: "signal_of (\<sigma>' B) \<tau>'' B 0 = \<sigma>' B"
-            by (metis \<open>\<tau>'' 0 = 0\<close> signal_of_zero zero_fun_def)
-          have "next_time 0 \<tau>'' \<le> Suc i" and "1 \<le> next_time 0 \<tau>''"
-            unfolding `next_time 0 \<tau>'' = 1` by auto   
-          have "\<sigma>'' C = (let m =  \<tau>'' 1 in override_on \<sigma>' (the \<circ> m) (dom m)) C"
-            unfolding \<sigma>''_def next_state_def `next_time 0 \<tau>'' = 1` by auto
-          also have "... = Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))"
-            unfolding \<tau>''_def Let_def trans_post_raw_def post_raw_def preempt_raw_def
-            by (smt Nat.add_0_right One_nat_def Suc_eq_plus1 cancel_comm_monoid_add_class.diff_cancel
-            comp_apply domIff fun_upd_same nec option.sel option.simps(3) override_on_def signal_of_zero
-            zero_fun_def)
-          also have "... = Bv (\<not> (bval_of (signal_of (\<sigma>' A) \<tau>'' A 0) \<and> bval_of (signal_of (\<sigma>' B) \<tau>'' B 0)))"
-            using sA sB by auto
-          finally have IR0: "bval_of (\<sigma>'' C) \<longleftrightarrow> \<not> (bval_of (signal_of (\<sigma>' A) \<tau>'' A 0) \<and> bval_of (signal_of (\<sigma>' B) \<tau>'' B 0))"
-            by auto   
-          have "signal_of (\<sigma>' A) \<tau>'' A i = signal_of (\<sigma>' A) (?\<tau>'(0:=0)) A i"
-            unfolding \<tau>''_def  using signal_of_trans_post by fastforce
-          also have "... = signal_of (\<sigma>' A) ?\<tau>' A i"
-            by (smt \<sigma>'_def comp_apply next_state_def ntime override_on_def signal_of2_rem_curr_trans_at_0)
-          also have "... = signal_of (\<sigma>' A) \<tau> A i"
-            using signal_of_trans_post by fastforce
-          also have "... = signal_of (def A) \<tau> A i"
-          proof -
-            have " (to_trans_raw_sig \<tau> A) 0 \<noteq> None \<or>  (to_trans_raw_sig \<tau> A) 0 = None"
-              by auto
-            moreover
-            { assume " (to_trans_raw_sig \<tau> A) 0 \<noteq> None"
-              hence ?thesis
-                by (meson signal_of2_cong_neq_none_at_0) }
-            moreover
-            { assume " (to_trans_raw_sig \<tau> A) 0 = None"
-              hence "A \<notin> dom ( ?\<tau>' 0)"
-                unfolding to_trans_raw_sig_def trans_post_raw_def preempt_raw_def post_raw_def
-                by auto
-              hence "\<sigma>' A = def A"
-                unfolding \<sigma>'_def next_state_def `next_time 0 ?\<tau>' = 0` Let_def by auto
-              hence ?thesis by auto }
-            ultimately show ?thesis by auto
-          qed
-          finally have hel: "signal_of (\<sigma>' A) \<tau>'' A i = signal_of (def A) \<tau> A i"
-            by auto
-          have "signal_of (\<sigma>' B) \<tau>'' B i = signal_of (\<sigma>' B) (?\<tau>'(0:=0)) B i"
-            unfolding \<tau>''_def  using signal_of_trans_post by fastforce
-          also have "... = signal_of (\<sigma>' B) ?\<tau>' B i"
-            using signal_of2_rem_curr_trans_at_0 ind2 unfolding ntime \<sigma>'_def by metis
-          also have "... = signal_of (\<sigma>' B) \<tau> B i"
-            using signal_of_trans_post by fastforce
-          also have "... = signal_of (def B) \<tau> B i"
-          proof -
-            have " (to_trans_raw_sig \<tau> B) 0 \<noteq> None \<or>  (to_trans_raw_sig \<tau> B) 0 = None"
-              by auto
-            moreover
-            { assume " (to_trans_raw_sig \<tau> B) 0 \<noteq> None"
-              with signal_of2_cong_neq_none_at_0 have ?thesis by metis }
-            moreover
-            { assume " (to_trans_raw_sig \<tau> B) 0 = None"
-              hence "B \<notin> dom ( ?\<tau>' 0)"
-                 unfolding to_trans_raw_sig_def trans_post_raw_def preempt_raw_def post_raw_def by auto
-              hence "\<sigma>' B = def B"
-                unfolding \<sigma>'_def next_state_def `next_time 0 ?\<tau>' = 0` Let_def by auto
-              hence ?thesis by auto }
-            ultimately show ?thesis by auto
-          qed
-          finally have "signal_of (\<sigma>' B) \<tau>'' B i = signal_of (def B) \<tau> B i"
-            by auto
-          then have ?thesis
-          proof -
-            { assume "1 \<noteq> i"
-              { assume "\<not> (1::nat) < 1"
-                moreover
-                { assume "snd res \<noteq> (\<sigma>'', \<theta>'', \<tau>''(1 := 0)) \<and> \<not> (1::nat) < 1"
-                  then have "(1, \<sigma>'', \<theta>'', \<tau>''(1 := 0)) \<noteq> res \<and> \<not> (1::nat) < 1"
-                    by (metis snd_conv)
-                  then have "\<not> 1, 1 , \<sigma>'' , \<gamma>'' , \<theta>'', def \<turnstile> <nand3 , \<tau>'' (1 := 0)> \<leadsto> res"
-                    using bau by blast
-                  then have "Suc i \<noteq> 1"
-                    using \<open>next_time 0 \<tau>'' = 1\<close> bigstep3 by force }
-                ultimately have "Suc i = 1 \<and> 0 = i \<longrightarrow> \<not> bval_of (to_signal (\<sigma>' B) (to_trans_raw_sig \<tau>'') B i) \<and> bval_of (get_time (snd res) C) \<or> \<not> bval_of (to_signal (\<sigma>' A) (to_trans_raw_sig \<tau>'') A i) \<and> bval_of (get_time (snd res) C) \<or> (\<not> bval_of (get_time (snd res) C) \<and> bval_of (to_signal (\<sigma>' A) (to_trans_raw_sig \<tau>'') A i)) \<and> bval_of (to_signal (\<sigma>' B) (to_trans_raw_sig \<tau>'') B i)"
-                  by (metis (no_types) IR0 comp_apply fst_conv) }
-              then have "Suc i = 1 \<longrightarrow> \<not> bval_of (to_signal (\<sigma>' B) (to_trans_raw_sig \<tau>'') B i) \<and> bval_of (get_time (snd res) C) \<or> \<not> bval_of (to_signal (\<sigma>' A) (to_trans_raw_sig \<tau>'') A i) \<and> bval_of (get_time (snd res) C) \<or> (\<not> bval_of (get_time (snd res) C) \<and> bval_of (to_signal (\<sigma>' A) (to_trans_raw_sig \<tau>'') A i)) \<and> bval_of (to_signal (\<sigma>' B) (to_trans_raw_sig \<tau>'') B i) \<or> 1 \<le> i"
-                using le_less_linear by blast }
-            then show ?thesis
-              using IR \<open>next_time 0 \<tau>'' = 1\<close> \<open>signal_of (\<sigma>' B) \<tau>'' B i = signal_of (def B) \<tau> B i\<close> hel le_Suc_eq 
-              by force
-          qed }
-        moreover
-        { assume "bval_of (\<sigma>' C) \<longleftrightarrow> \<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B))"
-          hence not_nec: "\<not> post_necessary_raw 0 (?\<tau>'(0:=0)) 0 C (Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))) (\<sigma>' C)"
-          proof -
-            have " (?\<tau>'(0:=0)) 0 C = None"
-              by  (auto simp add:zero_map)
-            thus ?thesis using post_necessary_raw_correctness `bval_of (\<sigma>' C) \<longleftrightarrow> \<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B))`
-              by (smt \<open>\<sigma>' C = def C\<close> add.right_neutral assms(4) assms(5) signal_of_zero styping_def
-              ty.distinct(1) type_of.simps(2) val.exhaust_sel zero_option_def)
-          qed
-          hence lookup: " \<tau>'' = preempt_raw C (?\<tau>'(0:=0)) 1"
-            unfolding \<tau>''_def trans_post_raw_def by auto
-          hence "to_trans_raw_sig \<tau>'' C = 0"
-            unfolding preempt_raw_def to_trans_raw_sig_def
-            apply (intro ext)+ by (auto simp add: zero_fun_def zero_option_def)
-          { assume "A \<notin> next_event 0 \<tau>'' \<sigma>' \<and> B \<notin> next_event 0 \<tau>'' \<sigma>'"
-            hence "A \<notin> dom ( \<tau>'' (next_time 0 \<tau>'')) \<or> the ( \<tau>'' (next_time 0 \<tau>'') A) = \<sigma>' A"
-              and "B \<notin> dom ( \<tau>'' (next_time 0 \<tau>'')) \<or> the ( \<tau>'' (next_time 0 \<tau>'') B) = \<sigma>' B"
-              unfolding next_event_def ntime Let_def by auto
-            hence helper: "\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)) \<longleftrightarrow>  \<not> (bval_of (next_state 0 \<tau>'' \<sigma>' A) \<and> bval_of (next_state 0 \<tau>'' \<sigma>' B))"
-              unfolding next_state_def Let_def  by (simp add: override_on_def)
-            have "next_state 0 \<tau>'' \<sigma>' C = (let m =  \<tau>'' (next_time 0 \<tau>'') in override_on \<sigma>' (the \<circ> m) (dom m)) C"
-              unfolding next_state_def by auto
-            also have "... = \<sigma>' C"
-            proof -
-              define m where "m =  \<tau>'' (next_time 0 \<tau>'')"
-              hence "C \<notin> dom m"
-                using `to_trans_raw_sig \<tau>'' C = 0` unfolding next_time_def
-                unfolding to_trans_raw_sig_def  by (metis domIff zero_fun_def zero_option_def)
-              thus ?thesis
-                unfolding Let_def override_on_def m_def by auto
-            qed
-            also have "... = Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))"
-              using `bval_of (\<sigma>' C) \<longleftrightarrow> \<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B))`
-              by (metis fun_upd_same not_nec semiring_normalization_rules(6) signal_of_zero zero_fun_def)
-            finally have "bval_of (next_state 0 \<tau>'' \<sigma>' C) \<longleftrightarrow> \<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B))"
-              by auto
-            hence "bval_of (next_state 0 \<tau>'' \<sigma>' C) \<longleftrightarrow> \<not> (bval_of (next_state 0 \<tau>'' \<sigma>' A) \<and> bval_of (next_state 0 \<tau>'' \<sigma>' B))"
-              using helper by auto }
-          hence  ind4': "A \<notin> \<gamma>'' \<and> B \<notin> \<gamma>'' \<Longrightarrow> bval_of (\<sigma>'' C) = (\<not> (bval_of (\<sigma>'' A) \<and> bval_of (\<sigma>'' B)))"
-            unfolding \<gamma>''_def \<sigma>''_def by auto
-          have ind5': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow>  (to_trans_raw_sig \<tau>'' C) n = 0"
-            using `to_trans_raw_sig \<tau>'' C = 0` by (simp add: zero_fun_def)
-          hence ind5'': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow>  (to_trans_raw_sig (\<tau>''(next_time 0 \<tau>'':=0)) C) n = 0"
-            by (simp add: to_trans_raw_sig_def)
-          have "styping \<Gamma> \<sigma>''"
-            unfolding \<sigma>''_def
-            by (metis \<open>styping \<Gamma> (next_state 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def
-            B)))) (def C) \<tau> 0 1) def)\<close> \<sigma>'_def \<tau>''_def assms(5) assms(6) next_state_preserve_styping
-            trans_post_preserve_type_correctness ttyping_rem_curr_trans type_of.simps(1))
-          have "ttyping \<Gamma> \<theta>''"
-            unfolding \<theta>''_def
-            by (metis \<open>styping \<Gamma> (next_state 0 (trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def
-            B)))) (def C) \<tau> 0 1) def)\<close> \<sigma>'_def add_to_beh_preserve_type_correctness domIff ttyping_def
-            zero_fun_def zero_map)
-          have "ttyping \<Gamma> (\<tau>''(next_time 0 \<tau>'' := 0))"
-            by (simp add: \<tau>''_def assms(5) assms(6) trans_post_preserve_type_correctness ttyping_rem_curr_trans)
-          have *: "next_time 0 \<tau>'' \<le> i \<Longrightarrow>
-             bval_of (get_state res C) =
-         (\<not> (bval_of (signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'' := 0)) A i) \<and> bval_of (signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'' := 0)) B i)))"
-            using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5'' `conc_wt \<Gamma> nand3` `styping \<Gamma> \<sigma>''`
-                  `ttyping \<Gamma> \<theta>''` `ttyping \<Gamma> (\<tau>''(next_time 0 \<tau>'' := 0))` ` \<Gamma> C = Bty` `styping \<Gamma> def`]
-            by blast
-          moreover have "next_time 0 \<tau>'' \<le> i \<Longrightarrow> signal_of (\<sigma>'' A) \<tau>'' A i = signal_of (\<sigma>' A) \<tau>'' A i"
-          proof (cases "inf_time (to_trans_raw_sig \<tau>'') A i = None")
-            case True
-            assume "next_time 0 \<tau>'' \<le> i"
-            have "\<forall>k. k \<le> i \<longrightarrow>  (to_trans_raw_sig \<tau>'' A) k = 0"
-              using True by (auto dest!: inf_time_noneE2)
-            hence " (to_trans_raw_sig \<tau>'' A) (next_time 0 \<tau>'') = 0"
-              using `next_time 0 \<tau>'' \<le> i` by auto
-            hence "A \<notin> dom ( \<tau>'' (next_time 0 \<tau>''))"
-              unfolding next_time_def  unfolding trans_post_raw_def to_trans_raw_sig_def
-              by (simp add: domIff zero_option_def)
-            have "signal_of (\<sigma>'' A) \<tau>'' A i = next_state 0 \<tau>'' \<sigma>' A"
-              using True unfolding to_signal_def comp_def \<tau>''_def  by (simp add: \<sigma>''_def \<tau>''_def)
-            also have "... = \<sigma>' A"
-              using `A \<notin> dom ( \<tau>'' (next_time 0 \<tau>''))` unfolding next_state_def
-              by (metis override_on_apply_notin)
-            finally have 0: "signal_of (\<sigma>'' A) \<tau>'' A i = \<sigma>' A"
-              by auto
-            have 1: "signal_of (\<sigma>' A) \<tau>'' A i = \<sigma>' A"
-              using True unfolding to_signal_def comp_def by auto
-            then show ?thesis
-              using 0 1 by auto
-          next
-            case False
-            then obtain ta where "inf_time (to_trans_raw_sig \<tau>'') A i = Some ta"
-              by auto
-            then show ?thesis
-              unfolding to_signal_def comp_def by auto
-          qed
-          moreover have "signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'':=0)) A i = signal_of (\<sigma>'' A) \<tau>'' A i"
-            apply (intro signal_of_rem_curr_trans_at_t)
-            using ind1' ind2' by auto
-          moreover have "(next_time 0 \<tau>'') \<le> i \<Longrightarrow> signal_of (\<sigma>'' B) \<tau>'' B i = signal_of (\<sigma>' B) \<tau>'' B i"
-          proof (cases "inf_time (to_trans_raw_sig \<tau>'') B i = None")
-            case True
-            assume "(next_time 0 \<tau>'') \<le> i"
-            have "\<forall>k. k \<le> i \<longrightarrow>  (to_trans_raw_sig \<tau>'' B) k = 0"
-              using True by (auto dest!: inf_time_noneE2)
-            hence " (to_trans_raw_sig \<tau>'' B) (next_time 0 \<tau>'') = 0"
-              using `(next_time 0 \<tau>'') \<le> i` by auto
-            hence "B \<notin> dom ( \<tau>'' (next_time 0 \<tau>''))"
-              unfolding next_time_def  unfolding trans_post_raw_def to_trans_raw_sig_def
-              by (simp add: domIff zero_option_def)
-            have "signal_of (\<sigma>'' B) \<tau>'' B i = next_state 0 \<tau>'' \<sigma>' B"
-              using True unfolding to_signal_def comp_def \<tau>''_def  by (simp add: \<sigma>''_def \<tau>''_def)
-            also have "... = \<sigma>' B"
-              using `B \<notin> dom ( \<tau>'' (next_time 0 \<tau>''))` unfolding next_state_def
-              by (metis override_on_apply_notin)
-            finally have 0: "signal_of (\<sigma>'' B) \<tau>'' B i = \<sigma>' B"
-              by auto
-            have 1: "signal_of (\<sigma>' B) \<tau>'' B i = \<sigma>' B"
-              using True unfolding to_signal_def comp_def by auto
-            then show ?thesis
-              using 0 1 by auto
-          next
-            case False
-            then obtain ta where "inf_time (to_trans_raw_sig \<tau>'') B i = Some ta"
-              by auto
-            then show ?thesis
-              unfolding to_signal_def comp_def by auto
-          qed
-          moreover have "signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'' := 0)) B i = signal_of (\<sigma>'' B) \<tau>'' B i"
-            apply (intro signal_of_rem_curr_trans_at_t)
-            using ind1' ind2' by auto
-          ultimately have **: "next_time 0 \<tau>'' \<le> i \<Longrightarrow>
-            bval_of (get_state res C) = (\<not> (bval_of (signal_of (\<sigma>' A) \<tau>'' A i) \<and> bval_of (signal_of (\<sigma>' B) \<tau>'' B i)))"
-            using "*" by auto
-          have "signal_of (\<sigma>' A) \<tau>'' A i = signal_of (\<sigma>' A) (?\<tau>'(0:=0)) A i"
-            unfolding \<tau>''_def   using signal_of_trans_post by fastforce
-          also have "... = signal_of (\<sigma>' A) ?\<tau>' A i"
-            using signal_of2_rem_curr_trans_at_0 ind2 unfolding ntime \<sigma>'_def  by metis
-          also have "... = signal_of (\<sigma>' A) \<tau> A i"
-            using signal_of_trans_post by fastforce
-          also have "... = signal_of (def A) \<tau> A i"
-          proof -
-            have " (to_trans_raw_sig \<tau> A) 0 \<noteq> None \<or>  (to_trans_raw_sig \<tau> A) 0 = None"
-              by auto
-            moreover
-            { assume " (to_trans_raw_sig \<tau> A) 0 \<noteq> None"
-              with signal_of2_cong_neq_none_at_0 have ?thesis by metis }
-            moreover
-            { assume " (to_trans_raw_sig \<tau> A) 0 = None"
-              hence "A \<notin> dom ((trans_post_raw C ?x (def C) \<tau> 0 1) 0)"
-                 unfolding to_trans_raw_sig_def trans_post_raw_def preempt_raw_def post_raw_def
-                by auto
-              hence "\<sigma>' A = def A"
-                unfolding \<sigma>'_def next_state_def `next_time 0 ?\<tau>' = 0` Let_def by auto
-              hence ?thesis by auto }
-            ultimately show ?thesis by auto
-          qed
-          finally have hel: "signal_of (\<sigma>' A) \<tau>'' A i = signal_of (def A) \<tau> A i"
-            by auto
-          have "signal_of (\<sigma>' B) \<tau>'' B i = signal_of (\<sigma>' B) (?\<tau>'(0:=0)) B i"
-            unfolding \<tau>''_def using signal_of_trans_post by fastforce
-          also have "... = signal_of (\<sigma>' B) ?\<tau>' B i"
-            using signal_of2_rem_curr_trans_at_0 ind2 unfolding ntime \<sigma>'_def  by metis
-          also have "... = signal_of (\<sigma>' B) \<tau> B i"
-            using signal_of_trans_post by fastforce
-          also have "... = signal_of (def B) \<tau> B i"
-          proof -
-              have " (to_trans_raw_sig \<tau> B) 0 \<noteq> None \<or>  (to_trans_raw_sig \<tau> B) 0 = None"
-                by auto
-              moreover
-              { assume " (to_trans_raw_sig \<tau> B) 0 \<noteq> None"
-                with signal_of2_cong_neq_none_at_0 have ?thesis by metis }
-              moreover
-              { assume " (to_trans_raw_sig \<tau> B) 0 = None"
-                hence "B \<notin> dom ( (trans_post_raw C ?x (def C) \<tau> 0 1) 0)"
-                   unfolding to_trans_raw_sig_def trans_post_raw_def preempt_raw_def post_raw_def by auto
-                hence "\<sigma>' B = def B"
-                  unfolding \<sigma>'_def next_state_def `next_time 0 ?\<tau>' = 0` Let_def by auto
-                hence ?thesis by auto }
-              ultimately show ?thesis by auto
-            qed
-          finally have hel2: "signal_of (\<sigma>' B) \<tau>'' B i = signal_of (def B) \<tau> B i"
-            by auto
-          with ** have ?thesis
-            using hel hel2  using le_less_linear
-            sorry }
-        ultimately show ?thesis by auto
-      next
-        case none
-        hence \<tau>''_def: "\<tau>'' = ?\<tau>'(0:=0)"
-          using cyc unfolding nand3_def t'_def' by auto
-        moreover have " \<tau> 0 C = None"
-          using assms(2)  unfolding to_trans_raw_sig_def  by (metis zero_map)
-        have "\<tau>'' \<noteq> 0"
-          using `\<tau>'' = ?\<tau>'(0 := 0)`
-          using \<open>(trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1) (t' := 0) \<noteq> 0\<close> t'_def' by auto
-        hence "next_time 0 \<tau>'' = (LEAST n. dom ( \<tau>'' n) \<noteq> {})"
-          unfolding next_time_def by auto
-        have "... = 1"
-        proof (rule Least_equality)
-          show "dom ( \<tau>'' 1) \<noteq> {}"
-            using False ` ?\<tau>' 1 C = Some ?x` unfolding \<tau>''_def
-            by  auto
-        next
-          { fix y :: nat
-            assume "\<not> 1 \<le> y"
-            hence "y < 1" by auto hence "y = 0" by auto
-            hence "dom ( \<tau>'' y) = {}"
-              unfolding \<tau>''_def   by (auto simp add: trans_post_raw_def zero_map) }
-          thus "\<And>y. dom ( \<tau>'' y) \<noteq> {} \<Longrightarrow> 1 \<le> y "
-            by auto
-        qed
-        hence "next_time 0 \<tau>'' = 1"
-          by (simp add: \<open>next_time 0 \<tau>'' = (LEAST n. dom (\<tau>'' n) \<noteq> {})\<close>)
-        have "\<sigma>' A = def A" and "\<sigma>' B = def B"
-          using none unfolding \<gamma>'_def \<sigma>'_def next_event_def Let_def ntime
-          by (metis \<gamma>'_def next_state_fixed_point none)+
-        { assume "A \<notin> next_event 0 \<tau>'' \<sigma>' \<and> B \<notin> next_event 0 \<tau>'' \<sigma>'"
-          hence "A \<notin> dom ( \<tau>'' (next_time 0 \<tau>'')) \<or> the ( \<tau>'' (next_time 0 \<tau>'') A) = \<sigma>' A"
-            and "B \<notin> dom ( \<tau>'' (next_time 0 \<tau>'')) \<or> the ( \<tau>'' (next_time 0 \<tau>'') B) = \<sigma>' B"
-            unfolding next_event_def ntime Let_def by auto
-          hence helper: "\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)) \<longleftrightarrow>  \<not> (bval_of (next_state 0 \<tau>'' \<sigma>' A) \<and> bval_of (next_state 0 \<tau>'' \<sigma>' B))"
-            unfolding next_state_def Let_def  by (simp add: override_on_def)
-          have "next_state 0 \<tau>'' \<sigma>' C = (let m =  \<tau>'' (next_time 0 \<tau>'') in override_on \<sigma>' (the \<circ> m) (dom m)) C"
-            unfolding next_state_def by auto
-          also have "... = (let m =  \<tau>'' 1 in override_on \<sigma>' (the \<circ> m) (dom m)) C"
-            unfolding `next_time 0 \<tau>'' = 1` by auto
-          also have "... = Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))"
-            unfolding \<tau>''_def  `\<sigma>' A = def A` `\<sigma>' B = def B` using False ` ?\<tau>' 1 C = Some ?x`
-             unfolding trans_post_raw_def Let_def post_raw_def by (auto simp add:override_on_def)
-          finally have "bval_of (next_state 0 \<tau>'' \<sigma>' C) \<longleftrightarrow> \<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B))"
-            by auto
-          hence "bval_of (next_state 0 \<tau>'' \<sigma>' C) \<longleftrightarrow> \<not> (bval_of (next_state 0 \<tau>'' \<sigma>' A) \<and> bval_of (next_state 0 \<tau>'' \<sigma>' B))"
-            using helper by auto }
-        hence  ind4': "A \<notin> \<gamma>'' \<and> B \<notin> \<gamma>'' \<Longrightarrow> bval_of (\<sigma>'' C) = (\<not> (bval_of (\<sigma>'' A) \<and> bval_of (\<sigma>'' B)))"
-          unfolding \<gamma>''_def \<sigma>''_def by auto
-        have "\<And>n. 1 < n \<Longrightarrow>  (to_trans_raw_sig \<tau>'' C) n = 0"
-          unfolding \<tau>''_def   unfolding trans_post_raw_def to_trans_raw_sig_def preempt_raw_def
-          post_raw_def by (simp add: zero_option_def)
-        hence ind5': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow>  (to_trans_raw_sig \<tau>'' C) n = 0"
-          unfolding `next_time 0 \<tau>'' = 1` by auto
-        hence ind5'': "\<And>n. next_time 0 \<tau>'' < n \<Longrightarrow>  (to_trans_raw_sig (\<tau>'' (next_time 0 \<tau>'':=0)) C) n = 0"
-          by (simp add: to_trans_raw_sig_def)
-        have "styping \<Gamma> \<sigma>''"
-          unfolding \<sigma>''_def
-          by (simp add: \<sigma>'_def assms(4) assms(5) assms(6) calculation next_state_preserve_styping
-          trans_post_preserve_type_correctness ttyping_rem_curr_trans)
-        have "ttyping \<Gamma> \<theta>''"
-          unfolding \<theta>''_def
-          by (metis \<sigma>'_def add_to_beh_preserve_type_correctness assms(4) assms(5) assms(6) domIff
-          next_state_preserve_styping trans_post_preserve_type_correctness ttyping_def type_of.simps(1)
-          zero_fun_def zero_option_def)
-        have "ttyping \<Gamma> (\<tau>''(next_time 0 \<tau>'' := 0))"
-          by (simp add: assms(5) assms(6) calculation trans_post_preserve_type_correctness ttyping_rem_curr_trans)
-        have *: "1 \<le> i \<Longrightarrow>
-           bval_of (get_state res C) =
-       (\<not> (bval_of (signal_of (\<sigma>'' A) (\<tau>''(next_time 0 \<tau>'' := 0)) A i) \<and> bval_of (signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'' := 0)) B i)))"
-          using nand3_correctness_ind[OF bigstep3 _ _ ind1'' ind2'' ind3' _ ind4' ind5'' `conc_wt \<Gamma> nand3` `styping \<Gamma> \<sigma>''` `ttyping \<Gamma> \<theta>''`
-                                        `ttyping \<Gamma> (\<tau>''(next_time 0 \<tau>'' := 0))` `\<Gamma> C = Bty` `styping \<Gamma> def`]
-          unfolding `next_time 0 \<tau>'' = 1` by auto
-        moreover have "1 \<le> i \<Longrightarrow> signal_of (\<sigma>'' A) \<tau>'' A i = signal_of (\<sigma>' A) \<tau>'' A i"
-        proof (cases "inf_time (to_trans_raw_sig \<tau>'') A i = None")
-          case True
-          assume "1 \<le> i"
-          have "\<forall>k. k \<le> i \<longrightarrow>  (to_trans_raw_sig \<tau>'' A) k = 0"
-            using True by (auto dest!: inf_time_noneE2)
-          hence " (to_trans_raw_sig \<tau>'' A) 1 = 0"
-            using `1 \<le> i` by auto
-          hence "A \<notin> dom ( \<tau>'' 1)"
-             unfolding trans_post_raw_def to_trans_raw_sig_def
-            by (simp add: domIff zero_option_def)
-          have "signal_of (\<sigma>'' A) \<tau>'' A i = next_state 0 \<tau>'' \<sigma>' A"
-            using True unfolding to_signal_def comp_def \<tau>''_def  by (simp add: \<sigma>''_def \<tau>''_def)
-          also have "... = \<sigma>' A"
-            using `A \<notin> dom ( \<tau>'' 1)` unfolding next_state_def
-            by (metis \<open>next_time 0 \<tau>'' = 1\<close> override_on_apply_notin)
-          finally have 0: "signal_of (\<sigma>'' A) \<tau>'' A i = \<sigma>' A"
-            by auto
-          have 1: "signal_of (\<sigma>' A) \<tau>'' A i = \<sigma>' A"
-            using True unfolding to_signal_def comp_def by auto
-          then show ?thesis
-            using 0 1 by auto
-        next
-          case False
-          then obtain ta where "inf_time (to_trans_raw_sig \<tau>'') A i = Some ta"
-            by auto
-          then show ?thesis
-            unfolding to_signal_def comp_def by auto
-        qed
-        moreover have "signal_of (\<sigma>'' A) (\<tau>'' (next_time 0 \<tau>'':=0)) A i =  signal_of (\<sigma>'' A) \<tau>'' A i"
-          apply (intro signal_of_rem_curr_trans_at_t)
-          using ind1' ind2' by auto
-        moreover have "1 \<le> i \<Longrightarrow> signal_of (\<sigma>'' B) \<tau>'' B i = signal_of (\<sigma>' B) \<tau>'' B i"
-        proof (cases "inf_time (to_trans_raw_sig \<tau>'') B i = None")
-          case True
-          assume "1 \<le> i"
-          have "\<forall>k. k \<le> i \<longrightarrow>  (to_trans_raw_sig \<tau>'' B) k = 0"
-            using True by (auto dest!: inf_time_noneE2)
-          hence " (to_trans_raw_sig \<tau>'' B) 1 = 0"
-            using `1 \<le> i` by auto
-          hence "B \<notin> dom ( \<tau>'' 1)"
-             unfolding trans_post_raw_def to_trans_raw_sig_def
-            by (simp add: domIff zero_option_def)
-          have "signal_of (\<sigma>'' B) \<tau>'' B i = next_state 0 \<tau>'' \<sigma>' B"
-            using True unfolding to_signal_def comp_def \<tau>''_def  by (simp add: \<sigma>''_def \<tau>''_def)
-          also have "... = \<sigma>' B"
-            using `B \<notin> dom ( \<tau>'' 1)` unfolding next_state_def
-            by (metis \<open>next_time 0 \<tau>'' = 1\<close> override_on_apply_notin)
-          finally have 0: "signal_of (\<sigma>'' B) \<tau>'' B i = \<sigma>' B"
-            by auto
-          have 1: "signal_of (\<sigma>' B) \<tau>'' B i = \<sigma>' B"
-            using True unfolding to_signal_def comp_def by auto
-          then show ?thesis
-            using 0 1 by auto
-        next
-          case False
-          then obtain ta where "inf_time (to_trans_raw_sig \<tau>'') B i = Some ta"
-            by auto
-          then show ?thesis
-            unfolding to_signal_def comp_def by auto
-        qed
-        moreover have "signal_of (\<sigma>'' B) (\<tau>''(next_time 0 \<tau>'':=0)) B i =  signal_of (\<sigma>'' B) \<tau>'' B i"
-          apply (intro signal_of_rem_curr_trans_at_t)
-          using ind1' ind2' by auto
-        ultimately have IR: "1 \<le> i \<Longrightarrow> bval_of (get_state res C) \<longleftrightarrow>
-                                              \<not> (bval_of (signal_of (\<sigma>' A) \<tau>'' A i) \<and> bval_of (signal_of (\<sigma>' B) \<tau>'' B i))"
-          by auto
-        have " \<tau>'' 0 = 0"
-          unfolding \<tau>''_def  by (auto simp add: trans_post_raw_def)
-        have sA: "signal_of (\<sigma>' A) \<tau>'' A 0 = \<sigma>' A"
-          by (metis \<open>\<tau>'' 0 = 0\<close> signal_of_zero zero_fun_def)
-        have sB: "signal_of (\<sigma>' B) \<tau>'' B 0 = \<sigma>' B"
-          by (metis \<open>\<tau>'' 0 = 0\<close> signal_of_zero zero_fun_def)
-        have "next_time 0 \<tau>'' \<le> Suc i" and "1 \<le> next_time 0 \<tau>''"
-          unfolding `next_time 0 \<tau>'' = 1` by auto        
-        have "\<sigma>'' C = (let m =  \<tau>'' 1 in override_on \<sigma>' (the \<circ> m) (dom m)) C"
-          unfolding \<sigma>''_def next_state_def `next_time 0 \<tau>'' = 1` by auto
-        also have "... = Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))"
-          using ` ?\<tau>' 1 C = Some ?x` unfolding \<tau>''_def Let_def  `\<sigma>' A = def A` `\<sigma>' B = def B`
-            unfolding trans_post_raw_def  post_raw_def by (auto simp add: override_on_def)
-        also have "... = Bv (\<not> (bval_of (signal_of (\<sigma>' A) \<tau>'' A 0) \<and> bval_of (signal_of (\<sigma>' B) \<tau>'' B 0)))"
-          using sA sB by auto
-        finally have IR0: "bval_of (\<sigma>'' C) \<longleftrightarrow> \<not> (bval_of (signal_of (\<sigma>' A) \<tau>'' A 0) \<and> bval_of (signal_of (\<sigma>' B) \<tau>'' B 0))"
-          by auto
-        have "signal_of (\<sigma>' A) \<tau>'' A i = signal_of (\<sigma>' A) (?\<tau>'(0:= 0)) A i"
-          unfolding \<tau>''_def by (metis \<tau>''_def sig.distinct(3))
-        also have "... = signal_of (\<sigma>' A) ?\<tau>' A i"
-          using signal_of2_rem_curr_trans_at_0 ind2 unfolding ntime \<sigma>'_def  by metis
-        also have "... = signal_of (\<sigma>' A) \<tau> A i"
-          using signal_of_trans_post by fastforce
-        also have "... = signal_of (def A) \<tau> A i"
-        proof -
-          have " (to_trans_raw_sig \<tau> A) 0 \<noteq> None \<or>  (to_trans_raw_sig \<tau> A) 0 = None"
-            by auto
-          moreover
-          { assume " (to_trans_raw_sig \<tau> A) 0 \<noteq> None"
-            with signal_of2_cong_neq_none_at_0 have ?thesis by metis }
-          moreover
-          { assume " (to_trans_raw_sig \<tau> A) 0 = None"
-            hence "A \<notin> dom ( (trans_post_raw C ?x (def C) \<tau> 0 1) 0)"
-              unfolding to_trans_raw_sig_def trans_post_raw_def preempt_raw_def post_raw_def
-              by auto
-            hence "\<sigma>' A = def A"
-              unfolding \<sigma>'_def next_state_def `next_time 0 ?\<tau>' = 0` Let_def by auto
-            hence ?thesis by auto }
-          ultimately show ?thesis by auto
-        qed
-        finally have hel: "signal_of (\<sigma>' A) \<tau>'' A i = signal_of (def A) \<tau> A i"
-          by auto
-        have "signal_of (\<sigma>' B) \<tau>'' B i = signal_of (\<sigma>' B) (?\<tau>'(0:=0)) B i"
-          unfolding \<tau>''_def  by fastforce
-        also have "... = signal_of (\<sigma>' B) ?\<tau>' B i"
-          using signal_of2_rem_curr_trans_at_0 ind2 unfolding ntime \<sigma>'_def  by metis
-        also have "... = signal_of (\<sigma>' B) \<tau> B i"
-          using signal_of_trans_post by fastforce
-        also have "... = signal_of (def B) \<tau> B i"
-        proof -
-          have " (to_trans_raw_sig \<tau> B) 0 \<noteq> None \<or>  (to_trans_raw_sig \<tau> B) 0 = None"
-            by auto
-          moreover
-          { assume " (to_trans_raw_sig \<tau> B) 0 \<noteq> None"
-            with signal_of2_cong_neq_none_at_0 have ?thesis by metis }
-          moreover
-          { assume " (to_trans_raw_sig \<tau> B) 0 = None"
-            hence "B \<notin> dom ( (trans_post_raw C ?x (def C) \<tau> 0 1) 0)"
-               unfolding to_trans_raw_sig_def trans_post_raw_def preempt_raw_def post_raw_def by auto
-            hence "\<sigma>' B = def B"
-              unfolding \<sigma>'_def next_state_def `next_time 0 ?\<tau>' = 0` Let_def by auto
-            hence ?thesis by auto }
-          ultimately show ?thesis by auto
-        qed
-        finally have "signal_of (\<sigma>' B) \<tau>'' B i = signal_of (def B) \<tau> B i"
-          by auto
-        then show ?thesis
-          using IR IR0 hel le_less_linear \<open>next_time 0 \<tau>'' = 1\<close> \<open>next_time 0 \<tau>'' \<le> Suc i\<close> le_Suc_eq
-        proof -
-          { assume "1 \<noteq> i"
-            { assume "\<not> (1::nat) < 1"
-              moreover
-              { assume "snd res \<noteq> (\<sigma>'', \<theta>'', \<tau>''(1 := 0)) \<and> \<not> (1::nat) < 1"
-                then have "(1, \<sigma>'', \<theta>'', \<tau>''(1 := 0)) \<noteq> res \<and> \<not> (1::nat) < 1"
-                  by (meson snd_conv)
-                then have "\<not> 1, 1 , \<sigma>'' , \<gamma>'' , \<theta>'', def \<turnstile> <nand3 , \<tau>'' (1 := 0)> \<leadsto> res"
-                  using bau by blast
-                then have "Suc i \<noteq> 1"
-                  using \<open>next_time 0 \<tau>'' = 1\<close> bigstep3 by force }
-              ultimately have "Suc i = 1 \<and> 0 = i \<longrightarrow> \<not> bval_of (to_signal (\<sigma>' B) (to_trans_raw_sig \<tau>'') B i) \<and> bval_of (get_time (snd res) C) \<or> \<not> bval_of (to_signal (\<sigma>' A) (to_trans_raw_sig \<tau>'') A i) \<and> bval_of (get_time (snd res) C) \<or> (\<not> bval_of (get_time (snd res) C) \<and> bval_of (to_signal (\<sigma>' A) (to_trans_raw_sig \<tau>'') A i)) \<and> bval_of (to_signal (\<sigma>' B) (to_trans_raw_sig \<tau>'') B i)"
-                by (metis IR0 comp_apply fst_conv) }
-            then have "Suc i = 1 \<longrightarrow> \<not> bval_of (to_signal (\<sigma>' B) (to_trans_raw_sig \<tau>'') B i) \<and> bval_of (get_time (snd res) C) \<or> \<not> bval_of (to_signal (\<sigma>' A) (to_trans_raw_sig \<tau>'') A i) \<and> bval_of (get_time (snd res) C) \<or> (\<not> bval_of (get_time (snd res) C) \<and> bval_of (to_signal (\<sigma>' A) (to_trans_raw_sig \<tau>'') A i)) \<and> bval_of (to_signal (\<sigma>' B) (to_trans_raw_sig \<tau>'') B i) \<or> 1 \<le> i"
-              by simp }
-          then show ?thesis
-            using IR \<open>next_time 0 \<tau>'' = 1\<close> \<open>signal_of (\<sigma>' B) \<tau>'' B i = signal_of (def B) \<tau> B i\<close> hel le_Suc_eq by force
-        qed
-      qed }
-    moreover
-    { assume "Suc i < next_time 0 \<tau>''"
-      have "get_state res = \<sigma>'"
-        apply (rule bau[OF bigstep'])
-        using \<open>Suc i < next_time 0 \<tau>''\<close> b_conc_exec_deterministic cyc not_less by blast auto         
-      hence "get_state res C = def C"
-        by (simp add: \<open>\<sigma>' C = def C\<close>)
-      hence ?thesis
-      proof (cases "A \<in> \<gamma>' \<or> B \<in> \<gamma>'")
-      case True
-      hence "b_seq_exec 0 \<sigma>' \<gamma>' 0 def (get_seq nand3) (?\<tau>' (t':=0)) \<tau>''"
-        using cyc  by (metis conc_cases(1) conc_stmt.sel(4) disjnt_insert1 nand3_def)
-      hence "is_Bv (\<sigma>' A)" and "is_Bv (\<sigma>' B)"
-        by (metis \<open>\<Gamma> A = Bty\<close> \<open>\<Gamma> B = Bty\<close> \<open>styping \<Gamma> \<sigma>'\<close> styping_def ty.distinct(1) type_of.simps(2)
-        val.collapse(2))+
-      hence "0 , \<sigma>' , \<gamma>' , 0, def  \<turnstile> Bsig A \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma>' A))" and
-            "0 , \<sigma>' , \<gamma>' , 0, def  \<turnstile> Bsig B \<longrightarrow>\<^sub>b Bv (bval_of (\<sigma>' B))"
-        by (auto intro!: beval_raw.intros)
-      hence "0 , \<sigma>' , \<gamma>' , 0, def  \<turnstile> Bnand (Bsig A) (Bsig B) \<longrightarrow>\<^sub>b 
-                      (Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B))))" (is "_, _, _, _, _ \<turnstile> _ \<longrightarrow>\<^sub>b ?x'")
-        by (intro beval_raw.intros)  
-      hence "0, \<sigma>', \<gamma>', 0, def \<turnstile> <Bassign_trans C (Bnand (Bsig A) (Bsig B)) 1, (?\<tau>' (t':=0))> \<longrightarrow>\<^sub>s trans_post_raw C ?x' (\<sigma>' C) (?\<tau>' (t':=0)) 0 1"
-        by (simp add: b_seq_exec.intros(5))
-      hence \<tau>''_def: "\<tau>'' = trans_post_raw C ?x' (\<sigma>' C) (?\<tau>' (t':=0)) 0 1"
-        by (metis \<open>0 , \<sigma>' , \<gamma>' , 0, def \<turnstile> <get_seq nand3 , (trans_post_raw C (Bv (\<not> (bval_of (def A)
-        \<and> bval_of (def B)))) (def C) \<tau> 0 1) (t' := 0)> \<longrightarrow>\<^sub>s \<tau>''\<close> b_seq_exec_deterministic
-        conc_stmt.sel(4) nand3_def)
-      have "post_necessary_raw (1 - 1) (?\<tau>' (t':=0)) 0 C ?x' (\<sigma>' C) \<or>\<not> post_necessary_raw (1 - 1) (?\<tau>' (t':=0)) 0 C ?x' (\<sigma>' C)"
-        by auto
-      moreover
-      { assume "post_necessary_raw (1 - 1) (?\<tau>' (t':=0)) 0 C ?x' (\<sigma>' C)"
-        hence "signal_of (\<sigma>' C) (?\<tau>' (t' := 0)) C 0 \<noteq> ?x'"
-          by auto
-        hence "\<tau>'' = post_raw C ?x' (?\<tau>' (t':=0)) 1"
-          unfolding \<tau>''_def trans_post_raw_def by auto
-        hence "next_time 0 \<tau>'' = 1"
-          by (smt fun_upd_eqD fun_upd_triv less_one nat_less_le next_time_at_least
-          next_time_at_least2 next_time_def option.distinct(1) post_raw_def t'_def' zero_fun_def
-          zero_option_def) 
-        with \<open>Suc i < next_time 0 \<tau>''\<close> have "False"
-          by auto
-        hence ?thesis
-          by auto }
-      moreover
-      { assume "\<not> post_necessary_raw (1 - 1) (?\<tau>' (t':=0)) 0 C ?x' (\<sigma>' C)"
-        hence "signal_of (\<sigma>' C) (?\<tau>' (t':=0)) C 0 = ?x'"
-          by auto
-        moreover have "signal_of (\<sigma>' C) (?\<tau>' (t':=0)) C 0 = \<sigma>' C"
-          unfolding `t' = 0`  by (metis fun_upd_same signal_of_zero zero_fun_def)
-        ultimately have "\<sigma>' C = ?x'"
-          by auto
-        hence "def C = ?x'"
-          using \<open>\<sigma>' C = def C\<close> by auto
-        hence "\<tau>'' = preempt_raw C (?\<tau>' (t':=0)) 1"
-          unfolding \<tau>''_def trans_post_raw_def 
-          by (metis \<open>\<sigma>' C = Bv (\<not> (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))\<close> add.left_neutral
-          cancel_comm_monoid_add_class.diff_cancel fun_upd_same signal_of_zero t'_def' zero_fun_def)
-        have *: "\<And>s. s \<in> {A, B} \<Longrightarrow> \<sigma>' s =  
-            (let m = post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 1 0 in override_on def (the \<circ> m) (dom m)) s"
-          unfolding \<sigma>'_def next_state_def `next_time 0 ?\<tau>' = 0`
-          using \<open>?\<tau>' = post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 1\<close> by auto
-        have "\<And>n. n < next_time 0 \<tau>'' \<Longrightarrow> \<tau>'' n  = 0"
-          using next_time_at_least2 by blast
-        hence "\<And>s n. s \<in> {A, B} \<Longrightarrow> n < next_time 0 \<tau>'' \<Longrightarrow> \<tau>'' n s = 0"
-          by (simp add: zero_fun_def)
-        hence "\<And>s n. s \<in> {A, B} \<Longrightarrow> n < next_time 0 \<tau>'' \<Longrightarrow> (?\<tau>' (t' := 0)) n s = 0"
-          unfolding \<open>\<tau>'' = preempt_raw C (?\<tau>' (t':=0)) 1\<close> 
-          by (metis \<open>0 , \<sigma>' , \<gamma>' , 0, def \<turnstile> <get_seq nand3 , (trans_post_raw C (Bv (\<not> (bval_of (def
-          A) \<and> bval_of (def B)))) (def C) \<tau> 0 1) (t' := 0)> \<longrightarrow>\<^sub>s \<tau>''\<close> \<open>\<tau>'' = preempt_raw C
-          ((trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1) (t' := 0))
-          1\<close> insertE insert_absorb insert_not_empty nand3_does_not_modify_AB' not_less_zero
-          sig.distinct(3) sig.distinct(5))
-        hence **: "\<And>s n. s \<in> {A , B} \<Longrightarrow> n < next_time 0 \<tau>'' \<Longrightarrow> (\<tau> (t' := 0)) n s = 0"
-          by (metis (mono_tags, hide_lams) assms(2) fun_upd_apply to_trans_raw_sig_def
-          trans_post_raw_diff_sig zero_fun_def)
-        have "A \<in> dom (?\<tau>' 0) \<or> A \<notin> dom (?\<tau>' 0)"
-          by auto
-        moreover
-        { assume "A \<notin> dom (?\<tau>' 0)"
-          hence "A \<notin> dom (\<tau> 0)"
-            by (metis domIff sig.distinct(3) to_trans_raw_sig_def trans_post_raw_diff_sig)
-          have "\<sigma>' A = def A"
-            using * \<open>A \<notin> dom (?\<tau>' 0)\<close> unfolding Let_def 
-            using \<open>?\<tau>' = post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 1\<close> by auto
-          also have "... = signal_of (def A) \<tau> A 0"
-            using `A \<notin> dom (?\<tau>' 0)` 
-            by (metis domIff sig.distinct(3) signal_of_zero to_trans_raw_sig_def
-            trans_post_raw_diff_sig zero_option_def)
-          also have "... = signal_of (def A) \<tau> A i"
-            apply (rule signal_of_less_ind'[THEN sym])
-            by (metis "**" Suc_lessD \<open>Suc i < next_time 0 \<tau>''\<close> fun_upd_apply insert_iff
-            le_less_trans not_less_eq t'_def') auto
-          finally have "\<sigma>' A = signal_of (def A) \<tau> A i"
-            by auto }
-        moreover
-        { assume "A \<in> dom (?\<tau>' 0)"
-          hence "A \<in> dom (\<tau> 0)"
-            by (metis domIff sig.distinct(3) to_trans_raw_sig_def trans_post_raw_diff_sig)
-          hence "\<sigma>' A = the (\<tau> 0 A)"
-            by (smt \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 =
-            post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 1\<close> \<sigma>'_def comp_apply
-            next_state_def not_one_less_zero ntime override_on_def post_raw_def zero_neq_one)
-          also have "... = signal_of (def A) \<tau> A 0"
-            using \<open>A \<in> dom (\<tau> 0)\<close> trans_some_signal_of' by fastforce
-          also have "... = signal_of (def A) \<tau> A i"
-            apply (rule signal_of_less_ind'[THEN sym])
-            by (metis "**" Suc_lessD \<open>Suc i < next_time 0 \<tau>''\<close> fun_upd_apply insert_iff
-            le_less_trans not_less_eq t'_def') auto
-          finally have "\<sigma>' A = signal_of (def A) \<tau> A i"
-            by auto }
-        ultimately have "\<sigma>' A = signal_of (def A) \<tau> A i"
-          by auto
-        have "B \<in> dom (?\<tau>' 0) \<or> B \<notin> dom (?\<tau>' 0)"
-          by auto
-        moreover
-        { assume "B \<notin> dom (?\<tau>' 0)"
-          hence "B \<notin> dom (\<tau> 0)"
-            by (metis domIff sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
-          have "\<sigma>' B = def B"
-            using * \<open>B \<notin> dom (?\<tau>' 0)\<close> unfolding Let_def 
-            using \<open>?\<tau>' = post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 1\<close> by auto
-          also have "... = signal_of (def B) \<tau> B 0"
-            using `B \<notin> dom (?\<tau>' 0)` 
-            by (metis \<open>B \<notin> dom (\<tau> 0)\<close> domIff signal_of_zero zero_option_def)
-          also have "... = signal_of (def B) \<tau> B i"
-            apply (rule signal_of_less_ind'[THEN sym])
-            by (metis (mono_tags, hide_lams) "**"  Suc_lessD \<open>Suc i < next_time 0 \<tau>''\<close> 
-             ex_least_nat_le fun_upd_apply insert_iff le_less_trans
-             not_less_zero t'_def' ) auto
-          finally have "\<sigma>' B = signal_of (def B) \<tau> B i"
-            by auto }
-        moreover
-        { assume "B \<in> dom (?\<tau>' 0)"
-          hence "B \<in> dom (\<tau> 0)"
-            by (metis domIff sig.distinct(5) to_trans_raw_sig_def trans_post_raw_diff_sig)
-          hence "\<sigma>' B = the (\<tau> 0 B)"
-            by (smt \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 =
-            post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) \<tau> 1\<close> \<sigma>'_def comp_apply
-            next_state_def not_one_less_zero ntime override_on_def post_raw_def zero_neq_one)
-          also have "... = signal_of (def B) \<tau> B 0"
-            using \<open>B \<in> dom (\<tau> 0)\<close> trans_some_signal_of' by fastforce
-          also have "... = signal_of (def B) \<tau> B i"
-            apply (rule signal_of_less_ind'[THEN sym])
-            by (metis "**" Suc_lessD \<open>Suc i < next_time 0 \<tau>''\<close> fun_upd_apply insert_iff
-            le_less_trans not_less_eq t'_def') auto
-          finally have "\<sigma>' B = signal_of (def B) \<tau> B i"
-            by auto }
-        ultimately have "\<sigma>' B = signal_of (def B) \<tau> B i"
-          by auto        
-        have ?thesis
-          using \<open>\<sigma>' A = signal_of (def A) \<tau> A i\<close> \<open>\<sigma>' B = signal_of (def B) \<tau> B i\<close> \<open>\<sigma>' C = Bv (\<not>
-          (bval_of (\<sigma>' A) \<and> bval_of (\<sigma>' B)))\<close> \<open>get_state res = \<sigma>'\<close> by auto }
-      ultimately show ?thesis 
-        by auto        
-    next
-      case False
-      hence "\<tau>'' = ?\<tau>' (t' := 0)"
-        using cyc 
-        by (metis conc_cases(1) disjnt_empty1 disjnt_insert1 nand3_def)
-      hence "next_time 0 \<tau>'' = 1"
-        by (smt Suc_lessI \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0
-        1 1 C = Some (Bv (\<not> (bval_of (def A) \<and> bval_of (def B))))\<close> cyc fun_upd_same fun_upd_triv
-        fun_upd_twist le_zero_eq less_Suc_eq less_one next_time_at_least2 not_gr_zero
-        option.simps(3) t'_def' t_strictly_increasing zero_fun_def zero_option_def)
-      hence "False"
-        using \<open>Suc i < next_time 0 \<tau>''\<close> by linarith
-      thus ?thesis
-        by auto
-    qed }
-    ultimately have ?thesis
-      by auto }
-  moreover
-  { assume "Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) = def C"
-    hence "\<not> post_necessary_raw 0 \<tau> 0 C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C)"
-      by (metis add.left_neutral assms(2) signal_of_zero to_trans_raw_sig_def zero_fun_def)
-    hence "?\<tau>' = preempt_raw C \<tau> 1"
-      unfolding trans_post_raw_def by auto
-    also have "... = \<tau>"
-    proof (rule, rule)
-      fix time sig
-      have "sig = C \<or> sig \<noteq> C"
-        by auto
-      moreover
-      { assume "sig = C"
-        hence "preempt_raw C \<tau> 1 time C = None"
-          unfolding preempt_raw_def
-          by (metis (full_types) assms(2) fun_upd_idem_iff to_trans_raw_sig_def zero_fun_def zero_option_def)
-        also have "... = \<tau> time C"
-          using assms(2) unfolding to_trans_raw_sig_def  by (metis zero_map)
-        finally have "preempt_raw C \<tau> 1 time sig = \<tau> time sig"
-          using `sig = C` by auto }
-      moreover
-      { assume "sig \<noteq> C"
-        hence "preempt_raw C \<tau> 1 time sig = \<tau> time sig"
-          unfolding preempt_raw_def by auto }
-      ultimately show "preempt_raw C \<tau> 1 time sig = \<tau> time sig"
-        by auto
-    qed
-    finally have "?\<tau>' = \<tau>"
-      by auto
-    hence bigstep: "(Suc i),
-           next_time 0 \<tau> ,
-           next_state 0 \<tau> def ,
-           next_event 0 \<tau> def ,
-           add_to_beh def 0 0 (next_time 0 \<tau>), def
-        \<turnstile> <nand3 , \<tau>(next_time 0 \<tau> := 0)> \<leadsto> res"
-      using bsimulate_obt_big_step[OF assms(1) `init' 0 def {} 0 def nand3 \<tau> ?\<tau>'`] `?\<tau>' = \<tau>` by auto
-    have s1: "\<And>n. n \<le> next_time 0 \<tau> \<Longrightarrow> (\<tau>(next_time 0 \<tau> := 0)) n = 0"
-      by (simp add: nat_less_le next_time_at_least2)
-    have s2: "\<And>s. s \<in> dom ((\<tau>(next_time 0 \<tau> := 0)) (next_time 0 \<tau>)) \<Longrightarrow>
-                              next_state 0 \<tau> def s = the ((\<tau>(next_time 0 \<tau> := 0)) (next_time 0 \<tau>) s)"
-      by (simp add: zero_fun_def zero_option_def)
-    have s3: "\<And>n. next_time 0 \<tau> \<le> n \<Longrightarrow> add_to_beh def 0 0 (next_time 0 \<tau>) n = 0"
-      by (simp add: add_to_beh_def zero_fun_def)
-    have s4: "A \<notin> next_event 0 \<tau> def \<and> B \<notin> next_event 0 \<tau> def \<Longrightarrow>
-              bval_of (next_state 0 \<tau> def C) = (\<not> (bval_of (next_state 0 \<tau> def A) \<and> bval_of (next_state 0 \<tau> def B)))"
-      by (smt One_nat_def Suc_leI \<open>Bv (\<not> (bval_of (def A) \<and> bval_of (def B))) = def C\<close> \<open>\<not>
-      post_necessary_raw 0 \<tau> 0 C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C)\<close>
-      \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 = \<tau>\<close>
-      \<open>trans_post_raw C (Bv (\<not> (bval_of (def A) \<and> bval_of (def B)))) (def C) \<tau> 0 1 = preempt_raw C \<tau>
-      1\<close> add.left_neutral domD domIff fun_upd_idem_iff le0 nat_less_le next_state_def
-      next_state_fixed_point o_apply option.sel override_on_def preempt_raw_def
-      trans_some_signal_of' val.sel(1))
-    have s5: "\<And>n. next_time 0 \<tau> < n \<Longrightarrow> to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0)) C n = 0"
-      by (metis assms(2) fun_upd_apply to_trans_raw_sig_def zero_fun_def)
-    have "styping \<Gamma> (next_state 0 \<tau> def)"
-      by (simp add: assms(4) assms(6) next_state_preserve_styping)
-    have "ttyping \<Gamma> (add_to_beh def 0 0 (next_time 0 \<tau>))"
-      by (metis add_to_beh_preserve_type_correctness assms(4) bot_nat_def domIff dom_def ttyping_def
-      zero_fun_def zero_option_def)
-    have "ttyping \<Gamma> (\<tau>(next_time 0 \<tau> := 0))"
-      by (simp add: assms(6) ttyping_rem_curr_trans)
-    hence * : "next_time 0 \<tau> \<le> i \<Longrightarrow>
-               bval_of (get_state res C) =
-           (\<not> (bval_of (signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau> := 0)) A i) \<and>
-               bval_of (signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau> := 0)) B i)))"
-      using nand3_correctness_ind[OF bigstep _ _ s1 s2 s3 _ s4 s5 `conc_wt \<Gamma> nand3` `styping \<Gamma> (next_state 0 \<tau> def)`
-       `ttyping \<Gamma> (add_to_beh def 0 0 (next_time 0 \<tau>))` `ttyping \<Gamma> (\<tau>(next_time 0 \<tau> := 0))` `\<Gamma> C = Bty` `styping \<Gamma> def`]
-      by metis
-    moreover have "next_time 0 \<tau> \<le> i \<Longrightarrow> signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau> := 0)) A i = signal_of (def A) \<tau> A i"
-    proof (cases "inf_time (to_trans_raw_sig \<tau>) A i = None")
-      assume "next_time 0 \<tau> \<le> i"
-      case True
-      hence "signal_of (def A) \<tau> A i = def A"
-        by (metis inf_time_noneE2 signal_of_def to_trans_raw_sig_def)
-      have "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) A i= None"
-        using True  by (metis inf_time_rem_curr_trans option.simps(3) rem_curr_trans_to_trans_raw_sig)
-      hence "signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau>:= 0)) A i = next_state 0 \<tau> def A"
-        by (metis inf_time_noneE2 signal_of_def to_trans_raw_sig_def)
-      have "\<tau> (next_time 0 \<tau>) A = None"
-        using True `next_time 0 \<tau> \<le> i`
-        by (metis inf_time_noneE2 to_trans_raw_sig_def zero_option_def)
-      hence "next_state 0 \<tau> def A = def A"
-        unfolding next_state_def Let_def
-        by (simp add: domIff)
-      thus ?thesis
-        using \<open>signal_of (def A) \<tau> A i = def A\<close> \<open>signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau>
-        := 0)) A i = next_state 0 \<tau> def A\<close> by auto
-    next
-      assume "next_time 0 \<tau> \<le> i"
-      case False
-      then obtain ta where infA: "inf_time (to_trans_raw_sig \<tau>) A i = Some ta"
-        by auto
-      hence "\<tau> ta A \<noteq> None"
-        by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_some_exists to_trans_raw_sig_def
-        zero_option_def)
-      hence "next_time 0 \<tau> \<le> ta"
-        by (metis next_time_at_least2 not_le zero_map)
-      have "signal_of (def A) \<tau> A i = the (\<tau> ta A)"
-        using infA unfolding to_signal_def comp_def to_trans_raw_sig_def by auto
-      have "next_time 0 \<tau> = ta \<or> next_time 0 \<tau> < ta"
-        using `next_time 0 \<tau> \<le> ta` by auto
-      moreover
-      { assume "next_time 0 \<tau> = ta"
-        hence "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) A i = None"
-          using infA
-          by (metis inf_time_rem_curr_trans_at_t next_time_at_least2 rem_curr_trans_to_trans_raw_sig
-          to_trans_raw_sig_def zero_fun_def zero_option_def)
-        hence "signal_of (next_state 0 \<tau> def A) (\<tau>(next_time 0 \<tau> := 0)) A i = next_state 0 \<tau> def A"
-          unfolding to_signal_def comp_def by auto
-        also have "... = the (\<tau> ta A)"
-          unfolding next_state_def Let_def comp_def `next_time 0 \<tau> = ta`
-          by (simp add: \<open>\<tau> ta A \<noteq> None\<close> domIff)
-        also have "... = signal_of (def A) \<tau> A i"
-          using \<open>signal_of (def A) \<tau> A i = the (\<tau> ta A)\<close> by auto
-        finally have ?thesis
-          by auto }
-      moreover
-      { assume "next_time 0 \<tau> < ta"
-        hence "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) A i = Some ta"
-          using infA
-          by (metis inf_time_rem_curr_trans nat_less_le option.inject rem_curr_trans_to_trans_raw_sig)
-        hence ?thesis
-          by (metis \<open>signal_of (def A) \<tau> A i = the (\<tau> ta A)\<close> calculation(2) fun_upd_apply o_def
-          option.case(2) to_signal_def to_trans_raw_sig_def) }
-      ultimately show ?thesis
-        by auto
-    qed
-    moreover have "next_time 0 \<tau> \<le> i \<Longrightarrow> signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau> := 0)) B i = signal_of (def B) \<tau> B i"
-    proof (cases "inf_time (to_trans_raw_sig \<tau>) B i = None")
-      assume "next_time 0 \<tau> \<le> i"
-      case True
-      hence "signal_of (def B) \<tau> B i = def B"
-        by (metis inf_time_noneE2 signal_of_def to_trans_raw_sig_def)
-      have "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) B i= None"
-        using True  by (metis inf_time_rem_curr_trans option.simps(3) rem_curr_trans_to_trans_raw_sig)
-      hence "signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau>:= 0)) B i = next_state 0 \<tau> def B"
-        by (metis inf_time_noneE2 signal_of_def to_trans_raw_sig_def)
-      have "\<tau> (next_time 0 \<tau>) B = None"
-        using True `next_time 0 \<tau> \<le> i`
-        by (metis inf_time_noneE2 to_trans_raw_sig_def zero_option_def)
-      hence "next_state 0 \<tau> def B = def B"
-        unfolding next_state_def Let_def
-        by (simp add: domIff)
-      thus ?thesis
-        using \<open>signal_of (def B) \<tau> B i = def B\<close> \<open>signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau>
-        := 0)) B i = next_state 0 \<tau> def B\<close> by auto
-    next
-      assume "next_time 0 \<tau> \<le> i"
-      case False
-      then obtain ta where infB: "inf_time (to_trans_raw_sig \<tau>) B i = Some ta"
-        by auto
-      hence "\<tau> ta B \<noteq> None"
-        by (metis Femto_VHDL_raw.keys_def domIff dom_def inf_time_some_exists to_trans_raw_sig_def
-        zero_option_def)
-      hence "next_time 0 \<tau> \<le> ta"
-        by (metis next_time_at_least2 not_le zero_map)
-      have "signal_of (def B) \<tau> B i = the (\<tau> ta B)"
-        using infB unfolding to_signal_def comp_def to_trans_raw_sig_def by auto
-      have "next_time 0 \<tau> = ta \<or> next_time 0 \<tau> < ta"
-        using `next_time 0 \<tau> \<le> ta` by auto
-      moreover
-      { assume "next_time 0 \<tau> = ta"
-        hence "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) B i = None"
-          using infB
-          by (metis inf_time_rem_curr_trans_at_t next_time_at_least2 rem_curr_trans_to_trans_raw_sig
-          to_trans_raw_sig_def zero_fun_def zero_option_def)
-        hence "signal_of (next_state 0 \<tau> def B) (\<tau>(next_time 0 \<tau> := 0)) B i = next_state 0 \<tau> def B"
-          unfolding to_signal_def comp_def by auto
-        also have "... = the (\<tau> ta B)"
-          unfolding next_state_def Let_def comp_def `next_time 0 \<tau> = ta`
-          by (simp add: \<open>\<tau> ta B \<noteq> None\<close> domIff)
-        also have "... = signal_of (def B) \<tau> B i"
-          using \<open>signal_of (def B) \<tau> B i = the (\<tau> ta B)\<close> by auto
-        finally have ?thesis
-          by auto }
-      moreover
-      { assume "next_time 0 \<tau> < ta"
-        hence "inf_time (to_trans_raw_sig (\<tau>(next_time 0 \<tau> := 0))) B i = Some ta"
-          using infB
-          by (metis inf_time_rem_curr_trans nat_less_le option.inject rem_curr_trans_to_trans_raw_sig)
-        hence ?thesis
-          by (metis \<open>signal_of (def B) \<tau> B i = the (\<tau> ta B)\<close> calculation(2) fun_upd_apply o_def
-          option.case(2) to_signal_def to_trans_raw_sig_def) }
-      ultimately show ?thesis
-        by auto
-    qed
-    ultimately have IR: "next_time 0 \<tau> \<le> i \<Longrightarrow> bval_of (get_state res C) =
-           (\<not> (bval_of (signal_of (def A) \<tau> A i) \<and>  bval_of (signal_of (def B) \<tau> B i)))"
-      by auto
-    hence ?thesis
-      using IR by (metis (no_types, hide_lams) False le0 neq0_conv next_time_at_least2) }
-  ultimately show ?thesis
-    by auto 
 qed
 
 end
